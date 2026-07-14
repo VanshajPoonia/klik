@@ -1,0 +1,101 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
+import { Button } from "@/components/ui/button";
+import { Field, inputClass } from "@/components/ui/field";
+
+export function LoginForm({
+  googleEnabled,
+  resendEnabled,
+}: {
+  googleEnabled: boolean;
+  resendEnabled: boolean;
+}) {
+  const router = useRouter();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const result = await signIn("credentials", { username, password, redirect: false });
+
+    if (!result || result.error) {
+      setLoading(false);
+      setError("Incorrect username or password.");
+      return;
+    }
+
+    const session = await fetch("/api/auth/session").then((res) => res.json());
+    router.push(session?.user?.role === "superadmin" ? "/admin" : "/dashboard");
+    router.refresh();
+  }
+
+  return (
+    <div className="w-full max-w-sm space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Username">
+          <input
+            className={inputClass}
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            autoComplete="username"
+            required
+          />
+        </Field>
+        <Field label="Password">
+          <input
+            type="password"
+            className={inputClass}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </Field>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? "Signing in…" : "Sign in"}
+        </Button>
+      </form>
+
+      {(googleEnabled || resendEnabled) && (
+        <>
+          <div className="flex items-center gap-3 text-xs text-muted">
+            <div className="h-px flex-1 bg-canvas-line" />
+            or
+            <div className="h-px flex-1 bg-canvas-line" />
+          </div>
+          <div className="space-y-2">
+            {googleEnabled && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => signIn("google")}
+              >
+                Continue with Google
+              </Button>
+            )}
+            {resendEnabled && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => signIn("resend")}
+              >
+                Continue with email
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
