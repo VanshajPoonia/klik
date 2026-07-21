@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import https from "node:https";
 import sharp from "sharp";
 import heicConvert from "heic-convert";
-import { put } from "@vercel/blob";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
 import { canViewGallery } from "@/lib/access";
@@ -17,7 +17,7 @@ import {
   verifyEventUnlock,
 } from "@/lib/guest";
 import { requireOwnerSession } from "@/lib/roles";
-import { isAllowedMime, isVideoMime } from "@/lib/storage";
+import { isAllowedMime, isVideoMime, publicUrlFor, r2 } from "@/lib/storage";
 
 // sharp/heic-convert need native/WASM Node bindings, never the edge runtime.
 export const runtime = "nodejs";
@@ -160,18 +160,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         .jpeg({ quality: COMPRESS_QUALITY, mozjpeg: true })
         .toBuffer({ resolveWithObject: true });
 
-      // sharp's returned buffer triggers the same "SharedArrayBuffer is not
-      // allowed" runtime quirk as the raw fetch() responses did when handed
-      // straight to put() - a fresh copy avoids it (see fetchBlobBuffer above).
-      const freshBuffer = Buffer.from(new Uint8Array(compressed.data));
-      const uploaded = await put(input.pathname, freshBuffer, {
-        access: "public",
-        contentType: "image/jpeg",
-        addRandomSuffix: false,
-        allowOverwrite: true,
-      });
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: input.pathname,
+          Body: compressed.data,
+          ContentType: "image/jpeg",
+        }),
+      );
 
-      blobUrl = uploaded.url;
+      blobUrl = publicUrlFor(input.pathname);
       sizeBytes = compressed.data.byteLength;
       width = compressed.info.width;
       height = compressed.info.height;

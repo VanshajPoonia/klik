@@ -3,7 +3,6 @@
 import { useCallback, useRef, useState } from "react";
 import Image from "next/image";
 import useSWR from "swr";
-import { uploadPresigned } from "@vercel/blob/client";
 import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
@@ -57,15 +56,30 @@ export function GuestGallery({
 
       setUploading((current) => [...current, { id: mediaId, progress: 0 }]);
       try {
-        const blob = await uploadPresigned(pathname, file, {
-          access: "public",
-          handleUploadUrl: "/api/upload",
-          clientPayload: JSON.stringify({ eventId: event.id, mimeType: file.type }),
-          onUploadProgress: ({ percentage }) => {
+        const signRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId: event.id, mimeType: file.type, pathname }),
+        });
+        if (!signRes.ok) throw new Error("Failed to get upload URL");
+        const { uploadUrl, publicUrl, maxBytes } = await signRes.json();
+        if (file.size > maxBytes) throw new Error("File too large");
+
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", uploadUrl);
+          xhr.setRequestHeader("Content-Type", file.type);
+          xhr.upload.onprogress = (progressEvent) => {
+            if (!progressEvent.lengthComputable) return;
+            const percentage = (progressEvent.loaded / progressEvent.total) * 100;
             setUploading((current) =>
               current.map((item) => (item.id === mediaId ? { ...item, progress: percentage } : item)),
             );
-          },
+          };
+          xhr.onload = () =>
+            xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`));
+          xhr.onerror = () => reject(new Error("Upload failed"));
+          xhr.send(file);
         });
 
         await fetch(`/api/e/${event.slug}/media`, {
@@ -73,8 +87,8 @@ export function GuestGallery({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mediaId,
-            pathname: blob.pathname,
-            blobUrl: blob.url,
+            pathname,
+            blobUrl: publicUrl,
             mimeType: file.type,
             sizeBytes: file.size,
           }),
