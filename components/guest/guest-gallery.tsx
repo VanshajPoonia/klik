@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
+import { compressImageForUpload } from "@/lib/image-compress";
 
 interface MediaItem {
   id: string;
@@ -56,19 +57,30 @@ export function GuestGallery({
 
       setUploading((current) => [...current, { id: mediaId, progress: 0 }]);
       try {
+        // Compress+sharpen on the uploader's own device so this cost is
+        // spread across every guest's hardware instead of running once per
+        // upload on the server. Falls back to the original file (and the
+        // server's own compression) if the browser can't decode it, e.g.
+        // HEIC outside Safari.
+        const isPhoto = !file.type.startsWith("video/");
+        const compressed = isPhoto ? await compressImageForUpload(file) : null;
+
+        const uploadBody = compressed?.blob ?? file;
+        const mimeType = compressed ? "image/jpeg" : file.type;
+
         const signRes = await fetch("/api/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eventId: event.id, mimeType: file.type, pathname }),
+          body: JSON.stringify({ eventId: event.id, mimeType, pathname }),
         });
         if (!signRes.ok) throw new Error("Failed to get upload URL");
         const { uploadUrl, publicUrl, maxBytes } = await signRes.json();
-        if (file.size > maxBytes) throw new Error("File too large");
+        if (uploadBody.size > maxBytes) throw new Error("File too large");
 
         await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("PUT", uploadUrl);
-          xhr.setRequestHeader("Content-Type", file.type);
+          xhr.setRequestHeader("Content-Type", mimeType);
           xhr.upload.onprogress = (progressEvent) => {
             if (!progressEvent.lengthComputable) return;
             const percentage = (progressEvent.loaded / progressEvent.total) * 100;
@@ -79,7 +91,7 @@ export function GuestGallery({
           xhr.onload = () =>
             xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`));
           xhr.onerror = () => reject(new Error("Upload failed"));
-          xhr.send(file);
+          xhr.send(uploadBody);
         });
 
         await fetch(`/api/e/${event.slug}/media`, {
@@ -89,8 +101,11 @@ export function GuestGallery({
             mediaId,
             pathname,
             blobUrl: publicUrl,
-            mimeType: file.type,
-            sizeBytes: file.size,
+            mimeType,
+            sizeBytes: uploadBody.size,
+            width: compressed?.width,
+            height: compressed?.height,
+            clientCompressed: Boolean(compressed),
           }),
         });
 

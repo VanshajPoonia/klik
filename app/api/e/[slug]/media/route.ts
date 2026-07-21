@@ -18,13 +18,11 @@ import {
 } from "@/lib/guest";
 import { requireOwnerSession } from "@/lib/roles";
 import { isAllowedMime, isVideoMime, publicUrlFor, r2 } from "@/lib/storage";
+import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
 
 // sharp/heic-convert need native/WASM Node bindings, never the edge runtime.
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const COMPRESS_MAX_DIMENSION = 2560;
-const COMPRESS_QUALITY = 80;
 
 const registerSchema = z.object({
   mediaId: z.string().min(1),
@@ -36,6 +34,9 @@ const registerSchema = z.object({
   height: z.number().int().positive().optional(),
   durationS: z.number().positive().optional(),
   contentHash: z.string().optional(),
+  // True when the browser already resized/re-encoded the photo before
+  // upload - skips redundant server-side recompression of the same file.
+  clientCompressed: z.boolean().optional(),
 });
 
 /**
@@ -139,7 +140,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   let width = input.width;
   let height = input.height;
 
-  if (kind === "photo") {
+  if (kind === "photo" && !input.clientCompressed) {
     try {
       let buffer: Buffer = await fetchBlobBuffer(blobUrl);
 
