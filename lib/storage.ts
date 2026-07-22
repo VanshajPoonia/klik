@@ -1,4 +1,5 @@
 import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { baseMimeType } from "./media-constants";
 
 // klik-media is an EU-jurisdiction bucket, which requires the .eu. endpoint
 // instead of R2's default global one, or every request 403s.
@@ -26,11 +27,11 @@ export const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 
 export function isVideoMime(mimeType: string) {
-  return mimeType.startsWith("video/");
+  return baseMimeType(mimeType).startsWith("video/");
 }
 
-export function isAllowedMime(mimeType: string): mimeType is (typeof ALLOWED_MEDIA_MIME_TYPES)[number] {
-  return (ALLOWED_MEDIA_MIME_TYPES as readonly string[]).includes(mimeType);
+export function isAllowedMime(mimeType: string): boolean {
+  return (ALLOWED_MEDIA_MIME_TYPES as readonly string[]).includes(baseMimeType(mimeType));
 }
 
 export function maxBytesForMime(mimeType: string) {
