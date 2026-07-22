@@ -99,14 +99,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
   const url = new URL(request.url);
   const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 100);
-  const cursor = url.searchParams.get("cursor"); // ISO createdAt of the last item seen
+  const cursor = url.searchParams.get("cursor"); // ISO createdAt of the oldest item seen so far
+  const since = url.searchParams.get("since"); // ISO createdAt of the newest item seen so far
 
   const guestId = await getGuestId(event.id);
-  const rows = await fetchGalleryMedia(event.id, { isOwner: Boolean(ownerSession), guestId, cursor, limit });
+  const rows = await fetchGalleryMedia(event.id, {
+    isOwner: Boolean(ownerSession),
+    guestId,
+    cursor,
+    since,
+    limit,
+  });
 
   return NextResponse.json({
     media: rows,
-    nextCursor: rows.length === limit ? rows[rows.length - 1].createdAt.toISOString() : null,
+    // Meaningless in since-mode (the client only reads `media` there); it
+    // already knows to keep polling since* regardless of what this says.
+    nextCursor: !since && rows.length === limit ? rows[rows.length - 1].createdAt.toISOString() : null,
   });
 }
 
