@@ -15,6 +15,7 @@ const createClientSchema = z.object({
   expiresAt: z.coerce.date().nullable().optional(),
   moderation: z.boolean().optional(),
   visibility: z.enum(EVENT_VISIBILITIES).optional(),
+  galleryPassword: z.string().min(4).max(72).optional(),
 });
 
 export async function GET() {
@@ -87,7 +88,22 @@ export async function POST(request: Request) {
     );
   }
 
-  const { contactName, eventName, eventDate, expiresAt, moderation, visibility } = parsed.data;
+  const {
+    contactName,
+    eventName,
+    eventDate,
+    expiresAt,
+    moderation,
+    visibility,
+    galleryPassword,
+  } = parsed.data;
+
+  if (visibility === "password" && !galleryPassword) {
+    return NextResponse.json(
+      { error: "Gallery password required for password-protected events" },
+      { status: 400 },
+    );
+  }
 
   const { user, event, password } = await createOrganizerUserAndEvent(contactName, {
     name: eventName,
@@ -95,6 +111,7 @@ export async function POST(request: Request) {
     expiresAt,
     moderation,
     visibility,
+    password: galleryPassword,
   });
 
   return NextResponse.json(

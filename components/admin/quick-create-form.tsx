@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
+import { PasswordInput } from "@/components/ui/password-input";
 
 type Visibility = "public" | "password" | "private";
 
@@ -22,6 +23,7 @@ const initialForm = {
   expiresAt: "",
   moderation: false,
   visibility: "public" as Visibility,
+  galleryPassword: "",
 };
 
 export function QuickCreateForm() {
@@ -46,6 +48,7 @@ export function QuickCreateForm() {
         expiresAt: form.expiresAt || null,
         moderation: form.moderation,
         visibility: form.visibility,
+        galleryPassword: form.visibility === "password" ? form.galleryPassword : undefined,
       }),
     });
 
@@ -62,7 +65,18 @@ export function QuickCreateForm() {
   if (result) {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const guestUrl = `${origin}/e/${result.event.slug}`;
-    const credentialsText = `Klik login\nURL: ${origin}/login\nUsername: ${result.username}\nPassword: ${result.password}`;
+    const credentialsText = [
+      "Klik client login",
+      `URL: ${origin}/login`,
+      `Username: ${result.username}`,
+      `Login password: ${result.password}`,
+      "",
+      "Guest gallery",
+      `URL: ${guestUrl}`,
+      ...(form.visibility === "password"
+        ? [`Gallery password: ${form.galleryPassword}`]
+        : []),
+    ].join("\n");
 
     return (
       <Card className="space-y-6">
@@ -72,22 +86,28 @@ export function QuickCreateForm() {
         </div>
 
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
-          This password is shown once. Copy it now - it can&rsquo;t be retrieved again, only reset.
+          The client login password is shown once. Copy it now. It can only be reset later.
         </div>
 
         <dl className="space-y-2 text-sm">
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted">Username</dt>
+            <dt className="text-muted">Client username</dt>
             <dd className="font-mono text-paper">{result.username}</dd>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted">Password</dt>
+            <dt className="text-muted">Client login password</dt>
             <dd className="font-mono text-paper">{result.password}</dd>
           </div>
           <div className="flex items-center justify-between gap-4">
             <dt className="text-muted">Gallery link</dt>
             <dd className="truncate font-mono text-paper">{guestUrl}</dd>
           </div>
+          {form.visibility === "password" && (
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted">Gallery password</dt>
+              <dd className="font-mono text-paper">{form.galleryPassword}</dd>
+            </div>
+          )}
         </dl>
 
         <div className="rounded-2xl bg-paper p-4 text-center">
@@ -189,6 +209,25 @@ export function QuickCreateForm() {
             <option value="private">Private - organizer only</option>
           </select>
         </Field>
+        {form.visibility === "password" && (
+          <Field
+            label="Gallery password"
+            hint="Guests will enter this password after scanning the QR code"
+            htmlFor="admin-gallery-password"
+          >
+            <PasswordInput
+              id="admin-gallery-password"
+              value={form.galleryPassword}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, galleryPassword: event.target.value }))
+              }
+              autoComplete="new-password"
+              minLength={4}
+              maxLength={72}
+              required
+            />
+          </Field>
+        )}
         <label className="flex items-center gap-2 text-sm text-paper">
           <input
             type="checkbox"
