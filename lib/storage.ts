@@ -34,8 +34,27 @@ export function isAllowedMime(mimeType: string): boolean {
   return (ALLOWED_MEDIA_MIME_TYPES as readonly string[]).includes(baseMimeType(mimeType));
 }
 
-export function maxBytesForMime(mimeType: string) {
-  return isVideoMime(mimeType) ? MAX_VIDEO_BYTES : MAX_PHOTO_BYTES;
+export function extensionForMime(mimeType: string) {
+  const extensions: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/heic": "heic",
+    "image/heif": "heif",
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+  };
+  return extensions[baseMimeType(mimeType)] ?? "bin";
+}
+
+export function maxBytesForMime(
+  mimeType: string,
+  limits: { maxPhotoBytes?: number; maxVideoBytes?: number } = {},
+) {
+  return isVideoMime(mimeType)
+    ? (limits.maxVideoBytes ?? MAX_VIDEO_BYTES)
+    : (limits.maxPhotoBytes ?? MAX_PHOTO_BYTES);
 }
 
 /** Random, unguessable, and groupable-by-event for cron purge. */
