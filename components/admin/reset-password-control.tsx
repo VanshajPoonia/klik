@@ -38,6 +38,15 @@ export function ResetPasswordControl({
         return;
       }
 
+      if (
+        !data ||
+        typeof data.username !== "string" ||
+        typeof data.password !== "string"
+      ) {
+        setError("The password was reset, but the new credentials could not be displayed.");
+        return;
+      }
+
       setResult(data as ResetResult);
       setConfirming(false);
     } catch {
@@ -74,7 +83,8 @@ export function ResetPasswordControl({
         <div className="rounded-xl border border-volt/30 bg-volt/5 p-4">
           <p className="text-sm font-semibold text-volt">New password created</p>
           <p className="mt-1 text-xs text-muted">
-            This password is shown once. Copy it and send it to the client now.
+            This password is shown once. Copy it now. Existing client sessions have also been
+            revoked.
           </p>
           <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
             <div>
@@ -120,7 +130,7 @@ export function ResetPasswordControl({
           <div>
             <p className="text-sm text-paper">Reset @{username}&apos;s password?</p>
             <p className="mt-0.5 text-xs text-muted">
-              Their current password will stop working immediately.
+              Their current password will stop working and signed-in sessions will be revoked.
             </p>
           </div>
           <div className="flex gap-2">
