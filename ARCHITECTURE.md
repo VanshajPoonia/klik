@@ -298,7 +298,7 @@ No new tables. An admin-provisioned venue is just a `users` row like any other, 
 
 `lib/auth.ts` adds a `Credentials` provider (username/password, bcrypt) alongside Google/Resend (which are only registered when their env vars are present). **Session strategy is `"jwt"`, not `"database"` - this is required, not a preference.** Reading Auth.js's own source: a Credentials sign-in always issues a JWT-encoded cookie, but reading the session back branches on the *global* `session.strategy` setting - so `"database"` would make credential logins look logged-out on the very next request. Google/Resend work identically under JWT strategy; `DrizzleAdapter` stays wired for OAuth account-linking and magic-link tokens (the `sessions` table just goes unused).
 
-Practical consequence: there's no server-side session revocation (JWTs are stateless). A leaked venue credential is mitigated by `POST /api/admin/clients/[userId]/reset-password`, not a session kill-switch.
+Credential JWTs carry the user's `credential_version`. Auth checks that version against the database whenever a credential session is accessed. `POST /api/admin/clients/[userId]/reset-password` increments the version, so the old password and previously issued client sessions stop working.
 
 Account-credential passwords are hashed at cost 12 (`lib/credentials.ts`) - higher than the cost-10 convention for event gallery passwords (§8), since account access is higher-stakes than a gallery view-password.
 

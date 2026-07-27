@@ -13,6 +13,7 @@ declare module "next-auth" {
   interface User {
     role?: UserRole;
     username?: string | null;
+    credentialVersion?: number;
   }
 }
 
@@ -21,5 +22,6 @@ declare module "next-auth/jwt" {
     id?: string;
     role?: UserRole;
     username?: string | null;
+    credentialVersion?: number;
   }
 }

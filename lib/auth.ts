@@ -57,6 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           image: user.image,
           role: user.role,
           username: user.username,
+          credentialVersion: user.credentialVersion,
         };
       },
     }),
@@ -67,6 +68,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.role = user.role ?? "organizer";
         token.username = user.username ?? null;
+        token.credentialVersion = user.credentialVersion;
+        return token;
+      }
+
+      if (typeof token.username === "string" && typeof token.id === "string") {
+        const [currentUser] = await db
+          .select({ credentialVersion: users.credentialVersion })
+          .from(users)
+          .where(eq(users.id, token.id))
+          .limit(1);
+        if (
+          !currentUser ||
+          typeof token.credentialVersion !== "number" ||
+          currentUser.credentialVersion !== token.credentialVersion
+        ) {
+          return null;
+        }
       }
       return token;
     },
