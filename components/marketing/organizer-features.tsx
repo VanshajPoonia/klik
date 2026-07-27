@@ -20,7 +20,7 @@ const features = [
   {
     icon: Share2,
     title: "Downloads",
-    body: "Let guests save and share photos, or keep them gallery-only.",
+    body: "Let guests save photos and videos, or keep everything gallery-only.",
   },
   {
     icon: CalendarClock,
@@ -29,8 +29,8 @@ const features = [
   },
   {
     icon: Download,
-    title: "Download all",
-    body: "Pull every approved photo into one zip, whenever you want it.",
+    title: "Original files",
+    body: "Download any photo or video from the organizer dashboard whenever you need it.",
   },
 ];
 

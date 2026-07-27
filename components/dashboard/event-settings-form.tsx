@@ -133,7 +133,7 @@ export function EventSettingsForm({ event }: { event: PublicEvent }) {
             onChange={(event) => setDownloadsEnabled(event.target.checked)}
             className="h-4 w-4 rounded border-canvas-line accent-volt"
           />
-          Guests can download photos
+          Guests can download photos and videos
         </label>
       </div>
 
