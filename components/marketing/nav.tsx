@@ -20,6 +20,12 @@ export function Nav() {
         </Link>
         <nav className="flex items-center gap-5">
           <Link
+            href="/#pricing"
+            className="hidden text-sm text-muted transition-colors hover:text-paper md:block"
+          >
+            Pricing
+          </Link>
+          <Link
             href="/login"
             className="hidden text-sm text-muted transition-colors hover:text-paper sm:block"
           >
