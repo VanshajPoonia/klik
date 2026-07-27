@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export function LoginForm({
   googleEnabled,
@@ -49,10 +50,9 @@ export function LoginForm({
             required
           />
         </Field>
-        <Field label="Password">
-          <input
-            type="password"
-            className={inputClass}
+        <Field label="Password" htmlFor="login-password">
+          <PasswordInput
+            id="login-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"

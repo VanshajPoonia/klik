@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export function EntrySheet({
   slug,
@@ -58,12 +59,13 @@ export function EntrySheet({
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           {requiresPassword && (
-            <Field label="Gallery password">
-              <input
-                type="password"
-                className={inputClass}
+            <Field label="Gallery password" htmlFor="guest-gallery-password">
+              <PasswordInput
+                id="guest-gallery-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                maxLength={72}
                 required
                 autoFocus
               />
