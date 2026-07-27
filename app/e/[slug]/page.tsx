@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
-import { canViewGallery } from "@/lib/access";
+import { canUpload, canViewGallery } from "@/lib/access";
+import { getAccountPlan } from "@/lib/account-plans";
 import {
   guestCookieName,
   verifyGuestSession,
@@ -20,6 +21,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   const { slug } = await params;
   const [event] = await db.select().from(events).where(eq(events.slug, slug)).limit(1);
   if (!event) notFound();
+  const plan = await getAccountPlan(event.ownerId);
 
   const session = await auth();
   const isOwner = Boolean(
@@ -30,7 +32,11 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   const unlockCookie = cookieStore.get(eventUnlockCookieName(event.id))?.value;
   const hasUnlockCookie = unlockCookie ? await verifyEventUnlock(unlockCookie, event.id) : false;
 
-  const access = canViewGallery(event, { isOwner, hasUnlockCookie });
+  const access = canViewGallery(event, {
+    isOwner,
+    hasUnlockCookie,
+    galleryAccessDays: plan.galleryAccessDays,
+  });
 
   if (!access.allowed) {
     if (access.reason === "password_required") {
@@ -64,7 +70,10 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     limit: 60,
   });
 
-  return (
-    <GuestGallery event={toPublicEvent(event)} isOwner={isOwner} initialMedia={initialMedia} />
-  );
+  const publicEvent = toPublicEvent({
+    ...event,
+    uploadsEnabled: canUpload(event, plan.uploadWindowDays),
+  });
+
+  return <GuestGallery event={publicEvent} isOwner={isOwner} initialMedia={initialMedia} />;
 }

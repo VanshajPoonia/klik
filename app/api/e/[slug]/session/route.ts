@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { events, guests } from "@/lib/schema";
 import { isExpired } from "@/lib/access";
+import { getAccountPlan } from "@/lib/account-plans";
 import {
   signGuestSession,
   guestCookieName,
@@ -25,7 +26,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const { slug } = await params;
   const [event] = await db.select().from(events).where(eq(events.slug, slug)).limit(1);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (isExpired(event)) return NextResponse.json({ error: "This event has ended" }, { status: 410 });
+  const plan = await getAccountPlan(event.ownerId);
+  if (isExpired(event, plan.galleryAccessDays)) {
+    return NextResponse.json({ error: "This event has ended" }, { status: 410 });
+  }
   if (event.visibility === "private") {
     return NextResponse.json({ error: "This gallery is private" }, { status: 403 });
   }
