@@ -6,12 +6,29 @@ export const inputClass =
 export function Field({
   label,
   hint,
+  htmlFor,
   children,
 }: {
   label: string;
   hint?: string;
+  htmlFor?: string;
   children: ReactNode;
 }) {
+  if (htmlFor) {
+    return (
+      <div>
+        <label
+          htmlFor={htmlFor}
+          className="mb-1.5 block text-xs font-medium tracking-wide text-muted uppercase"
+        >
+          {label}
+        </label>
+        {children}
+        {hint && <span className="mt-1.5 block text-xs text-muted">{hint}</span>}
+      </div>
+    );
+  }
+
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs font-medium tracking-wide text-muted uppercase">
