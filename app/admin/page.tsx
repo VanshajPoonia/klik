@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
+import { PlanAssignmentControl } from "@/components/admin/plan-assignment-control";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -20,6 +21,7 @@ export default async function AdminPage() {
       userId: users.id,
       username: users.username,
       contactName: users.name,
+      planKey: users.planKey,
       eventId: events.id,
       eventName: events.name,
       eventSlug: events.slug,
@@ -27,10 +29,56 @@ export default async function AdminPage() {
       expiresAt: events.expiresAt,
       createdAt: events.createdAt,
     })
-    .from(events)
-    .innerJoin(users, eq(events.ownerId, users.id))
+    .from(users)
+    .leftJoin(events, eq(events.ownerId, users.id))
     .where(eq(users.role, "organizer"))
     .orderBy(desc(events.createdAt));
+
+  const clients = rows.reduce<
+    Array<{
+      userId: string;
+      username: string | null;
+      contactName: string | null;
+      planKey: (typeof rows)[number]["planKey"];
+      events: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        visibility: (typeof rows)[number]["visibility"];
+      }>;
+    }>
+  >((grouped, row) => {
+    const existing = grouped.find((client) => client.userId === row.userId);
+    if (existing) {
+      if (row.eventId && row.eventName && row.eventSlug && row.visibility) {
+        existing.events.push({
+          id: row.eventId,
+          name: row.eventName,
+          slug: row.eventSlug,
+          visibility: row.visibility,
+        });
+      }
+    } else {
+      grouped.push({
+        userId: row.userId,
+        username: row.username,
+        contactName: row.contactName,
+        planKey: row.planKey,
+        events:
+          row.eventId && row.eventName && row.eventSlug && row.visibility
+            ? [
+                {
+                  id: row.eventId,
+                  name: row.eventName,
+                  slug: row.eventSlug,
+                  visibility: row.visibility,
+                },
+              ]
+            : [],
+      });
+    }
+    return grouped;
+  }, []);
 
   return (
     <div className="min-h-screen px-6 py-10 md:px-10">
@@ -58,29 +106,54 @@ export default async function AdminPage() {
         </div>
 
         <div className="space-y-3">
-          {rows.length === 0 && (
+          {clients.length === 0 && (
             <Card className="text-center text-sm text-muted">
               No clients yet - provision your first venue to hand off a QR code and login.
             </Card>
           )}
-          {rows.map((row) => (
-            <Card key={row.eventId} className="space-y-4 transition-colors hover:border-paper/30">
-              <Link
-                href={`/dashboard/events/${row.eventId}`}
-                className="-m-2 flex items-center justify-between gap-4 rounded-lg p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
-              >
+          {clients.map((client) => (
+            <Card key={client.userId} className="space-y-5">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-paper">{row.contactName}</p>
-                  <p className="truncate text-xs text-muted">
-                    {row.eventName} · /e/{row.eventSlug} · @{row.username}
-                  </p>
+                  <p className="truncate font-medium text-paper">{client.contactName}</p>
+                  <p className="truncate text-xs text-muted">@{client.username}</p>
                 </div>
-                <Badge tone={row.visibility === "public" ? "volt" : "neutral"}>
-                  {row.visibility}
-                </Badge>
-              </Link>
-              {row.username && (
-                <ResetPasswordControl userId={row.userId} username={row.username} />
+                <p className="text-xs text-muted">
+                  {client.events.length} {client.events.length === 1 ? "event" : "events"}
+                </p>
+              </div>
+
+              <PlanAssignmentControl
+                userId={client.userId}
+                initialPlanKey={client.planKey}
+              />
+
+              {client.events.length > 0 ? (
+                <div className="divide-y divide-canvas-line rounded-xl border border-canvas-line">
+                  {client.events.map((event) => (
+                    <Link
+                      key={event.id}
+                      href={`/dashboard/events/${event.id}`}
+                      className="flex min-h-14 items-center justify-between gap-4 px-4 py-3 transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-paper/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-volt"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-paper">{event.name}</p>
+                        <p className="truncate text-xs text-muted">/e/{event.slug}</p>
+                      </div>
+                      <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>
+                        {event.visibility}
+                      </Badge>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-dashed border-canvas-line px-4 py-3 text-sm text-muted">
+                  No events currently assigned.
+                </p>
+              )}
+
+              {client.username && (
+                <ResetPasswordControl userId={client.userId} username={client.username} />
               )}
             </Card>
           ))}
