@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
+import { PasswordInput } from "@/components/ui/password-input";
 import type { PublicEvent } from "@/lib/events";
 
 type Visibility = "public" | "password" | "private";
@@ -22,6 +23,8 @@ export function EventSettingsForm({ event }: { event: PublicEvent }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const needsNewGalleryPassword =
+    visibility === "password" && event.visibility !== "password";
 
   async function handleSave() {
     setSaving(true);
@@ -83,12 +86,23 @@ export function EventSettingsForm({ event }: { event: PublicEvent }) {
       </div>
 
       {visibility === "password" && (
-        <Field label="New gallery password" hint="Leave blank to keep the current password">
-          <input
-            className={inputClass}
+        <Field
+          label="New gallery password"
+          hint={
+            needsNewGalleryPassword
+              ? "Guests will enter this password to open the gallery"
+              : "Leave blank to keep the current password"
+          }
+          htmlFor="event-settings-gallery-password"
+        >
+          <PasswordInput
+            id="event-settings-gallery-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            autoComplete="new-password"
             minLength={4}
+            maxLength={72}
+            required={needsNewGalleryPassword}
           />
         </Field>
       )}

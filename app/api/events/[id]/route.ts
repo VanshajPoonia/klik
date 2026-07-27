@@ -50,18 +50,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { password, ...rest } = parsed.data;
   const nextVisibility = rest.visibility ?? event.visibility;
-  if (nextVisibility === "password" && !password && !event.passwordHash) {
+  const enteringPasswordProtection =
+    nextVisibility === "password" && event.visibility !== "password";
+  if (
+    nextVisibility === "password" &&
+    !password &&
+    (enteringPasswordProtection || !event.passwordHash)
+  ) {
     return NextResponse.json(
       { error: "Password required for password-protected events" },
       { status: 400 },
     );
   }
 
+  const passwordHashUpdate = password
+    ? { passwordHash: await hashGalleryPassword(password) }
+    : rest.visibility && rest.visibility !== "password"
+      ? { passwordHash: null }
+      : {};
+
   const [updated] = await db
     .update(events)
     .set({
       ...rest,
-      ...(password ? { passwordHash: await hashGalleryPassword(password) } : {}),
+      ...passwordHashUpdate,
       updatedAt: new Date(),
     })
     .where(eq(events.id, id))

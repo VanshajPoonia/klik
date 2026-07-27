@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, inputClass } from "@/components/ui/field";
+import { PasswordInput } from "@/components/ui/password-input";
 
 type Visibility = "public" | "password" | "private";
 
@@ -85,12 +86,14 @@ export function CreateEventForm() {
           </Field>
         </div>
         {visibility === "password" && (
-          <Field label="Gallery password">
-            <input
-              className={inputClass}
+          <Field label="Gallery password" htmlFor="create-event-gallery-password">
+            <PasswordInput
+              id="create-event-gallery-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              autoComplete="new-password"
               minLength={4}
+              maxLength={72}
               required
             />
           </Field>
