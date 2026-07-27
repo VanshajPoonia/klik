@@ -8,6 +8,7 @@ import {
   real,
   index,
 } from "drizzle-orm/pg-core";
+import type { PlanKey } from "./plans";
 
 // --- Auth.js tables (organizers only - guests never get a row here) ---
 
@@ -21,6 +22,8 @@ export const users = pgTable("users", {
   emailVerified: timestamp("emailVerified", { withTimezone: true }),
   image: text("image"),
   role: text("role").$type<UserRole>().notNull().default("organizer"),
+  planKey: text("plan_key").$type<PlanKey>().notNull().default("event"),
+  credentialVersion: integer("credential_version").notNull().default(0),
   username: text("username").unique(), // set only for credential-based accounts
   passwordHash: text("password_hash"), // bcrypt, set only alongside username
 });
