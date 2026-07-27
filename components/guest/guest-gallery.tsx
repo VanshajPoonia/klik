@@ -176,8 +176,6 @@ export function GuestGallery({
   const uploadOne = useCallback(
     async ({ file, prepared }: PendingUpload) => {
       const mediaId = nanoid();
-      const extension = file.name.split(".").pop() || "bin";
-      const pathname = `events/${event.id}/${mediaId}.${extension}`;
 
       setUploading((current) => [...current, { id: mediaId, progress: 0 }]);
       try {
@@ -195,11 +193,16 @@ export function GuestGallery({
         const signRes = await fetch("/api/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eventId: event.id, mimeType, pathname }),
+          body: JSON.stringify({
+            eventId: event.id,
+            mediaId,
+            mimeType,
+            sizeBytes: uploadBody.size,
+          }),
         });
-        if (!signRes.ok) throw new Error("Failed to get upload URL");
-        const { uploadUrl, publicUrl, maxBytes } = await signRes.json();
-        if (uploadBody.size > maxBytes) throw new Error("File too large");
+        const signed = await signRes.json().catch(() => ({}));
+        if (!signRes.ok) throw new Error(signed.error ?? "Failed to get upload URL");
+        const { uploadUrl, pathname } = signed;
 
         await putWithRetry(uploadUrl, uploadBody, mimeType, (percentage) =>
           setUploading((current) =>
@@ -207,13 +210,12 @@ export function GuestGallery({
           ),
         );
 
-        await fetch(`/api/e/${event.slug}/media`, {
+        const registerRes = await fetch(`/api/e/${event.slug}/media`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mediaId,
             pathname,
-            blobUrl: publicUrl,
             mimeType,
             sizeBytes: uploadBody.size,
             width: compressed?.width ?? prepared?.width,
@@ -221,6 +223,10 @@ export function GuestGallery({
             clientCompressed: Boolean(compressed) || Boolean(prepared),
           }),
         });
+        if (!registerRes.ok) {
+          const registered = await registerRes.json().catch(() => ({}));
+          throw new Error(registered.error ?? "Could not add media to the gallery");
+        }
 
         mutate();
       } catch {
@@ -301,7 +307,7 @@ export function GuestGallery({
           <div>
             <h1 className="font-display text-2xl text-paper">{event.name}</h1>
             <p className="mt-1 text-sm text-muted">
-              {items.length} {items.length === 1 ? "photo" : "photos"} shared
+              {items.length} {items.length === 1 ? "item" : "items"} shared
               {isOwner && " · viewing as organizer"}
             </p>
           </div>
@@ -312,7 +318,7 @@ export function GuestGallery({
                 Camera
               </Button>
               <Button variant="ghost" onClick={() => inputRef.current?.click()}>
-                Add photos
+                Add media
               </Button>
               <input
                 ref={inputRef}
@@ -355,7 +361,7 @@ export function GuestGallery({
 
         {items.length === 0 ? (
           <div className="rounded-2xl border border-canvas-line bg-canvas-raised px-6 py-16 text-center text-sm text-muted">
-            No photos yet - be the first to add one.
+            No photos or videos yet. Be the first to add one.
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -425,6 +431,8 @@ export function GuestGallery({
           index={lightboxIndex}
           onIndexChange={(next) => setLightboxId(items[next]?.id ?? null)}
           onClose={() => setLightboxId(null)}
+          canDownload={event.downloadsEnabled || isOwner}
+          downloadBaseUrl={`/api/e/${event.slug}/media`}
         />
       )}
     </div>

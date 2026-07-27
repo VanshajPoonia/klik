@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 
 export interface LightboxItem {
   id: string;
@@ -19,11 +19,15 @@ export function Lightbox({
   index,
   onIndexChange,
   onClose,
+  downloadBaseUrl,
+  canDownload = false,
 }: {
   items: LightboxItem[];
   index: number;
   onIndexChange: (next: number) => void;
   onClose: () => void;
+  downloadBaseUrl?: string;
+  canDownload?: boolean;
 }) {
   const touchStartX = useRef<number | null>(null);
   const item = items[index];
@@ -74,13 +78,24 @@ export function Lightbox({
         <span className="text-sm tabular-nums text-muted">
           {index + 1} / {items.length}
         </span>
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {canDownload && downloadBaseUrl && (
+            <a
+              href={`${downloadBaseUrl}/${item.id}/download`}
+              aria-label={`Download ${item.kind}`}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+            >
+              <Download className="h-5 w-5" aria-hidden="true" />
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <div className="relative flex-1 overflow-hidden">
