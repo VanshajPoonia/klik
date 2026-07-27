@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, EVENT_VISIBILITIES } from "@/lib/schema";
 import { createEvent, toPublicEvent } from "@/lib/events";
+import { getAccountPlan } from "@/lib/account-plans";
+import { isExpired } from "@/lib/access";
 
 const createEventSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -50,6 +52,30 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Password required for password-protected events" },
       { status: 400 },
+    );
+  }
+
+  const [plan, existingEvents] = await Promise.all([
+    getAccountPlan(session.user.id),
+    db
+      .select({
+        expiresAt: events.expiresAt,
+        createdAt: events.createdAt,
+      })
+      .from(events)
+      .where(eq(events.ownerId, session.user.id)),
+  ]);
+  const activeEventCount = existingEvents.filter(
+    (event) => !isExpired(event, plan.galleryAccessDays),
+  ).length;
+  if (activeEventCount >= plan.maxActiveEvents) {
+    return NextResponse.json(
+      {
+        error: `${plan.name} supports ${plan.maxActiveEvents} active ${
+          plan.maxActiveEvents === 1 ? "event" : "events"
+        }. Ask an administrator to change your plan or wait for an event to end.`,
+      },
+      { status: 403 },
     );
   }
 
