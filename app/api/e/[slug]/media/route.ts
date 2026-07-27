@@ -5,10 +5,11 @@ import { cookies } from "next/headers";
 import https from "node:https";
 import sharp from "sharp";
 import heicConvert from "heic-convert";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
-import { canViewGallery } from "@/lib/access";
+import { canUpload, canViewGallery } from "@/lib/access";
+import { getAccountPlan } from "@/lib/account-plans";
 import { fetchGalleryMedia } from "@/lib/media";
 import {
   verifyGuestSession,
@@ -17,7 +18,16 @@ import {
   verifyEventUnlock,
 } from "@/lib/guest";
 import { requireOwnerSession } from "@/lib/roles";
-import { isAllowedMime, isVideoMime, publicUrlFor, r2 } from "@/lib/storage";
+import {
+  blobPathnameFor,
+  deleteBlobs,
+  extensionForMime,
+  isAllowedMime,
+  isVideoMime,
+  maxBytesForMime,
+  publicUrlFor,
+  r2,
+} from "@/lib/storage";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
 
 // sharp/heic-convert need native/WASM Node bindings, never the edge runtime.
@@ -25,9 +35,8 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const registerSchema = z.object({
-  mediaId: z.string().min(1),
+  mediaId: z.string().min(10).max(64).regex(/^[A-Za-z0-9_-]+$/),
   pathname: z.string().min(1),
-  blobUrl: z.string().url(),
   mimeType: z.string().min(1),
   sizeBytes: z.number().int().positive(),
   width: z.number().int().positive().optional(),
@@ -86,13 +95,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const { slug } = await params;
   const event = await loadEvent(slug);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const plan = await getAccountPlan(event.ownerId);
 
   const ownerSession = await requireOwnerSession(event.ownerId);
   const cookieStore = await cookies();
   const unlockCookie = cookieStore.get(eventUnlockCookieName(event.id))?.value;
   const hasUnlockCookie = unlockCookie ? await verifyEventUnlock(unlockCookie, event.id) : false;
 
-  const access = canViewGallery(event, { isOwner: Boolean(ownerSession), hasUnlockCookie });
+  const access = canViewGallery(event, {
+    isOwner: Boolean(ownerSession),
+    hasUnlockCookie,
+    galleryAccessDays: plan.galleryAccessDays,
+  });
   if (!access.allowed) {
     return NextResponse.json({ error: access.reason }, { status: 403 });
   }
@@ -123,6 +137,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const { slug } = await params;
   const event = await loadEvent(slug);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const plan = await getAccountPlan(event.ownerId);
+  if (!canUpload(event, plan.uploadWindowDays)) {
+    return NextResponse.json({ error: "Uploads are closed for this event" }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => null);
   const parsed = registerSchema.safeParse(body);
@@ -136,6 +154,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!isAllowedMime(input.mimeType)) {
     return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
   }
+  const expectedPathname = blobPathnameFor(
+    event.id,
+    input.mediaId,
+    extensionForMime(input.mimeType),
+  );
+  if (input.pathname !== expectedPathname) {
+    return NextResponse.json({ error: "Invalid upload path" }, { status: 400 });
+  }
 
   const guestId = await getGuestId(event.id);
   const ownerSession = await requireOwnerSession(event.ownerId);
@@ -143,9 +169,50 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
 
+  const [existingMedia] = await db
+    .select({ id: media.id })
+    .from(media)
+    .where(eq(media.id, input.mediaId))
+    .limit(1);
+  if (existingMedia) {
+    return NextResponse.json({ error: "Upload identifier is already in use" }, { status: 409 });
+  }
+
+  const maxBytes = maxBytesForMime(input.mimeType, plan);
+  let actualSizeBytes: number;
+  try {
+    const uploadedObject = await r2.send(
+      new HeadObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: input.pathname,
+      }),
+    );
+    actualSizeBytes = uploadedObject.ContentLength ?? 0;
+  } catch {
+    return NextResponse.json({ error: "Uploaded file could not be verified" }, { status: 400 });
+  }
+
+  if (!actualSizeBytes || actualSizeBytes !== input.sizeBytes) {
+    await deleteBlobs([input.pathname]).catch((error) => {
+      console.error("Failed to remove invalid upload:", error);
+    });
+    return NextResponse.json({ error: "Uploaded file size did not match" }, { status: 400 });
+  }
+
+  if (actualSizeBytes > maxBytes) {
+    await deleteBlobs([input.pathname]).catch((error) => {
+      console.error("Failed to remove oversized upload:", error);
+    });
+    return NextResponse.json(
+      { error: `File is too large for the ${plan.name} plan`, maxBytes },
+      { status: 413 },
+    );
+  }
+
   const kind = isVideoMime(input.mimeType) ? "video" : "photo";
-  let blobUrl = input.blobUrl;
-  let sizeBytes = input.sizeBytes;
+  let blobUrl = publicUrlFor(input.pathname);
+  let sizeBytes = actualSizeBytes;
+  let storedMimeType = input.mimeType;
   let width = input.width;
   let height = input.height;
 
@@ -181,6 +248,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
       blobUrl = publicUrlFor(input.pathname);
       sizeBytes = compressed.data.byteLength;
+      storedMimeType = "image/jpeg";
       width = compressed.info.width;
       height = compressed.info.height;
     } catch (error) {
@@ -200,7 +268,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       blobUrl,
       blobPathname: input.pathname,
       contentHash: input.contentHash ?? null,
-      mimeType: input.mimeType,
+      mimeType: storedMimeType,
       sizeBytes,
       width: width ?? null,
       height: height ?? null,
