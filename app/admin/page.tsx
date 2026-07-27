@@ -8,6 +8,7 @@ import { users, events } from "@/lib/schema";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
+import { ResetPasswordControl } from "@/components/admin/reset-password-control";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -63,19 +64,25 @@ export default async function AdminPage() {
             </Card>
           )}
           {rows.map((row) => (
-            <Link key={row.eventId} href={`/dashboard/events/${row.eventId}`}>
-              <Card className="flex items-center justify-between transition-colors hover:border-paper/30">
-                <div>
-                  <p className="font-medium text-paper">{row.contactName}</p>
-                  <p className="text-xs text-muted">
+            <Card key={row.eventId} className="space-y-4 transition-colors hover:border-paper/30">
+              <Link
+                href={`/dashboard/events/${row.eventId}`}
+                className="-m-2 flex items-center justify-between gap-4 rounded-lg p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-paper">{row.contactName}</p>
+                  <p className="truncate text-xs text-muted">
                     {row.eventName} · /e/{row.eventSlug} · @{row.username}
                   </p>
                 </div>
                 <Badge tone={row.visibility === "public" ? "volt" : "neutral"}>
                   {row.visibility}
                 </Badge>
-              </Card>
-            </Link>
+              </Link>
+              {row.username && (
+                <ResetPasswordControl userId={row.userId} username={row.username} />
+              )}
+            </Card>
           ))}
         </div>
       </div>
