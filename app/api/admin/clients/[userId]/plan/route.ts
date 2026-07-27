@@ -6,6 +6,7 @@ import { getPlan, PLAN_KEYS } from "@/lib/plans";
 import { events, users } from "@/lib/schema";
 import { requireSuperadmin } from "@/lib/roles";
 import { isExpired } from "@/lib/access";
+import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
 
 const requestSchema = z.object({
   planKey: z.enum(PLAN_KEYS),
@@ -45,6 +46,9 @@ export async function PATCH(
   const activeEventCount = organizerEvents.filter(
     (event) => !isExpired(event, plan.galleryAccessDays),
   ).length;
+  const monthlyEventCount = organizerEvents.filter((event) =>
+    wasCreatedThisUtcMonth(event.createdAt),
+  ).length;
   if (activeEventCount > plan.maxActiveEvents) {
     const eventsToClose = activeEventCount - plan.maxActiveEvents;
     return NextResponse.json(
@@ -52,6 +56,16 @@ export async function PATCH(
         error: `Close or delete ${eventsToClose} active ${
           eventsToClose === 1 ? "event" : "events"
         } before assigning ${plan.name}.`,
+      },
+      { status: 409 },
+    );
+  }
+  if (monthlyEventCount > plan.maxEventsPerMonth) {
+    return NextResponse.json(
+      {
+        error: `${plan.name} allows ${plan.maxEventsPerMonth} ${
+          plan.maxEventsPerMonth === 1 ? "event" : "events"
+        } per month, but this organizer has already created ${monthlyEventCount}. Assign this plan after the monthly allowance resets.`,
       },
       { status: 409 },
     );

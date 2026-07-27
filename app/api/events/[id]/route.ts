@@ -3,13 +3,21 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, media, EVENT_VISIBILITIES } from "@/lib/schema";
-import { toPublicEvent, hashGalleryPassword } from "@/lib/events";
+import { toOrganizerEvent, hashGalleryPassword } from "@/lib/events";
 import { requireOwnerSession } from "@/lib/roles";
 import { deleteBlobs } from "@/lib/storage";
+import { getAccountPlan } from "@/lib/account-plans";
+import { canManageEventClients } from "@/lib/plans";
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   eventDate: z.coerce.date().nullable().optional(),
+  clientName: z.string().trim().max(120).nullable().optional(),
+  clientEmail: z
+    .union([z.literal(""), z.string().trim().email().max(254)])
+    .nullable()
+    .optional(),
+  clientPhone: z.string().trim().max(40).nullable().optional(),
   visibility: z.enum(EVENT_VISIBILITIES).optional(),
   password: z.string().min(4).max(72).optional(),
   moderation: z.boolean().optional(),
@@ -30,7 +38,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { event, session } = await getOwnedEvent(id);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json({ event: toPublicEvent(event) });
+  return NextResponse.json({ event: toOrganizerEvent(event) });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -46,6 +54,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       { error: parsed.error.issues[0]?.message ?? "Invalid input" },
       { status: 400 },
     );
+  }
+
+  const clientFieldsRequested =
+    "clientName" in parsed.data ||
+    "clientEmail" in parsed.data ||
+    "clientPhone" in parsed.data;
+  if (clientFieldsRequested) {
+    const plan = await getAccountPlan(event.ownerId);
+    if (!canManageEventClients(plan.key)) {
+      return NextResponse.json(
+        { error: "Client details are available on the Klik Venue plan" },
+        { status: 403 },
+      );
+    }
   }
 
   const { password, ...rest } = parsed.data;
@@ -79,7 +101,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .where(eq(events.id, id))
     .returning();
 
-  return NextResponse.json({ event: toPublicEvent(updated) });
+  return NextResponse.json({ event: toOrganizerEvent(updated) });
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {

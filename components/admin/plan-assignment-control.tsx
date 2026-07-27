@@ -59,7 +59,10 @@ export function PlanAssignmentControl({
         ))}
       </select>
       <p className={`mt-1.5 text-xs ${error ? "text-red-400" : "text-muted"}`} aria-live="polite">
-        {error ?? (saving ? "Saving plan…" : `${PLANS[planKey].maxActiveEvents} active event limit`)}
+        {error ??
+          (saving
+            ? "Saving plan…"
+            : `${PLANS[planKey].maxActiveEvents} active, ${PLANS[planKey].maxEventsPerMonth} per month`)}
       </p>
     </div>
   );

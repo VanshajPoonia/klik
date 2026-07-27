@@ -6,11 +6,17 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
-import type { PublicEvent } from "@/lib/events";
+import type { OrganizerEvent } from "@/lib/events";
 
 type Visibility = "public" | "password" | "private";
 
-export function EventSettingsForm({ event }: { event: PublicEvent }) {
+export function EventSettingsForm({
+  event,
+  canManageClients = false,
+}: {
+  event: OrganizerEvent;
+  canManageClients?: boolean;
+}) {
   const router = useRouter();
   const [visibility, setVisibility] = useState<Visibility>(event.visibility as Visibility);
   const [password, setPassword] = useState("");
@@ -20,6 +26,9 @@ export function EventSettingsForm({ event }: { event: PublicEvent }) {
   const [expiresAt, setExpiresAt] = useState(
     event.expiresAt ? new Date(event.expiresAt).toISOString().slice(0, 10) : "",
   );
+  const [clientName, setClientName] = useState(event.clientName ?? "");
+  const [clientEmail, setClientEmail] = useState(event.clientEmail ?? "");
+  const [clientPhone, setClientPhone] = useState(event.clientPhone ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -41,6 +50,9 @@ export function EventSettingsForm({ event }: { event: PublicEvent }) {
         downloadsEnabled,
         uploadsEnabled,
         expiresAt: expiresAt || null,
+        clientName: canManageClients ? clientName || null : undefined,
+        clientEmail: canManageClients ? clientEmail || null : undefined,
+        clientPhone: canManageClients ? clientPhone || null : undefined,
       }),
     });
 
@@ -105,6 +117,40 @@ export function EventSettingsForm({ event }: { event: PublicEvent }) {
             required={needsNewGalleryPassword}
           />
         </Field>
+      )}
+
+      {canManageClients && (
+        <fieldset className="space-y-4 rounded-xl border border-canvas-line p-4">
+          <legend className="px-1 text-sm font-medium text-paper">Client details</legend>
+          <Field label="Client name" hint="Visible only to the organizer and administrators">
+            <input
+              className={inputClass}
+              value={clientName}
+              onChange={(event) => setClientName(event.target.value)}
+              maxLength={120}
+            />
+          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Client email">
+              <input
+                type="email"
+                className={inputClass}
+                value={clientEmail}
+                onChange={(event) => setClientEmail(event.target.value)}
+                maxLength={254}
+              />
+            </Field>
+            <Field label="Client phone">
+              <input
+                type="tel"
+                className={inputClass}
+                value={clientPhone}
+                onChange={(event) => setClientPhone(event.target.value)}
+                maxLength={40}
+              />
+            </Field>
+          </div>
+        </fieldset>
       )}
 
       <div className="space-y-3">

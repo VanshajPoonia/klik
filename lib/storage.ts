@@ -68,10 +68,12 @@ export function publicUrlFor(pathname: string) {
 
 export async function deleteBlobs(pathnames: string[]) {
   if (pathnames.length === 0) return;
-  await r2.send(
-    new DeleteObjectsCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Delete: { Objects: pathnames.map((Key) => ({ Key })) },
-    }),
-  );
+  for (let index = 0; index < pathnames.length; index += 1000) {
+    await r2.send(
+      new DeleteObjectsCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Delete: { Objects: pathnames.slice(index, index + 1000).map((Key) => ({ Key })) },
+      }),
+    );
+  }
 }

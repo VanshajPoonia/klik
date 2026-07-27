@@ -27,6 +27,9 @@ export interface CreateEventInput {
   ownerId: string;
   name: string;
   eventDate?: Date | null;
+  clientName?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
   visibility?: EventVisibility;
   password?: string | null;
   moderation?: boolean;
@@ -52,6 +55,9 @@ export async function prepareEventInsert(input: CreateEventInput) {
       slug,
       name: input.name,
       eventDate: input.eventDate ?? null,
+      clientName: input.clientName ?? null,
+      clientEmail: input.clientEmail ?? null,
+      clientPhone: input.clientPhone ?? null,
       visibility: input.visibility ?? "public",
       passwordHash,
       moderation: input.moderation ?? false,
@@ -70,10 +76,21 @@ export async function createEvent(input: CreateEventInput) {
 
 export { hashGalleryPassword };
 
-/** Strips password_hash before an event row ever reaches an API response. */
-export function toPublicEvent(event: Event) {
-  const { passwordHash: _passwordHash, ...rest } = event;
+/** Owner-safe event shape that keeps operational fields but never exposes a password hash. */
+export function toOrganizerEvent(event: Event) {
+  const { passwordHash, ...rest } = event;
+  void passwordHash;
   return rest;
 }
 
+/** Guest-safe event shape that also removes private client contact details. */
+export function toPublicEvent(event: Event) {
+  const { clientName, clientEmail, clientPhone, ...rest } = toOrganizerEvent(event);
+  void clientName;
+  void clientEmail;
+  void clientPhone;
+  return rest;
+}
+
+export type OrganizerEvent = ReturnType<typeof toOrganizerEvent>;
 export type PublicEvent = ReturnType<typeof toPublicEvent>;

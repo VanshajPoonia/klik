@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MediaGrid } from "@/components/dashboard/media-grid";
 import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
 import { Lightbox } from "@/components/guest/lightbox";
-import type { PublicEvent } from "@/lib/events";
+import type { OrganizerEvent } from "@/lib/events";
 import type { Media, MediaStatus } from "@/lib/schema";
 
 type Tab = "gallery" | "settings" | "qr";
@@ -18,11 +19,15 @@ export function EventDashboard({
   initialMedia,
   guestUrl,
   backHref = "/dashboard",
+  canManageClients = false,
+  canSlideshow = false,
 }: {
-  event: PublicEvent;
+  event: OrganizerEvent;
   initialMedia: Media[];
   guestUrl: string;
   backHref?: string;
+  canManageClients?: boolean;
+  canSlideshow?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
   const [mediaItems, setMediaItems] = useState(initialMedia);
@@ -116,10 +121,22 @@ export function EventDashboard({
             <h1 className="font-display text-2xl text-paper">{event.name}</h1>
             <p className="mt-1 text-sm text-muted">/e/{event.slug}</p>
           </div>
-          <div className="flex gap-2">
-            <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>{event.visibility}</Badge>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {approved.length > 0 && (
+              <a
+                href={`/api/events/${event.id}/download`}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line px-4 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Download ZIP
+              </a>
+            )}
+            <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>
+              {event.visibility}
+            </Badge>
             {event.moderation && <Badge tone="warning">moderated</Badge>}
             {!event.uploadsEnabled && <Badge tone="danger">uploads closed</Badge>}
+            {event.purgedAt && <Badge tone="danger">storage cleared</Badge>}
           </div>
         </header>
 
@@ -200,7 +217,9 @@ export function EventDashboard({
           </div>
         )}
 
-        {tab === "settings" && <EventSettingsForm event={event} />}
+        {tab === "settings" && (
+          <EventSettingsForm event={event} canManageClients={canManageClients} />
+        )}
         {tab === "qr" && <QrPanel eventId={event.id} slug={event.slug} guestUrl={guestUrl} />}
       </div>
 
@@ -211,6 +230,7 @@ export function EventDashboard({
           onIndexChange={(next) => setLightboxId(mediaItems[next]?.id ?? null)}
           onClose={() => setLightboxId(null)}
           canDownload
+          canSlideshow={canSlideshow}
           downloadBaseUrl={downloadBaseUrl}
         />
       )}

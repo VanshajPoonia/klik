@@ -71,6 +71,9 @@ CREATE TABLE events (
   slug             text NOT NULL UNIQUE,          -- short, URL-safe, e.g. "anita-wedding-x7k2"
   name             text NOT NULL,
   event_date       timestamptz,
+  client_name      text,                          -- Venue-only organizer contact
+  client_email     text,                          -- never included in guest responses
+  client_phone     text,                          -- never included in guest responses
   cover_media_id   text,                          -- FK to media, nullable, set after upload
   visibility       text NOT NULL DEFAULT 'public',-- 'public' | 'password' | 'private'
   password_hash    text,                          -- bcrypt, only when visibility='password'
@@ -137,12 +140,12 @@ app/
     events/route.ts               # POST create (organizer)
     events/[id]/route.ts          # PATCH settings, DELETE event (organizer)
     events/[id]/qr/route.ts       # GET → SVG/PNG QR (organizer)
-    events/[id]/zip/route.ts      # GET → streaming zip of approved media (organizer)
+    events/[id]/download/route.ts # GET → streaming zip of approved media (organizer)
     events/[id]/media/[mediaId]/route.ts  # PATCH status, DELETE (organizer)
     e/[slug]/session/route.ts     # POST guest session (name + consent) / password unlock
     e/[slug]/media/route.ts       # GET gallery page (cursor) | POST register uploaded blob
     upload/route.ts               # POST → Vercel Blob client-upload token handshake
-    cron/purge/route.ts           # GET, CRON_SECRET-protected: purge expired events
+    cron/purge-expired/route.ts   # GET, CRON_SECRET-protected: purge expired storage
 lib/
   db.ts        # Neon + Drizzle client
   schema.ts    # Drizzle schema (source of truth for §3)
@@ -166,14 +169,14 @@ All bodies validated with Zod. Errors: `{ error: string }` with proper status co
 | `PATCH /api/events/[id]` | owner | Update any setting; setting `visibility='password'` requires `password`; re-hash |
 | `DELETE /api/events/[id]` | owner | Delete event + all blobs (iterate `blob_pathname`, then cascade delete rows) |
 | `GET /api/events/[id]/qr?format=png\|svg&size=1024` | owner | QR encoding `${APP_URL}/e/${slug}` |
-| `GET /api/events/[id]/zip` | owner | Streaming zip of approved originals; filename `klik-<slug>.zip` |
+| `GET /api/events/[id]/download` | owner | Streaming zip of approved originals; filename `klik-<slug>.zip` |
 | `PATCH /api/events/[id]/media/[mediaId]` | owner | `{ status: 'approved' \| 'rejected' }` |
 | `DELETE /api/events/[id]/media/[mediaId]` | owner | Delete row + blob |
 | `POST /api/e/[slug]/session` | none | `{ name?, consent: true, password? }` → creates guest row, sets signed cookie. Password checked here for password-visibility events |
 | `GET /api/e/[slug]/media?cursor=<createdAt_id>&limit=50` | gallery access | Approved media only, newest first, keyset pagination. Guests' own `pending` items are included (flagged `mine: true, pending: true`) so uploaders see their photos immediately |
 | `POST /api/upload` | guest cookie or owner | Vercel Blob `handleUpload` token exchange. Enforces: event exists, uploads enabled, not expired, mime allowlist, size caps, rate limit |
 | `POST /api/e/[slug]/media` | guest cookie or owner | After client upload completes: `{ blobUrl, pathname, hash, mime, size, width?, height?, duration? }` → insert media row with correct initial `status` |
-| `GET /api/cron/purge` | `Authorization: Bearer CRON_SECRET` | For events where `expires_at + 30 days < now()` and `purged_at IS NULL`: delete blobs, set `purged_at` |
+| `GET /api/cron/purge-expired` | `Authorization: Bearer CRON_SECRET` | Delete media after the account plan's storage window, keep the event row, and set `purged_at` |
 
 ---
 
@@ -237,8 +240,8 @@ Client UX requirements: parallel uploads (max 3 concurrent), per-file progress, 
 - Guard: if total size > 2 GB, return 413 with a clear message; dashboard then offers "download in batches of 200" (same endpoint with `?cursor=` ranges). This keeps MVP simple - no background jobs, no email links.
 
 ### 7.7 Expiration & purge
-- `vercel.json` cron: `0 3 * * *` → `/api/cron/purge`.
-- Grace period: blobs deleted **30 days after** `expires_at`; rows kept (with `purged_at` set) so the dashboard can explain what happened.
+- `vercel.json` cron: `0 3 * * *` calls `/api/cron/purge-expired`.
+- Media is deleted after the owning account plan's storage window. Event rows remain with `purged_at` set so the dashboard can explain what happened.
 
 ### 7.8 Consent
 - Consent checkbox is required before the guest session is created; `consented_at` stored on the guest row. Copy: *"I understand that photos and videos I upload may be visible to everyone with access to this event gallery, and I have the right to share them."*
@@ -255,7 +258,7 @@ Client UX requirements: parallel uploads (max 3 concurrent), per-file progress, 
 - [ ] Upload token handshake re-checks every rule (§6) - client-supplied mime/size are advisory only; Blob token itself restricts `allowedContentTypes` and `maximumSizeInBytes`.
 - [ ] Rate limits on: guest session creation (10/IP/hour), password attempts (10/IP/hour), uploads (§6).
 - [ ] Cron route rejects requests without `CRON_SECRET`.
-- [ ] No PII beyond optional display name; document this in the privacy note.
+- [ ] Venue client contact fields never appear in guest-facing event responses.
 
 ---
 
@@ -267,7 +270,7 @@ Each milestone must end with the app deployable and the listed flows working end
 2. **Events CRUD + QR** ✅ - dashboard create/list/edit/delete, settings form, QR generation/download.
 3. **Guest page + uploads** ✅ - access gate, consent/name sheet, upload flow (§6, now with server-side photo compression - see §11), gallery grid + polling.
 4. **Moderation + media management** ✅ (basic) - pending section, approve/reject/delete. Duplicate-badge UI and per-item guest download/share buttons are not yet built.
-5. **Zip download, expiration cron purge, rate limits, security pass (§8) - not yet built.**
+5. **Zip download and expiration cron purge** ✅. Rate limits and the remaining security pass are not yet built.
 6. **Polish** - landing page ✅. Empty/error states, mobile QA, OG images - not yet built.
 
 Out of scope for MVP (do not build): realtime websockets, face recognition, AI moderation, guest likes/comments, payments/plans, email notifications, EXIF-based sorting, background job queues, video transcoding.
@@ -323,7 +326,7 @@ Plugs into the existing upload flow (§6) at the step that already existed there
 
 ### Explicitly deferred from this pass
 
-Payments/pricing, zip download-all, cron purge/expiration enforcement, rate limiting (including brute-force protection on the new `/login` credentials form - a new surface this feature introduces), Google/Resend live wiring (code is in place but no keys supplied yet - those buttons are hidden unless the env vars are set), video transcoding, multi-admin management UI beyond the one seeded superadmin, true session revocation.
+Payments, rate limiting (including brute-force protection on the `/login` credentials form), Google/Resend live wiring, video transcoding, and multi-admin management UI beyond the one seeded superadmin.
 
 ### Deployment notes (for whoever touches infra next)
 

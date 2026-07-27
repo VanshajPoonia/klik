@@ -24,6 +24,7 @@ export default async function AdminPage() {
       planKey: users.planKey,
       eventId: events.id,
       eventName: events.name,
+      eventClientName: events.clientName,
       eventSlug: events.slug,
       visibility: events.visibility,
       expiresAt: events.expiresAt,
@@ -44,6 +45,7 @@ export default async function AdminPage() {
         id: string;
         name: string;
         slug: string;
+        clientName: string | null;
         visibility: (typeof rows)[number]["visibility"];
       }>;
     }>
@@ -55,6 +57,7 @@ export default async function AdminPage() {
           id: row.eventId,
           name: row.eventName,
           slug: row.eventSlug,
+          clientName: row.eventClientName,
           visibility: row.visibility,
         });
       }
@@ -71,6 +74,7 @@ export default async function AdminPage() {
                   id: row.eventId,
                   name: row.eventName,
                   slug: row.eventSlug,
+                  clientName: row.eventClientName,
                   visibility: row.visibility,
                 },
               ]
@@ -138,6 +142,9 @@ export default async function AdminPage() {
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-paper">{event.name}</p>
+                        {event.clientName && (
+                          <p className="truncate text-xs text-paper/70">{event.clientName}</p>
+                        )}
                         <p className="truncate text-xs text-muted">/e/{event.slug}</p>
                       </div>
                       <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>

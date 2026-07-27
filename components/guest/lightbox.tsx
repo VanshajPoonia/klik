@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Pause, Play, X } from "lucide-react";
 
 export interface LightboxItem {
   id: string;
@@ -21,6 +21,7 @@ export function Lightbox({
   onClose,
   downloadBaseUrl,
   canDownload = false,
+  canSlideshow = false,
 }: {
   items: LightboxItem[];
   index: number;
@@ -28,8 +29,10 @@ export function Lightbox({
   onClose: () => void;
   downloadBaseUrl?: string;
   canDownload?: boolean;
+  canSlideshow?: boolean;
 }) {
   const touchStartX = useRef<number | null>(null);
+  const [slideshowPlaying, setSlideshowPlaying] = useState(false);
   const item = items[index];
 
   const go = useCallback(
@@ -45,10 +48,23 @@ export function Lightbox({
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "ArrowRight") go(1);
+      else if (e.code === "Space" && canSlideshow && items.length > 1) {
+        e.preventDefault();
+        setSlideshowPlaying((playing) => !playing);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, onClose]);
+  }, [canSlideshow, go, items.length, onClose]);
+
+  useEffect(() => {
+    if (!slideshowPlaying || items.length < 2 || !item) return;
+    const delay = item.kind === "video" ? 12_000 : 6_000;
+    const timer = window.setTimeout(() => {
+      onIndexChange((index + 1) % items.length);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [index, item, items.length, onIndexChange, slideshowPlaying]);
 
   // Keep the page behind from scrolling under the viewer.
   useEffect(() => {
@@ -79,6 +95,21 @@ export function Lightbox({
           {index + 1} / {items.length}
         </span>
         <div className="flex items-center gap-2">
+          {canSlideshow && items.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setSlideshowPlaying((playing) => !playing)}
+              aria-label={slideshowPlaying ? "Pause slideshow" : "Start slideshow"}
+              aria-pressed={slideshowPlaying}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+            >
+              {slideshowPlaying ? (
+                <Pause className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <Play className="h-5 w-5" aria-hidden="true" />
+              )}
+            </button>
+          )}
           {canDownload && downloadBaseUrl && (
             <a
               href={`${downloadBaseUrl}/${item.id}/download`}

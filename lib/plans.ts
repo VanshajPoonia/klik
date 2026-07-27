@@ -11,6 +11,7 @@ export type PlanDefinition = {
   priceNote?: string;
   description: string;
   maxActiveEvents: number;
+  maxEventsPerMonth: number;
   uploadWindowDays: number;
   galleryAccessDays: number;
   maxPhotoBytes: number;
@@ -28,6 +29,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     priceNote: "$49 after the introductory period",
     description: "For birthdays, graduations, reunions, and smaller weddings.",
     maxActiveEvents: 1,
+    maxEventsPerMonth: 1,
     uploadWindowDays: 90,
     galleryAccessDays: 365,
     maxPhotoBytes: 25 * MB,
@@ -38,6 +40,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "Shared live gallery",
       "Public, password, or private access",
       "Host moderation and guest download controls",
+      "Download-all ZIP",
       "3-month upload window",
       "12-month gallery access",
       "One QR code and one gallery",
@@ -51,6 +54,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     priceSuffix: "one-time",
     description: "For hosts who need a longer collection window and larger videos.",
     maxActiveEvents: 1,
+    maxEventsPerMonth: 1,
     uploadWindowDays: 365,
     galleryAccessDays: 365,
     maxPhotoBytes: 25 * MB,
@@ -60,6 +64,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "12-month upload window",
       "Videos up to 500 MB",
       "Original photo and video downloads",
+      "Live full-screen slideshow",
       "Host moderation and guest download controls",
       "12-month gallery access",
     ],
@@ -72,15 +77,17 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     priceNote: "$690 annual option",
     description: "For venues and professionals managing several live events.",
     maxActiveEvents: 5,
+    maxEventsPerMonth: 5,
     uploadWindowDays: 365,
     galleryAccessDays: 365,
     maxPhotoBytes: 25 * MB,
     maxVideoBytes: 500 * MB,
     features: [
-      "Up to 5 active events",
+      "Up to 5 active events per month",
       "Central event dashboard",
+      "Client and event management",
       "Downloadable event QR signs",
-      "12-month upload and gallery windows",
+      "12-month event storage",
       "Videos up to 500 MB",
       "Moderation and guest download controls",
     ],
@@ -89,6 +96,14 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
 
 export function getPlan(planKey: PlanKey | null | undefined): PlanDefinition {
   return PLANS[planKey ?? "event"] ?? PLANS.event;
+}
+
+export function canUseSlideshow(planKey: PlanKey): boolean {
+  return planKey === "premium" || planKey === "venue";
+}
+
+export function canManageEventClients(planKey: PlanKey): boolean {
+  return planKey === "venue";
 }
 
 export function formatFileSize(bytes: number): string {

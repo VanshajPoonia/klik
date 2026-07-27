@@ -195,7 +195,7 @@ export function QuickCreateForm() {
             {Object.values(PLANS).map((plan) => (
               <option key={plan.key} value={plan.key}>
                 {plan.name} · {plan.maxActiveEvents} active{" "}
-                {plan.maxActiveEvents === 1 ? "event" : "events"}
+                {plan.maxActiveEvents === 1 ? "event" : "events"} · {plan.maxEventsPerMonth}/month
               </option>
             ))}
           </select>

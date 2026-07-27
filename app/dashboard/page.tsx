@@ -10,7 +10,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getAccountPlan } from "@/lib/account-plans";
 import { isExpired } from "@/lib/access";
-import { formatFileSize } from "@/lib/plans";
+import { canManageEventClients, formatFileSize } from "@/lib/plans";
+import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -25,7 +26,11 @@ export default async function DashboardPage() {
   const activeEventCount = rows.filter(
     (event) => !isExpired(event, plan.galleryAccessDays),
   ).length;
-  const canCreateEvent = activeEventCount < plan.maxActiveEvents;
+  const monthlyEventCount = rows.filter((event) =>
+    wasCreatedThisUtcMonth(event.createdAt),
+  ).length;
+  const canCreateEvent =
+    activeEventCount < plan.maxActiveEvents && monthlyEventCount < plan.maxEventsPerMonth;
 
   return (
     <div className="min-h-screen px-6 py-10 md:px-10">
@@ -59,6 +64,9 @@ export default async function DashboardPage() {
               {plan.maxActiveEvents === 1 ? "event" : "events"}
             </p>
             <p className="mt-1 text-xs text-muted">
+              {monthlyEventCount} of {plan.maxEventsPerMonth} created this month
+            </p>
+            <p className="mt-1 text-xs text-muted">
               {plan.uploadWindowDays}-day uploads · {formatFileSize(plan.maxVideoBytes)} videos
             </p>
           </div>
@@ -67,10 +75,13 @@ export default async function DashboardPage() {
         <div className="mb-10">
           <CreateEventForm
             canCreate={canCreateEvent}
+            canManageClients={canManageEventClients(plan.key)}
             limitMessage={
               canCreateEvent
                 ? undefined
-                : `${plan.name} has reached its active event limit. Ask an administrator to change the plan or wait for an event to end.`
+                : monthlyEventCount >= plan.maxEventsPerMonth
+                  ? `${plan.name} has reached its monthly event limit. The allowance resets on the first day of the next UTC month.`
+                  : `${plan.name} has reached its active event limit. Ask an administrator to change the plan or wait for an event to end.`
             }
           />
         </div>
@@ -86,6 +97,9 @@ export default async function DashboardPage() {
               <Card className="flex items-center justify-between transition-colors hover:border-paper/30">
                 <div>
                   <p className="font-medium text-paper">{event.name}</p>
+                  {event.clientName && (
+                    <p className="mt-0.5 text-xs text-paper/70">{event.clientName}</p>
+                  )}
                   <p className="text-xs text-muted">/e/{event.slug}</p>
                 </div>
                 <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>

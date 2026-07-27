@@ -11,15 +11,20 @@ type Visibility = "public" | "password" | "private";
 
 export function CreateEventForm({
   canCreate = true,
+  canManageClients = false,
   limitMessage,
 }: {
   canCreate?: boolean;
+  canManageClients?: boolean;
   limitMessage?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [eventDate, setEventDate] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("public");
   const [password, setPassword] = useState("");
   const [moderation, setModeration] = useState(false);
@@ -37,6 +42,9 @@ export function CreateEventForm({
       body: JSON.stringify({
         name,
         eventDate: eventDate || null,
+        clientName: canManageClients ? clientName : undefined,
+        clientEmail: canManageClients ? clientEmail : undefined,
+        clientPhone: canManageClients ? clientPhone : undefined,
         visibility,
         password: visibility === "password" ? password : undefined,
         moderation,
@@ -79,6 +87,42 @@ export function CreateEventForm({
             required
           />
         </Field>
+        {canManageClients && (
+          <fieldset className="space-y-4 rounded-xl border border-canvas-line p-4">
+            <legend className="px-1 text-sm font-medium text-paper">Client details</legend>
+            <Field label="Client name" hint="Optional internal contact for this event">
+              <input
+                className={inputClass}
+                value={clientName}
+                onChange={(event) => setClientName(event.target.value)}
+                maxLength={120}
+                placeholder="Anita and Raj"
+              />
+            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Client email">
+                <input
+                  type="email"
+                  className={inputClass}
+                  value={clientEmail}
+                  onChange={(event) => setClientEmail(event.target.value)}
+                  maxLength={254}
+                  placeholder="client@example.com"
+                />
+              </Field>
+              <Field label="Client phone">
+                <input
+                  type="tel"
+                  className={inputClass}
+                  value={clientPhone}
+                  onChange={(event) => setClientPhone(event.target.value)}
+                  maxLength={40}
+                  placeholder="+1 555 0100"
+                />
+              </Field>
+            </div>
+          </fieldset>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Event date (optional)">
             <input

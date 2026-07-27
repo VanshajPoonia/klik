@@ -14,6 +14,7 @@ import {
 } from "@/lib/guest";
 import { toPublicEvent } from "@/lib/events";
 import { fetchGalleryMedia } from "@/lib/media";
+import { canUseSlideshow } from "@/lib/plans";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -75,5 +76,12 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     uploadsEnabled: canUpload(event, plan.uploadWindowDays),
   });
 
-  return <GuestGallery event={publicEvent} isOwner={isOwner} initialMedia={initialMedia} />;
+  return (
+    <GuestGallery
+      event={publicEvent}
+      isOwner={isOwner}
+      initialMedia={initialMedia}
+      canSlideshow={canUseSlideshow(plan.key)}
+    />
+  );
 }

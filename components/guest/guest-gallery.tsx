@@ -104,10 +104,12 @@ export function GuestGallery({
   event,
   isOwner,
   initialMedia,
+  canSlideshow = false,
 }: {
   event: PublicEvent;
   isOwner: boolean;
   initialMedia: MediaItem[];
+  canSlideshow?: boolean;
 }) {
   // A single accumulating, always-sorted list: new arrivals are prepended via
   // a `since` cursor (never re-polls a fixed window, so nothing can be pushed
@@ -432,6 +434,7 @@ export function GuestGallery({
           onIndexChange={(next) => setLightboxId(items[next]?.id ?? null)}
           onClose={() => setLightboxId(null)}
           canDownload={event.downloadsEnabled || isOwner}
+          canSlideshow={canSlideshow}
           downloadBaseUrl={`/api/e/${event.slug}/media`}
         />
       )}
