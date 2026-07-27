@@ -8,9 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { MediaGrid } from "@/components/dashboard/media-grid";
 import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
+import { AlbumManager } from "@/components/dashboard/album-manager";
+import { CoHostManager } from "@/components/dashboard/co-host-manager";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { OrganizerEvent } from "@/lib/events";
-import type { Media, MediaStatus } from "@/lib/schema";
+import type { Album, Media, VenueClient } from "@/lib/schema";
+import type { MediaStatus } from "@/lib/schema";
+import { formatFileSize } from "@/lib/plans";
+import { buildDownloadBatches } from "@/lib/download-batches";
 
 type Tab = "gallery" | "settings" | "qr";
 
@@ -21,6 +26,16 @@ export function EventDashboard({
   backHref = "/dashboard",
   canManageClients = false,
   canSlideshow = false,
+  canManageAlbums = false,
+  canManageCoHosts = false,
+  canCustomizeGallery = false,
+  canCustomizeQr = false,
+  canDownloadQrSign = false,
+  canUseVenueHub = false,
+  canDeleteEvent = false,
+  albums = [],
+  coHosts = [],
+  clients = [],
 }: {
   event: OrganizerEvent;
   initialMedia: Media[];
@@ -28,6 +43,21 @@ export function EventDashboard({
   backHref?: string;
   canManageClients?: boolean;
   canSlideshow?: boolean;
+  canManageAlbums?: boolean;
+  canManageCoHosts?: boolean;
+  canCustomizeGallery?: boolean;
+  canCustomizeQr?: boolean;
+  canDownloadQrSign?: boolean;
+  canUseVenueHub?: boolean;
+  canDeleteEvent?: boolean;
+  albums?: Album[];
+  coHosts?: Array<{
+    id: string;
+    name: string | null;
+    email: string | null;
+    username: string | null;
+  }>;
+  clients?: VenueClient[];
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
   const [mediaItems, setMediaItems] = useState(initialMedia);
@@ -38,6 +68,10 @@ export function EventDashboard({
   const pending = mediaItems.filter((item) => item.status === "pending");
   const approved = mediaItems.filter((item) => item.status === "approved");
   const rejected = mediaItems.filter((item) => item.status === "rejected");
+  const downloadParts = buildDownloadBatches(approved).map((items) => ({
+    itemCount: items.length,
+    sizeBytes: items.reduce((total, item) => total + item.sizeBytes, 0),
+  }));
   const lightboxIndex = lightboxId
     ? mediaItems.findIndex((item) => item.id === lightboxId)
     : -1;
@@ -107,6 +141,35 @@ export function EventDashboard({
     }
   }
 
+  async function setAlbum(mediaId: string, albumId: string | null) {
+    const previousAlbumId = mediaItems.find((item) => item.id === mediaId)?.albumId ?? null;
+    setMediaError(null);
+    setBusy(mediaId, true);
+    setMediaItems((items) =>
+      items.map((item) => (item.id === mediaId ? { ...item, albumId } : item)),
+    );
+    try {
+      const response = await fetch(`/api/events/${event.id}/media/${mediaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ albumId }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? "Could not move this item.");
+      }
+    } catch (error) {
+      setMediaItems((items) =>
+        items.map((item) =>
+          item.id === mediaId ? { ...item, albumId: previousAlbumId } : item,
+        ),
+      );
+      setMediaError(error instanceof Error ? error.message : "Could not move this item.");
+    } finally {
+      setBusy(mediaId, false);
+    }
+  }
+
   return (
     <div className="min-h-screen px-6 py-10 md:px-10">
       <div className="mx-auto max-w-5xl">
@@ -122,7 +185,7 @@ export function EventDashboard({
             <p className="mt-1 text-sm text-muted">/e/{event.slug}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {approved.length > 0 && (
+            {downloadParts.length === 1 && (
               <a
                 href={`/api/events/${event.id}/download`}
                 className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line px-4 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt"
@@ -135,6 +198,7 @@ export function EventDashboard({
               {event.visibility}
             </Badge>
             {event.moderation && <Badge tone="warning">moderated</Badge>}
+            {!event.isActive && <Badge tone="neutral">event ended</Badge>}
             {!event.uploadsEnabled && <Badge tone="danger">uploads closed</Badge>}
             {event.purgedAt && <Badge tone="danger">storage cleared</Badge>}
           </div>
@@ -157,6 +221,27 @@ export function EventDashboard({
 
         {tab === "gallery" && (
           <div className="space-y-10">
+            {downloadParts.length > 1 && (
+              <section className="flex flex-wrap items-center gap-3 border-b border-canvas-line pb-6">
+                <p className="mr-auto max-w-md text-sm text-muted">
+                  This gallery is split into {downloadParts.length} ZIP files for reliable
+                  downloads.
+                </p>
+                {downloadParts.map((part, index) => (
+                  <a
+                    key={`part-${index + 1}`}
+                    href={`/api/events/${event.id}/download?part=${index + 1}`}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line px-4 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt"
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                    Part {index + 1}
+                    <span className="text-xs text-muted">
+                      {part.itemCount} items, {formatFileSize(part.sizeBytes)}
+                    </span>
+                  </a>
+                ))}
+              </section>
+            )}
             {mediaError && (
               <div
                 className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
@@ -178,6 +263,8 @@ export function EventDashboard({
                   onOpen={setLightboxId}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
+                  albums={canManageAlbums ? albums : undefined}
+                  onAlbumChange={canManageAlbums ? setAlbum : undefined}
                 />
               </section>
             )}
@@ -196,6 +283,8 @@ export function EventDashboard({
                   onOpen={setLightboxId}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
+                  albums={canManageAlbums ? albums : undefined}
+                  onAlbumChange={canManageAlbums ? setAlbum : undefined}
                 />
               )}
             </section>
@@ -211,6 +300,8 @@ export function EventDashboard({
                   onOpen={setLightboxId}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
+                  albums={canManageAlbums ? albums : undefined}
+                  onAlbumChange={canManageAlbums ? setAlbum : undefined}
                 />
               </section>
             )}
@@ -218,9 +309,47 @@ export function EventDashboard({
         )}
 
         {tab === "settings" && (
-          <EventSettingsForm event={event} canManageClients={canManageClients} />
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.75fr)]">
+            <EventSettingsForm
+              event={event}
+              canManageClients={canManageClients}
+              canCustomizeGallery={canCustomizeGallery}
+              canCustomizeQr={canCustomizeQr}
+              canUseVenueHub={canUseVenueHub}
+              canDeleteEvent={canDeleteEvent}
+              approvedMedia={approved}
+              clients={clients}
+            />
+            {(canManageAlbums || canManageCoHosts) && (
+              <div className="space-y-5">
+                {canManageAlbums && (
+                  <AlbumManager
+                    eventId={event.id}
+                    initialAlbums={albums}
+                    onDeleted={(albumId) =>
+                      setMediaItems((items) =>
+                        items.map((item) =>
+                          item.albumId === albumId ? { ...item, albumId: null } : item,
+                        ),
+                      )
+                    }
+                  />
+                )}
+                {canManageCoHosts && (
+                  <CoHostManager eventId={event.id} initialCoHosts={coHosts} />
+                )}
+              </div>
+            )}
+          </div>
         )}
-        {tab === "qr" && <QrPanel eventId={event.id} slug={event.slug} guestUrl={guestUrl} />}
+        {tab === "qr" && (
+          <QrPanel
+            eventId={event.id}
+            slug={event.slug}
+            guestUrl={guestUrl}
+            canDownloadSign={canDownloadQrSign}
+          />
+        )}
       </div>
 
       {lightboxIndex >= 0 && (

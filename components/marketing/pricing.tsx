@@ -51,7 +51,7 @@ export function Pricing() {
     {
       icon: CloudDownload,
       title: "Download and keep",
-      body: "Save original photos and videos.",
+      body: "Save approved photos and videos.",
     },
     {
       icon: QrCode,

@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { events } from "@/lib/schema";
+import { albums, events, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
 import { getAccountPlan } from "@/lib/account-plans";
 import {
@@ -14,7 +13,14 @@ import {
 } from "@/lib/guest";
 import { toPublicEvent } from "@/lib/events";
 import { fetchGalleryMedia } from "@/lib/media";
-import { canUseSlideshow } from "@/lib/plans";
+import { toPublicMedia, withProtectedMediaUrl } from "@/lib/media-delivery";
+import {
+  canCustomizeGallery,
+  canUseAlbums,
+  canUseSlideshow,
+  removesKlikBranding,
+} from "@/lib/plans";
+import { requireEventManagerSession } from "@/lib/roles";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -24,14 +30,14 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   if (!event) notFound();
   const plan = await getAccountPlan(event.ownerId);
 
-  const session = await auth();
-  const isOwner = Boolean(
-    session?.user && (session.user.id === event.ownerId || session.user.role === "superadmin"),
-  );
+  const managerSession = await requireEventManagerSession(event.id, event.ownerId);
+  const isOwner = Boolean(managerSession);
 
   const cookieStore = await cookies();
   const unlockCookie = cookieStore.get(eventUnlockCookieName(event.id))?.value;
-  const hasUnlockCookie = unlockCookie ? await verifyEventUnlock(unlockCookie, event.id) : false;
+  const hasUnlockCookie = unlockCookie
+    ? await verifyEventUnlock(unlockCookie, event.id, event.accessVersion)
+    : false;
 
   const access = canViewGallery(event, {
     isOwner,
@@ -65,14 +71,34 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     return <EntrySheet slug={slug} eventName={event.name} requiresPassword={false} />;
   }
 
-  const initialMedia = await fetchGalleryMedia(event.id, {
-    isOwner,
-    guestId: guestSession?.guestId,
-    limit: 60,
-  });
+  const initialMedia = (
+    await fetchGalleryMedia(event.id, {
+      isOwner,
+      guestId: guestSession?.guestId,
+      limit: 60,
+    })
+  ).map((item) => toPublicMedia(item, event.slug));
+  const [albumRows, coverRows] = await Promise.all([
+    canUseAlbums(plan.key)
+      ? db.select().from(albums).where(eq(albums.eventId, event.id)).orderBy(albums.createdAt)
+      : Promise.resolve([]),
+    canCustomizeGallery(plan.key) && event.coverMediaId
+      ? db
+          .select()
+          .from(media)
+          .where(eq(media.id, event.coverMediaId))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
+  const coverUrl = coverRows[0]
+    ? withProtectedMediaUrl(coverRows[0], event.slug).blobUrl
+    : null;
 
   const publicEvent = toPublicEvent({
     ...event,
+    coverMediaId: canCustomizeGallery(plan.key) ? event.coverMediaId : null,
+    accentColor: canCustomizeGallery(plan.key) ? event.accentColor : "#edee00",
+    backgroundColor: canCustomizeGallery(plan.key) ? event.backgroundColor : "#050505",
     uploadsEnabled: canUpload(event, plan.uploadWindowDays),
   });
 
@@ -81,7 +107,10 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       event={publicEvent}
       isOwner={isOwner}
       initialMedia={initialMedia}
+      albums={albumRows}
+      coverUrl={coverUrl}
       canSlideshow={canUseSlideshow(plan.key)}
+      showBranding={!removesKlikBranding(plan.key)}
     />
   );
 }

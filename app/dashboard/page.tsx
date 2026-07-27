@@ -4,29 +4,56 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { auth, signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { events } from "@/lib/schema";
+import { eventCoHosts, events, users, venueClients } from "@/lib/schema";
 import { CreateEventForm } from "@/components/dashboard/create-event-form";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getAccountPlan } from "@/lib/account-plans";
-import { isExpired } from "@/lib/access";
+import { isEventActive } from "@/lib/access";
 import { canManageEventClients, formatFileSize } from "@/lib/plans";
 import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
+import { VenueClientsPanel } from "@/components/dashboard/venue-clients-panel";
+import { VenueQrPanel } from "@/components/dashboard/venue-qr-panel";
+import { getAppUrl } from "@/lib/env";
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const rows = await db
-    .select()
-    .from(events)
-    .where(eq(events.ownerId, session.user.id))
-    .orderBy(events.createdAt);
-  const plan = await getAccountPlan(session.user.id);
-  const activeEventCount = rows.filter(
-    (event) => !isExpired(event, plan.galleryAccessDays),
-  ).length;
-  const monthlyEventCount = rows.filter((event) =>
+  const [ownedRows, coHostedRows, plan, account, clientRows] = await Promise.all([
+    db
+      .select()
+      .from(events)
+      .where(eq(events.ownerId, session.user.id))
+      .orderBy(events.createdAt),
+    db
+      .select({ event: events })
+      .from(eventCoHosts)
+      .innerJoin(events, eq(events.id, eventCoHosts.eventId))
+      .where(eq(eventCoHosts.userId, session.user.id))
+      .orderBy(events.createdAt)
+      .then((rows) => rows.map((row) => row.event)),
+    getAccountPlan(session.user.id),
+    db
+      .select({ venueSlug: users.venueSlug })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1)
+      .then((rows) => rows[0]),
+    db
+      .select()
+      .from(venueClients)
+      .where(eq(venueClients.ownerId, session.user.id))
+      .orderBy(venueClients.name),
+  ]);
+  const rows = [
+    ...ownedRows,
+    ...coHostedRows.filter(
+      (coHosted) => !ownedRows.some((owned) => owned.id === coHosted.id),
+    ),
+  ];
+  const activeEventCount = ownedRows.filter((event) => isEventActive(event)).length;
+  const monthlyEventCount = ownedRows.filter((event) =>
     wasCreatedThisUtcMonth(event.createdAt),
   ).length;
   const canCreateEvent =
@@ -73,9 +100,19 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mb-10">
+          {account?.venueSlug && (
+            <VenueQrPanel
+              venueSlug={account.venueSlug}
+              venueUrl={`${getAppUrl()}/v/${account.venueSlug}`}
+            />
+          )}
+          {canManageEventClients(plan.key) && (
+            <VenueClientsPanel initialClients={clientRows} />
+          )}
           <CreateEventForm
             canCreate={canCreateEvent}
             canManageClients={canManageEventClients(plan.key)}
+            clients={clientRows}
             limitMessage={
               canCreateEvent
                 ? undefined
@@ -101,6 +138,9 @@ export default async function DashboardPage() {
                     <p className="mt-0.5 text-xs text-paper/70">{event.clientName}</p>
                   )}
                   <p className="text-xs text-muted">/e/{event.slug}</p>
+                  {event.ownerId !== session.user.id && (
+                    <p className="mt-1 text-xs text-volt">Co-hosted event</p>
+                  )}
                 </div>
                 <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>
                   {event.visibility}

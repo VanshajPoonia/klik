@@ -42,10 +42,17 @@ export function canViewGallery(
 }
 
 export function canUpload(
-  event: Pick<Event, "uploadsEnabled" | "expiresAt" | "createdAt">,
+  event: Pick<Event, "isActive" | "uploadsEnabled" | "expiresAt" | "createdAt">,
   uploadWindowDays?: number,
 ): boolean {
-  if (!event.uploadsEnabled || isExpired(event)) return false;
+  if (!event.isActive || !event.uploadsEnabled || isExpired(event)) return false;
   if (!uploadWindowDays) return true;
   return getPlanDeadline(event.createdAt, uploadWindowDays).getTime() >= Date.now();
+}
+
+export function isEventActive(
+  event: Pick<Event, "isActive" | "expiresAt">,
+  reference = new Date(),
+): boolean {
+  return event.isActive && (!event.expiresAt || event.expiresAt >= reference);
 }

@@ -2,22 +2,19 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { cookies } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
 import { canUpload } from "@/lib/access";
 import { getAccountPlan } from "@/lib/account-plans";
-import { verifyGuestSession, guestCookieName } from "@/lib/guest";
+import { resolveEventViewer } from "@/lib/event-viewer";
 import {
   blobPathnameFor,
   extensionForMime,
   isAllowedMime,
   maxBytesForMime,
-  publicUrlFor,
   r2,
 } from "@/lib/storage";
-import { requireOwnerSession } from "@/lib/roles";
 
 const requestSchema = z.object({
   eventId: z.string().min(1),
@@ -63,13 +60,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Upload identifier is already in use" }, { status: 409 });
   }
 
-  // Guest must hold a valid signed cookie scoped to this event, or be the event owner.
-  const cookieStore = await cookies();
-  const guestCookie = cookieStore.get(guestCookieName(event.id))?.value;
-  const guestSession = guestCookie ? await verifyGuestSession(guestCookie) : null;
-  const ownerSession = await requireOwnerSession(event.ownerId);
-
-  if (!ownerSession && (!guestSession || guestSession.eventId !== event.id)) {
+  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  if (!viewer.access.allowed) {
+    return NextResponse.json({ error: "Gallery access is required to upload" }, { status: 403 });
+  }
+  if (!viewer.ownerSession && !viewer.guestId) {
     return NextResponse.json({ error: "Not authorized to upload to this event" }, { status: 401 });
   }
 
@@ -84,7 +79,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   return NextResponse.json({
     uploadUrl,
     pathname,
-    publicUrl: publicUrlFor(pathname),
     maxBytes,
   });
 }

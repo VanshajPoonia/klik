@@ -11,6 +11,7 @@ import type { PublicEvent } from "@/lib/events";
 import { compressImageForUpload } from "@/lib/image-compress";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { CapturedItem } from "@/components/guest/camera-capture";
+import { encodeMediaCursor } from "@/lib/media-cursor";
 
 // The camera carries the looks engine and its pixel passes. Most guests never
 // open it, so it stays out of the initial bundle until they do.
@@ -24,6 +25,7 @@ interface MediaItem {
   kind: "photo" | "video";
   status: "pending" | "approved" | "rejected";
   blobUrl: string;
+  albumId: string | null;
   mine: boolean;
   /** Date over RSC, ISO string over JSON - normalize before using. */
   createdAt: string | Date;
@@ -104,12 +106,18 @@ export function GuestGallery({
   event,
   isOwner,
   initialMedia,
+  albums = [],
+  coverUrl = null,
   canSlideshow = false,
+  showBranding = true,
 }: {
   event: PublicEvent;
   isOwner: boolean;
   initialMedia: MediaItem[];
+  albums?: Array<{ id: string; name: string }>;
+  coverUrl?: string | null;
   canSlideshow?: boolean;
+  showBranding?: boolean;
 }) {
   // A single accumulating, always-sorted list: new arrivals are prepended via
   // a `since` cursor (never re-polls a fixed window, so nothing can be pushed
@@ -119,7 +127,7 @@ export function GuestGallery({
   const [items, setItems] = useState<MediaItem[]>(initialMedia);
   const [cursor, setCursor] = useState<string | null>(
     initialMedia.length === PAGE_SIZE
-      ? new Date(initialMedia[PAGE_SIZE - 1].createdAt).toISOString()
+      ? encodeMediaCursor(initialMedia[PAGE_SIZE - 1])
       : null,
   );
   const [hasMore, setHasMore] = useState(initialMedia.length === PAGE_SIZE);
@@ -131,15 +139,17 @@ export function GuestGallery({
   // which would otherwise shift the open item out from under the viewer.
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [activeAlbumId, setActiveAlbumId] = useState<string>("all");
+  const [uploadAlbumId, setUploadAlbumId] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Before anything has loaded, there's no "newest" cursor to poll since - fall
   // back to the plain first page so a brand new, empty event still notices its
   // first upload.
-  const newestLoadedAt = items[0] ? new Date(items[0].createdAt).toISOString() : null;
-  const pollUrl = newestLoadedAt
-    ? `/api/e/${event.slug}/media?since=${encodeURIComponent(newestLoadedAt)}`
+  const newestLoadedCursor = items[0] ? encodeMediaCursor(items[0]) : null;
+  const pollUrl = newestLoadedCursor
+    ? `/api/e/${event.slug}/media?since=${encodeURIComponent(newestLoadedCursor)}`
     : `/api/e/${event.slug}/media?limit=${PAGE_SIZE}`;
 
   const { data: polled, mutate } = useSWR<{ media: MediaItem[]; nextCursor: string | null }>(
@@ -156,7 +166,7 @@ export function GuestGallery({
     if (!polled?.media) return;
     // Bootstrap case (no items loaded yet): this was the plain first-page
     // fetch, not a since-poll, so it also carries real pagination info.
-    if (newestLoadedAt === null) {
+    if (newestLoadedCursor === null) {
       if (polled.media.length === 0) return;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems(polled.media);
@@ -170,7 +180,7 @@ export function GuestGallery({
       const arrivals = polled.media.filter((item) => !seen.has(item.id));
       return arrivals.length ? [...arrivals, ...current] : current;
     });
-  }, [polled, newestLoadedAt]);
+  }, [polled, newestLoadedCursor]);
 
   // Resolves to -1 if the open item was removed (moderated away), which closes.
   const lightboxIndex = lightboxId ? items.findIndex((item) => item.id === lightboxId) : -1;
@@ -223,6 +233,7 @@ export function GuestGallery({
             width: compressed?.width ?? prepared?.width,
             height: compressed?.height ?? prepared?.height,
             clientCompressed: Boolean(compressed) || Boolean(prepared),
+            albumId: uploadAlbumId || null,
           }),
         });
         if (!registerRes.ok) {
@@ -239,7 +250,7 @@ export function GuestGallery({
         setUploading((current) => current.filter((item) => item.id !== mediaId));
       }
     },
-    [event.id, event.slug, mutate],
+    [event.id, event.slug, mutate, uploadAlbumId],
   );
 
   const uploadFiles = useCallback(
@@ -302,9 +313,36 @@ export function GuestGallery({
     return () => observer.disconnect();
   }, [hasMore, loadMore]);
 
+  const visibleItems =
+    activeAlbumId === "all"
+      ? items
+      : items.filter((item) => item.albumId === activeAlbumId);
+
   return (
-    <div className="min-h-screen px-6 py-10 md:px-10">
+    <div
+      className="min-h-screen px-6 py-10 md:px-10"
+      style={{
+        backgroundColor: event.backgroundColor,
+        ["--event-accent" as string]: event.accentColor,
+        ["--color-volt" as string]: event.accentColor,
+        ["--color-canvas" as string]: event.backgroundColor,
+      }}
+    >
       <div className="mx-auto max-w-5xl">
+        {coverUrl && (
+          <div className="relative mb-8 aspect-[16/6] overflow-hidden rounded-2xl border border-white/10">
+            <Image
+              src={coverUrl}
+              alt={`${event.name} gallery cover`}
+              fill
+              unoptimized
+              priority
+              sizes="(min-width: 1024px) 960px, 100vw"
+              className="object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
+          </div>
+        )}
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl text-paper">{event.name}</h1>
@@ -314,7 +352,22 @@ export function GuestGallery({
             </p>
           </div>
           {event.uploadsEnabled && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {albums.length > 0 && (
+                <select
+                  aria-label="Upload to album"
+                  value={uploadAlbumId}
+                  onChange={(event) => setUploadAlbumId(event.target.value)}
+                  className="min-h-11 rounded-full border border-canvas-line bg-canvas px-4 text-sm text-paper"
+                >
+                  <option value="">Main gallery</option>
+                  {albums.map((album) => (
+                    <option key={album.id} value={album.id}>
+                      {album.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <Button onClick={() => setCameraOpen(true)} className="gap-2">
                 <Camera className="h-4 w-4" />
                 Camera
@@ -361,13 +414,43 @@ export function GuestGallery({
           </div>
         )}
 
-        {items.length === 0 ? (
+        {albums.length > 0 && (
+          <nav className="mb-6 flex gap-2 overflow-x-auto pb-1" aria-label="Gallery albums">
+            <button
+              onClick={() => setActiveAlbumId("all")}
+              className={`min-h-10 shrink-0 rounded-full border px-4 text-sm transition-colors ${
+                activeAlbumId === "all"
+                  ? "border-transparent bg-[var(--event-accent)] text-black"
+                  : "border-canvas-line text-muted hover:text-paper"
+              }`}
+            >
+              All media
+            </button>
+            {albums.map((album) => (
+              <button
+                key={album.id}
+                onClick={() => setActiveAlbumId(album.id)}
+                className={`min-h-10 shrink-0 rounded-full border px-4 text-sm transition-colors ${
+                  activeAlbumId === album.id
+                    ? "border-transparent bg-[var(--event-accent)] text-black"
+                    : "border-canvas-line text-muted hover:text-paper"
+                }`}
+              >
+                {album.name}
+              </button>
+            ))}
+          </nav>
+        )}
+
+        {visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-canvas-line bg-canvas-raised px-6 py-16 text-center text-sm text-muted">
-            No photos or videos yet. Be the first to add one.
+            {items.length === 0
+              ? "No photos or videos yet. Be the first to add one."
+              : "No media has been added to this album yet."}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setLightboxId(item.id)}
@@ -392,6 +475,7 @@ export function GuestGallery({
                     src={item.blobUrl}
                     alt=""
                     fill
+                    unoptimized
                     sizes="(min-width: 768px) 25vw, 50vw"
                     className="object-cover"
                   />
@@ -410,6 +494,12 @@ export function GuestGallery({
           <div ref={sentinelRef} className="py-8 text-center text-sm text-muted">
             {loadingMore ? "Loading more..." : ""}
           </div>
+        )}
+
+        {showBranding && (
+          <p className="mt-12 text-center text-xs text-muted">
+            Shared with <span className="font-medium text-paper">klik</span>
+          </p>
         )}
       </div>
 

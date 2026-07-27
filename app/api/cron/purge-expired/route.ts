@@ -50,6 +50,7 @@ export async function GET(request: Request) {
         .update(events)
         .set({
           coverMediaId: null,
+          isActive: false,
           uploadsEnabled: false,
           purgedAt: now,
           updatedAt: now,

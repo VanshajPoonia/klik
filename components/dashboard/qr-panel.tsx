@@ -3,16 +3,18 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClassName } from "@/components/ui/button";
 
 export function QrPanel({
   eventId,
   slug,
   guestUrl,
+  canDownloadSign = false,
 }: {
   eventId: string;
   slug: string;
   guestUrl: string;
+  canDownloadSign?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -40,12 +42,29 @@ export function QrPanel({
         <Button variant="ghost" onClick={copyLink}>
           {copied ? "Copied!" : "Copy link"}
         </Button>
-        <a href={`/api/events/${eventId}/qr?format=png&size=1024`} download>
-          <Button variant="ghost">Download PNG</Button>
+        <a
+          href={`/api/events/${eventId}/qr?format=png&size=1024`}
+          download
+          className={buttonClassName({ variant: "ghost" })}
+        >
+          Download PNG
         </a>
-        <a href={`/api/events/${eventId}/qr?format=svg`} download>
-          <Button variant="ghost">Download SVG</Button>
+        <a
+          href={`/api/events/${eventId}/qr?format=svg`}
+          download
+          className={buttonClassName({ variant: "ghost" })}
+        >
+          Download SVG
         </a>
+        {canDownloadSign && (
+          <a
+            href={`/api/events/${eventId}/qr?format=sign`}
+            download
+            className={buttonClassName({ variant: "ghost" })}
+          >
+            Download printable sign
+          </a>
+        )}
       </div>
     </Card>
   );

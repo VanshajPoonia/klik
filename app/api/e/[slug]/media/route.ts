@@ -1,23 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { cookies } from "next/headers";
-import https from "node:https";
+import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import heicConvert from "heic-convert";
-import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
-import { events, media } from "@/lib/schema";
-import { canUpload, canViewGallery } from "@/lib/access";
+import { albums, events, media } from "@/lib/schema";
+import { canUpload } from "@/lib/access";
 import { getAccountPlan } from "@/lib/account-plans";
 import { fetchGalleryMedia } from "@/lib/media";
-import {
-  verifyGuestSession,
-  guestCookieName,
-  eventUnlockCookieName,
-  verifyEventUnlock,
-} from "@/lib/guest";
-import { requireOwnerSession } from "@/lib/roles";
+import { resolveEventViewer } from "@/lib/event-viewer";
 import {
   blobPathnameFor,
   deleteBlobs,
@@ -25,10 +17,12 @@ import {
   isAllowedMime,
   isVideoMime,
   maxBytesForMime,
-  publicUrlFor,
   r2,
 } from "@/lib/storage";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
+import { encodeMediaCursor } from "@/lib/media-cursor";
+import { mediaContentPath, toPublicMedia } from "@/lib/media-delivery";
+import { canUseAlbums } from "@/lib/plans";
 
 // sharp/heic-convert need native/WASM Node bindings, never the edge runtime.
 export const runtime = "nodejs";
@@ -43,52 +37,15 @@ const registerSchema = z.object({
   height: z.number().int().positive().optional(),
   durationS: z.number().positive().optional(),
   contentHash: z.string().optional(),
+  albumId: z.string().min(10).max(64).nullable().optional(),
   // True when the browser already resized/re-encoded the photo before
   // upload - skips redundant server-side recompression of the same file.
   clientCompressed: z.boolean().optional(),
 });
 
-/**
- * Next.js's global fetch() throws "SharedArrayBuffer is not allowed" for
- * these Blob responses in this runtime (a fetch/undici quirk unrelated to
- * this app's code). Node's raw https client sidesteps it entirely.
- */
-function fetchBlobBuffer(url: string, redirectsLeft = 3): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, (res) => {
-        const status = res.statusCode ?? 0;
-        if (status >= 300 && status < 400 && res.headers.location && redirectsLeft > 0) {
-          res.resume();
-          resolve(fetchBlobBuffer(res.headers.location, redirectsLeft - 1));
-          return;
-        }
-        if (status >= 400) {
-          res.resume();
-          reject(new Error(`Fetch failed with status ${status}`));
-          return;
-        }
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () => resolve(Buffer.concat(chunks)));
-        res.on("error", reject);
-      })
-      .on("error", reject);
-  });
-}
-
 async function loadEvent(slug: string) {
   const [event] = await db.select().from(events).where(eq(events.slug, slug)).limit(1);
   return event ?? null;
-}
-
-async function getGuestId(eventId: string) {
-  const cookieStore = await cookies();
-  const guestCookie = cookieStore.get(guestCookieName(eventId))?.value;
-  if (!guestCookie) return null;
-  const session = await verifyGuestSession(guestCookie);
-  if (!session || session.eventId !== eventId) return null;
-  return session.guestId;
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -97,39 +54,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const plan = await getAccountPlan(event.ownerId);
 
-  const ownerSession = await requireOwnerSession(event.ownerId);
-  const cookieStore = await cookies();
-  const unlockCookie = cookieStore.get(eventUnlockCookieName(event.id))?.value;
-  const hasUnlockCookie = unlockCookie ? await verifyEventUnlock(unlockCookie, event.id) : false;
-
-  const access = canViewGallery(event, {
-    isOwner: Boolean(ownerSession),
-    hasUnlockCookie,
-    galleryAccessDays: plan.galleryAccessDays,
-  });
-  if (!access.allowed) {
-    return NextResponse.json({ error: access.reason }, { status: 403 });
+  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  if (!viewer.access.allowed) {
+    return NextResponse.json({ error: viewer.access.reason }, { status: 403 });
   }
 
   const url = new URL(request.url);
   const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 100);
-  const cursor = url.searchParams.get("cursor"); // ISO createdAt of the oldest item seen so far
-  const since = url.searchParams.get("since"); // ISO createdAt of the newest item seen so far
+  const cursor = url.searchParams.get("cursor");
+  const since = url.searchParams.get("since");
 
-  const guestId = await getGuestId(event.id);
   const rows = await fetchGalleryMedia(event.id, {
-    isOwner: Boolean(ownerSession),
-    guestId,
+    isOwner: Boolean(viewer.ownerSession),
+    guestId: viewer.guestId,
     cursor,
     since,
     limit,
   });
 
   return NextResponse.json({
-    media: rows,
+    media: rows.map((item) => toPublicMedia(item, event.slug)),
     // Meaningless in since-mode (the client only reads `media` there); it
     // already knows to keep polling since* regardless of what this says.
-    nextCursor: !since && rows.length === limit ? rows[rows.length - 1].createdAt.toISOString() : null,
+    nextCursor: !since && rows.length === limit ? encodeMediaCursor(rows[rows.length - 1]) : null,
   });
 }
 
@@ -163,10 +110,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: "Invalid upload path" }, { status: 400 });
   }
 
-  const guestId = await getGuestId(event.id);
-  const ownerSession = await requireOwnerSession(event.ownerId);
-  if (!ownerSession && !guestId) {
+  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  if (!viewer.access.allowed) {
+    return NextResponse.json({ error: "Gallery access is required to upload" }, { status: 403 });
+  }
+  if (!viewer.ownerSession && !viewer.guestId) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
+  }
+  if (input.albumId) {
+    if (!canUseAlbums(plan.key)) {
+      return NextResponse.json(
+        { error: "Multiple albums are available on the Klik Premium plan" },
+        { status: 403 },
+      );
+    }
+    const [album] = await db
+      .select({ id: albums.id })
+      .from(albums)
+      .where(and(eq(albums.id, input.albumId), eq(albums.eventId, event.id)))
+      .limit(1);
+    if (!album) {
+      return NextResponse.json({ error: "Album not found" }, { status: 404 });
+    }
   }
 
   const [existingMedia] = await db
@@ -210,7 +175,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const kind = isVideoMime(input.mimeType) ? "video" : "photo";
-  let blobUrl = publicUrlFor(input.pathname);
+  const blobUrl = mediaContentPath(event.slug, input.mediaId);
   let sizeBytes = actualSizeBytes;
   let storedMimeType = input.mimeType;
   let width = input.width;
@@ -218,7 +183,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   if (kind === "photo" && !input.clientCompressed) {
     try {
-      let buffer: Buffer = await fetchBlobBuffer(blobUrl);
+      const storedObject = await r2.send(
+        new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: input.pathname,
+        }),
+      );
+      if (!storedObject.Body) throw new Error("Uploaded photo did not return a readable body");
+      let buffer: Buffer<ArrayBufferLike> = Buffer.from(
+        await storedObject.Body.transformToByteArray(),
+      );
 
       // sharp's bundled libheif can decode AVIF but not HEIC/HEIF (the format
       // iPhones shoot by default), so those need converting to JPEG first.
@@ -246,7 +220,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         }),
       );
 
-      blobUrl = publicUrlFor(input.pathname);
       sizeBytes = compressed.data.byteLength;
       storedMimeType = "image/jpeg";
       width = compressed.info.width;
@@ -262,9 +235,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     .values({
       id: input.mediaId,
       eventId: event.id,
-      guestId: ownerSession ? null : guestId,
+      guestId: viewer.ownerSession ? null : viewer.guestId,
+      albumId: input.albumId ?? null,
       kind,
-      status: event.moderation && !ownerSession ? "pending" : "approved",
+      status: event.moderation && !viewer.ownerSession ? "pending" : "approved",
       blobUrl,
       blobPathname: input.pathname,
       contentHash: input.contentHash ?? null,
@@ -276,5 +250,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     })
     .returning();
 
-  return NextResponse.json({ media: row }, { status: 201 });
+  return NextResponse.json(
+    {
+      media: toPublicMedia(
+        { ...row, mine: !viewer.ownerSession && row.guestId === viewer.guestId },
+        event.slug,
+      ),
+    },
+    { status: 201 },
+  );
 }

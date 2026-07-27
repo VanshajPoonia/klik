@@ -145,6 +145,7 @@ export function Lightbox({
             src={item.blobUrl}
             alt=""
             fill
+            unoptimized
             sizes="100vw"
             className="object-contain"
             priority

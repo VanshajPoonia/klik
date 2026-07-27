@@ -8,6 +8,7 @@ import { PLAN_KEYS, type PlanKey } from "@/lib/plans";
 import { requireSuperadmin } from "@/lib/roles";
 import { generateUsername, generatePassword, hashPassword } from "@/lib/credentials";
 import { prepareEventInsert, toPublicEvent, type CreateEventInput } from "@/lib/events";
+import { createVenueSlug } from "@/lib/venue";
 
 const createClientSchema = z.object({
   contactName: z.string().trim().min(1).max(120),
@@ -69,6 +70,7 @@ async function createOrganizerUserAndEvent(
         name: contactName,
         role: "organizer",
         planKey,
+        venueSlug: planKey === "venue" ? createVenueSlug(contactName) : null,
         username,
         passwordHash,
       })

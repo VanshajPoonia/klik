@@ -1,6 +1,7 @@
-import { and, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
 import { db } from "./db";
 import { media } from "./schema";
+import { decodeMediaCursor } from "./media-cursor";
 
 export interface FetchGalleryOptions {
   isOwner: boolean;
@@ -17,8 +18,9 @@ export interface FetchGalleryOptions {
   limit?: number;
 }
 
-// Bounds the response when polling "since a cursor" (no caller-supplied
-// limit applies there): normal upload bursts are nowhere near this size.
+// Bounds one response when polling "since a cursor". Since-mode reads the
+// oldest unseen rows first, then reverses them for display, so a burst larger
+// than the cap is drained across polls without skipping its middle.
 const SINCE_SAFETY_CAP = 300;
 
 /** Single source of truth for "which media rows can this viewer see," shared
@@ -26,8 +28,27 @@ const SINCE_SAFETY_CAP = 300;
 export async function fetchGalleryMedia(eventId: string, options: FetchGalleryOptions) {
   const { isOwner, guestId, cursor, since, limit = 50 } = options;
   const conditions = [eq(media.eventId, eventId)];
-  if (since) conditions.push(gt(media.createdAt, new Date(since)));
-  else if (cursor) conditions.push(lt(media.createdAt, new Date(cursor)));
+  const sinceCursor = since ? decodeMediaCursor(since) : null;
+  const pageCursor = cursor ? decodeMediaCursor(cursor) : null;
+  if (sinceCursor) {
+    conditions.push(
+      sinceCursor.id
+        ? or(
+            gt(media.createdAt, sinceCursor.createdAt),
+            and(eq(media.createdAt, sinceCursor.createdAt), gt(media.id, sinceCursor.id)),
+          )!
+        : gt(media.createdAt, sinceCursor.createdAt),
+    );
+  } else if (pageCursor) {
+    conditions.push(
+      pageCursor.id
+        ? or(
+            lt(media.createdAt, pageCursor.createdAt),
+            and(eq(media.createdAt, pageCursor.createdAt), lt(media.id, pageCursor.id)),
+          )!
+        : lt(media.createdAt, pageCursor.createdAt),
+    );
+  }
 
   const visibilityFilter = isOwner
     ? undefined // owner sees every status (for moderation/preview)
@@ -39,8 +60,15 @@ export async function fetchGalleryMedia(eventId: string, options: FetchGalleryOp
     .select()
     .from(media)
     .where(visibilityFilter ? and(...conditions, visibilityFilter) : and(...conditions))
-    .orderBy(desc(media.createdAt))
+    .orderBy(
+      since ? asc(media.createdAt) : desc(media.createdAt),
+      since ? asc(media.id) : desc(media.id),
+    )
     .limit(since ? SINCE_SAFETY_CAP : limit);
 
-  return rows.map((row) => ({ ...row, mine: guestId != null && row.guestId === guestId }));
+  const orderedRows = since ? rows.reverse() : rows;
+  return orderedRows.map((row) => ({
+    ...row,
+    mine: guestId != null && row.guestId === guestId,
+  }));
 }

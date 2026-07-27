@@ -10,6 +10,8 @@ export function MediaGrid({
   onOpen,
   downloadBaseUrl,
   busyIds,
+  albums,
+  onAlbumChange,
 }: {
   items: Media[];
   onApprove?: (id: string) => void;
@@ -18,6 +20,8 @@ export function MediaGrid({
   onOpen: (id: string) => void;
   downloadBaseUrl: string;
   busyIds?: Set<string>;
+  albums?: Array<{ id: string; name: string }>;
+  onAlbumChange?: (id: string, albumId: string | null) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -51,9 +55,34 @@ export function MediaGrid({
                   </span>
                 </>
               ) : (
-                <Image src={item.blobUrl} alt="" fill sizes="200px" className="object-cover" />
+                <Image
+                  src={item.blobUrl}
+                  alt=""
+                  fill
+                  unoptimized
+                  sizes="200px"
+                  className="object-cover"
+                />
               )}
             </button>
+            {albums && albums.length > 0 && onAlbumChange && (
+              <label className="block border-t border-canvas-line bg-canvas-raised px-2 py-2">
+                <span className="sr-only">Album for this {item.kind}</span>
+                <select
+                  value={item.albumId ?? ""}
+                  onChange={(event) => onAlbumChange(item.id, event.target.value || null)}
+                  disabled={busy}
+                  className="w-full rounded-lg border border-canvas-line bg-canvas px-2 py-1.5 text-xs text-paper"
+                >
+                  <option value="">Main gallery</option>
+                  {albums.map((album) => (
+                    <option key={album.id} value={album.id}>
+                      {album.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="grid grid-cols-2 gap-px bg-canvas-line">
               {onApprove && (
                 <button

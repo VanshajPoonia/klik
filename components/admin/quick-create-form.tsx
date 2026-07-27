@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClassName } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { PLANS, type PlanKey } from "@/lib/plans";
@@ -135,10 +135,12 @@ export function QuickCreateForm() {
           >
             {copied ? "Copied!" : "Copy credentials"}
           </Button>
-          <a href={`/api/events/${result.event.id}/qr?format=png&size=1024`} download>
-            <Button type="button" variant="ghost">
-              Download QR
-            </Button>
+          <a
+            href={`/api/events/${result.event.id}/qr?format=png&size=1024`}
+            download
+            className={buttonClassName({ variant: "ghost" })}
+          >
+            Download QR
           </a>
           <Link href={`/dashboard/events/${result.event.id}`}>
             <Button type="button" variant="ghost">

@@ -42,18 +42,22 @@ export function eventUnlockCookieName(eventId: string) {
   return `${EVENT_UNLOCK_COOKIE_PREFIX}${eventId}`;
 }
 
-export async function signEventUnlock(eventId: string): Promise<string> {
-  return new SignJWT({ eventId })
+export async function signEventUnlock(eventId: string, accessVersion: number): Promise<string> {
+  return new SignJWT({ eventId, accessVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
     .sign(secret());
 }
 
-export async function verifyEventUnlock(token: string, eventId: string): Promise<boolean> {
+export async function verifyEventUnlock(
+  token: string,
+  eventId: string,
+  accessVersion: number,
+): Promise<boolean> {
   try {
     const { payload } = await jwtVerify(token, secret());
-    return payload.eventId === eventId;
+    return payload.eventId === eventId && payload.accessVersion === accessVersion;
   } catch {
     return false;
   }

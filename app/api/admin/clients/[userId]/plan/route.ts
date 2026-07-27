@@ -5,8 +5,9 @@ import { db } from "@/lib/db";
 import { getPlan, PLAN_KEYS } from "@/lib/plans";
 import { events, users } from "@/lib/schema";
 import { requireSuperadmin } from "@/lib/roles";
-import { isExpired } from "@/lib/access";
+import { isEventActive } from "@/lib/access";
 import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
+import { createVenueSlug } from "@/lib/venue";
 
 const requestSchema = z.object({
   planKey: z.enum(PLAN_KEYS),
@@ -27,7 +28,7 @@ export async function PATCH(
 
   const { userId } = await params;
   const [account] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, name: users.name, venueSlug: users.venueSlug })
     .from(users)
     .where(and(eq(users.id, userId), eq(users.role, "organizer")))
     .limit(1);
@@ -38,14 +39,13 @@ export async function PATCH(
   const plan = getPlan(parsed.data.planKey);
   const organizerEvents = await db
     .select({
+      isActive: events.isActive,
       expiresAt: events.expiresAt,
       createdAt: events.createdAt,
     })
     .from(events)
     .where(eq(events.ownerId, userId));
-  const activeEventCount = organizerEvents.filter(
-    (event) => !isExpired(event, plan.galleryAccessDays),
-  ).length;
+  const activeEventCount = organizerEvents.filter((event) => isEventActive(event)).length;
   const monthlyEventCount = organizerEvents.filter((event) =>
     wasCreatedThisUtcMonth(event.createdAt),
   ).length;
@@ -71,11 +71,29 @@ export async function PATCH(
     );
   }
 
-  const [updatedAccount] = await db
-    .update(users)
-    .set({ planKey: parsed.data.planKey })
-    .where(and(eq(users.id, userId), eq(users.role, "organizer")))
-    .returning({ id: users.id, planKey: users.planKey });
+  let updatedAccount;
+  try {
+    [updatedAccount] = await db
+      .update(users)
+      .set({
+        planKey: parsed.data.planKey,
+        venueSlug:
+          parsed.data.planKey === "venue"
+            ? account.venueSlug ?? createVenueSlug(account.name ?? "venue")
+            : account.venueSlug,
+      })
+      .where(and(eq(users.id, userId), eq(users.role, "organizer")))
+      .returning({ id: users.id, planKey: users.planKey });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("plan_active_limit") || message.includes("plan_monthly_limit")) {
+      return NextResponse.json(
+        { error: "The organizer's current events no longer fit this plan. Refresh and try again." },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
 
   return NextResponse.json({ account: updatedAccount });
 }

@@ -1,19 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
-import { canViewGallery } from "@/lib/access";
 import { getAccountPlan } from "@/lib/account-plans";
-import {
-  eventUnlockCookieName,
-  guestCookieName,
-  verifyEventUnlock,
-  verifyGuestSession,
-} from "@/lib/guest";
-import { requireOwnerSession } from "@/lib/roles";
+import { resolveEventViewer } from "@/lib/event-viewer";
 import { extensionForMime, r2 } from "@/lib/storage";
 
 function downloadFilename(slug: string, mimeType: string, mediaId: string) {
@@ -37,21 +29,13 @@ export async function GET(
     .limit(1);
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const ownerSession = await requireOwnerSession(event.ownerId);
-  const cookieStore = await cookies();
-  const unlockCookie = cookieStore.get(eventUnlockCookieName(event.id))?.value;
-  const hasUnlockCookie = unlockCookie ? await verifyEventUnlock(unlockCookie, event.id) : false;
-  const access = canViewGallery(event, {
-    isOwner: Boolean(ownerSession),
-    hasUnlockCookie,
-    galleryAccessDays: plan.galleryAccessDays,
-  });
+  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
 
-  if (!access.allowed) {
+  if (!viewer.access.allowed) {
     return NextResponse.json({ error: "Not authorized to download this item" }, { status: 403 });
   }
 
-  if (!ownerSession) {
+  if (!viewer.ownerSession) {
     if (!event.downloadsEnabled) {
       return NextResponse.json(
         { error: "Downloads are disabled for this gallery" },
@@ -59,15 +43,13 @@ export async function GET(
       );
     }
 
-    const guestCookie = cookieStore.get(guestCookieName(event.id))?.value;
-    const guestSession = guestCookie ? await verifyGuestSession(guestCookie) : null;
-    if (!guestSession || guestSession.eventId !== event.id) {
+    if (!viewer.guestId) {
       return NextResponse.json({ error: "Join the gallery before downloading" }, { status: 401 });
     }
 
     const canDownloadItem =
       item.status === "approved" ||
-      (item.status === "pending" && item.guestId === guestSession.guestId);
+      (item.status === "pending" && item.guestId === viewer.guestId);
     if (!canDownloadItem) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

@@ -44,6 +44,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "3-month upload window",
       "12-month gallery access",
       "One QR code and one gallery",
+      "No subscription",
     ],
     featured: true,
   },
@@ -52,7 +53,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Klik Premium",
     price: "$89",
     priceSuffix: "one-time",
-    description: "For hosts who need a longer collection window and larger videos.",
+    description: "More control, customization, and a premium experience.",
     maxActiveEvents: 1,
     maxEventsPerMonth: 1,
     uploadWindowDays: 365,
@@ -62,11 +63,14 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     features: [
       "Everything in Klik Event",
       "12-month upload window",
-      "Videos up to 500 MB",
-      "Original photo and video downloads",
+      "Multiple albums within an event",
+      "Multiple organizers or co-hosts",
+      "Custom gallery colors and cover",
+      "Custom QR sign templates",
       "Live full-screen slideshow",
-      "Host moderation and guest download controls",
-      "12-month gallery access",
+      "Removal of Klik branding",
+      "Priority support",
+      "Longer video limits",
     ],
   },
   venue: {
@@ -84,12 +88,12 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxVideoBytes: 500 * MB,
     features: [
       "Up to 5 active events per month",
-      "Central event dashboard",
+      "Central venue dashboard",
+      "Reusable venue QR code",
       "Client and event management",
       "Downloadable event QR signs",
       "12-month event storage",
-      "Videos up to 500 MB",
-      "Moderation and guest download controls",
+      "$690 annual option",
     ],
   },
 };
@@ -102,8 +106,36 @@ export function canUseSlideshow(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }
 
+export function canUseAlbums(planKey: PlanKey): boolean {
+  return planKey === "premium";
+}
+
+export function canUseCoHosts(planKey: PlanKey): boolean {
+  return planKey === "premium";
+}
+
+export function canCustomizeGallery(planKey: PlanKey): boolean {
+  return planKey === "premium";
+}
+
+export function canCustomizeQr(planKey: PlanKey): boolean {
+  return planKey === "premium";
+}
+
+export function removesKlikBranding(planKey: PlanKey): boolean {
+  return planKey === "premium";
+}
+
 export function canManageEventClients(planKey: PlanKey): boolean {
   return planKey === "venue";
+}
+
+export function canUseVenueHub(planKey: PlanKey): boolean {
+  return planKey === "venue";
+}
+
+export function canDownloadQrSign(planKey: PlanKey): boolean {
+  return planKey === "premium" || planKey === "venue";
 }
 
 export function formatFileSize(bytes: number): string {

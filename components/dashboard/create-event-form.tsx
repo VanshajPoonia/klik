@@ -6,16 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
+import type { VenueClient } from "@/lib/schema";
 
 type Visibility = "public" | "password" | "private";
 
 export function CreateEventForm({
   canCreate = true,
   canManageClients = false,
+  clients = [],
   limitMessage,
 }: {
   canCreate?: boolean;
   canManageClients?: boolean;
+  clients?: VenueClient[];
   limitMessage?: string;
 }) {
   const router = useRouter();
@@ -25,6 +28,7 @@ export function CreateEventForm({
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  const [clientId, setClientId] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("public");
   const [password, setPassword] = useState("");
   const [moderation, setModeration] = useState(false);
@@ -45,6 +49,7 @@ export function CreateEventForm({
         clientName: canManageClients ? clientName : undefined,
         clientEmail: canManageClients ? clientEmail : undefined,
         clientPhone: canManageClients ? clientPhone : undefined,
+        clientId: canManageClients ? clientId || null : undefined,
         visibility,
         password: visibility === "password" ? password : undefined,
         moderation,
@@ -90,11 +95,39 @@ export function CreateEventForm({
         {canManageClients && (
           <fieldset className="space-y-4 rounded-xl border border-canvas-line p-4">
             <legend className="px-1 text-sm font-medium text-paper">Client details</legend>
+            {clients.length > 0 && (
+              <Field label="Saved client">
+                <select
+                  className={inputClass}
+                  value={clientId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    setClientId(nextId);
+                    const selected = clients.find((client) => client.id === nextId);
+                    if (selected) {
+                      setClientName(selected.name);
+                      setClientEmail(selected.email ?? "");
+                      setClientPhone(selected.phone ?? "");
+                    }
+                  }}
+                >
+                  <option value="">No saved client</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label="Client name" hint="Optional internal contact for this event">
               <input
                 className={inputClass}
                 value={clientName}
-                onChange={(event) => setClientName(event.target.value)}
+                onChange={(event) => {
+                  setClientName(event.target.value);
+                  setClientId("");
+                }}
                 maxLength={120}
                 placeholder="Anita and Raj"
               />
@@ -105,7 +138,10 @@ export function CreateEventForm({
                   type="email"
                   className={inputClass}
                   value={clientEmail}
-                  onChange={(event) => setClientEmail(event.target.value)}
+                  onChange={(event) => {
+                    setClientEmail(event.target.value);
+                    setClientId("");
+                  }}
                   maxLength={254}
                   placeholder="client@example.com"
                 />
@@ -115,7 +151,10 @@ export function CreateEventForm({
                   type="tel"
                   className={inputClass}
                   value={clientPhone}
-                  onChange={(event) => setClientPhone(event.target.value)}
+                  onChange={(event) => {
+                    setClientPhone(event.target.value);
+                    setClientId("");
+                  }}
                   maxLength={40}
                   placeholder="+1 555 0100"
                 />

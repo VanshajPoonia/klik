@@ -62,10 +62,6 @@ export function blobPathnameFor(eventId: string, mediaId: string, extension: str
   return `events/${eventId}/${mediaId}.${extension}`;
 }
 
-export function publicUrlFor(pathname: string) {
-  return `${process.env.R2_PUBLIC_URL}/${pathname}`;
-}
-
 export async function deleteBlobs(pathnames: string[]) {
   if (pathnames.length === 0) return;
   for (let index = 0; index < pathnames.length; index += 1000) {

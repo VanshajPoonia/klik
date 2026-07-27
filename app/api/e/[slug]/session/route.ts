@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const valid = await bcrypt.compare(parsed.data.password, event.passwordHash);
     if (!valid) return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
 
-    const unlockToken = await signEventUnlock(event.id);
+    const unlockToken = await signEventUnlock(event.id, event.accessVersion);
     response.cookies.set(eventUnlockCookieName(event.id), unlockToken, {
       httpOnly: true,
       sameSite: "lax",

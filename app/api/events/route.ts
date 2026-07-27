@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { events, EVENT_VISIBILITIES } from "@/lib/schema";
+import { events, venueClients, EVENT_VISIBILITIES } from "@/lib/schema";
 import { createEvent, toOrganizerEvent } from "@/lib/events";
 import { getAccountPlan } from "@/lib/account-plans";
-import { isExpired } from "@/lib/access";
+import { isEventActive } from "@/lib/access";
 import { canManageEventClients } from "@/lib/plans";
 import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
 
@@ -16,6 +16,7 @@ const createEventSchema = z.object({
   clientName: z.string().trim().max(120).optional(),
   clientEmail: z.union([z.literal(""), z.string().trim().email().max(254)]).optional(),
   clientPhone: z.string().trim().max(40).optional(),
+  clientId: z.string().min(10).max(64).nullable().optional(),
   visibility: z.enum(EVENT_VISIBILITIES).optional(),
   password: z.string().min(4).max(72).optional(),
   moderation: z.boolean().optional(),
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
     clientName,
     clientEmail,
     clientPhone,
+    clientId,
     visibility,
     password,
     moderation,
@@ -74,15 +76,14 @@ export async function POST(request: Request) {
     getAccountPlan(session.user.id),
     db
       .select({
+        isActive: events.isActive,
         expiresAt: events.expiresAt,
         createdAt: events.createdAt,
       })
       .from(events)
       .where(eq(events.ownerId, session.user.id)),
   ]);
-  const activeEventCount = existingEvents.filter(
-    (event) => !isExpired(event, plan.galleryAccessDays),
-  ).length;
+  const activeEventCount = existingEvents.filter((event) => isEventActive(event)).length;
   const monthlyEventCount = existingEvents.filter((event) =>
     wasCreatedThisUtcMonth(event.createdAt),
   ).length;
@@ -107,26 +108,62 @@ export async function POST(request: Request) {
     );
   }
 
-  const hasClientDetails = Boolean(clientName || clientEmail || clientPhone);
+  const hasClientDetails = Boolean(clientId || clientName || clientEmail || clientPhone);
   if (hasClientDetails && !canManageEventClients(plan.key)) {
     return NextResponse.json(
       { error: "Client details are available on the Klik Venue plan" },
       { status: 403 },
     );
   }
+  let selectedClient:
+    | { id: string; name: string; email: string | null; phone: string | null }
+    | undefined;
+  if (clientId) {
+    [selectedClient] = await db
+      .select({
+        id: venueClients.id,
+        name: venueClients.name,
+        email: venueClients.email,
+        phone: venueClients.phone,
+      })
+      .from(venueClients)
+      .where(
+        and(
+          eq(venueClients.id, clientId),
+          eq(venueClients.ownerId, session.user.id),
+        ),
+      )
+      .limit(1);
+    if (!selectedClient) {
+      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+  }
 
-  const event = await createEvent({
-    ownerId: session.user.id,
-    name,
-    eventDate,
-    clientName: clientName || null,
-    clientEmail: clientEmail || null,
-    clientPhone: clientPhone || null,
-    visibility,
-    password,
-    moderation,
-    expiresAt,
-  });
+  let event;
+  try {
+    event = await createEvent({
+      ownerId: session.user.id,
+      name,
+      eventDate,
+      clientId: selectedClient?.id ?? null,
+      clientName: selectedClient?.name ?? clientName ?? null,
+      clientEmail: selectedClient?.email ?? clientEmail ?? null,
+      clientPhone: selectedClient?.phone ?? clientPhone ?? null,
+      visibility,
+      password,
+      moderation,
+      expiresAt,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("event_active_limit") || message.includes("event_monthly_limit")) {
+      return NextResponse.json(
+        { error: "Your plan limit was reached while this event was being created. Refresh and try again." },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
 
   return NextResponse.json({ event: toOrganizerEvent(event) }, { status: 201 });
 }

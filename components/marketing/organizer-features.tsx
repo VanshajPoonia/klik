@@ -29,8 +29,8 @@ const features = [
   },
   {
     icon: Download,
-    title: "Original files",
-    body: "Download any photo or video from the organizer dashboard whenever you need it.",
+    title: "Protected downloads",
+    body: "Download any stored photo or video from the organizer dashboard whenever you need it.",
   },
 ];
 

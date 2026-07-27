@@ -15,6 +15,18 @@ const sizes = {
   lg: "px-7 py-3.5 text-base",
 };
 
+export function buttonClassName({
+  variant = "primary",
+  size = "md",
+  className = "",
+}: {
+  variant?: keyof typeof variants;
+  size?: keyof typeof sizes;
+  className?: string;
+} = {}) {
+  return `${base} ${variants[variant]} ${sizes[size]} ${className}`;
+}
+
 export function Button({
   variant = "primary",
   size = "md",
@@ -24,7 +36,5 @@ export function Button({
   variant?: keyof typeof variants;
   size?: keyof typeof sizes;
 }) {
-  return (
-    <button className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} {...props} />
-  );
+  return <button className={buttonClassName({ variant, size, className })} {...props} />;
 }

@@ -7,6 +7,7 @@ import {
   integer,
   real,
   index,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import type { PlanKey } from "./plans";
 
@@ -23,6 +24,7 @@ export const users = pgTable("users", {
   image: text("image"),
   role: text("role").$type<UserRole>().notNull().default("organizer"),
   planKey: text("plan_key").$type<PlanKey>().notNull().default("event"),
+  venueSlug: text("venue_slug").unique(),
   credentialVersion: integer("credential_version").notNull().default(0),
   username: text("username").unique(), // set only for credential-based accounts
   passwordHash: text("password_hash"), // bcrypt, set only alongside username
@@ -69,6 +71,25 @@ export type MediaKind = (typeof MEDIA_KINDS)[number];
 export const MEDIA_STATUSES = ["pending", "approved", "rejected"] as const;
 export type MediaStatus = (typeof MEDIA_STATUSES)[number];
 
+export const QR_TEMPLATES = ["classic", "minimal", "bold"] as const;
+export type QrTemplate = (typeof QR_TEMPLATES)[number];
+
+export const venueClients = pgTable(
+  "venue_clients",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("venue_clients_owner_idx").on(table.ownerId)],
+);
+
 export const events = pgTable(
   "events",
   {
@@ -82,10 +103,17 @@ export const events = pgTable(
     clientName: text("client_name"),
     clientEmail: text("client_email"),
     clientPhone: text("client_phone"),
+    clientId: text("client_id").references(() => venueClients.id, { onDelete: "set null" }),
     coverMediaId: text("cover_media_id"),
+    accentColor: text("accent_color").notNull().default("#e8f000"),
+    backgroundColor: text("background_color").notNull().default("#090a08"),
+    qrTemplate: text("qr_template").$type<QrTemplate>().notNull().default("classic"),
+    venueFeatured: boolean("venue_featured").notNull().default(false),
     visibility: text("visibility").$type<EventVisibility>().notNull().default("public"),
     passwordHash: text("password_hash"),
+    accessVersion: integer("access_version").notNull().default(0),
     moderation: boolean("moderation").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
     downloadsEnabled: boolean("downloads_enabled").notNull().default(true),
     uploadsEnabled: boolean("uploads_enabled").notNull().default(true),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
@@ -94,6 +122,36 @@ export const events = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
+);
+
+export const eventCoHosts = pgTable(
+  "event_co_hosts",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.userId] }),
+    index("event_co_hosts_user_idx").on(table.userId),
+  ],
+);
+
+export const albums = pgTable(
+  "albums",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("albums_event_idx").on(table.eventId)],
 );
 
 export const guests = pgTable(
@@ -118,6 +176,7 @@ export const media = pgTable(
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
     guestId: text("guest_id").references(() => guests.id, { onDelete: "set null" }),
+    albumId: text("album_id").references(() => albums.id, { onDelete: "set null" }),
     kind: text("kind").$type<MediaKind>().notNull(),
     status: text("status").$type<MediaStatus>().notNull().default("approved"),
     blobUrl: text("blob_url").notNull(),
@@ -143,3 +202,6 @@ export type NewEvent = typeof events.$inferInsert;
 export type Guest = typeof guests.$inferSelect;
 export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;
+export type Album = typeof albums.$inferSelect;
+export type EventCoHost = typeof eventCoHosts.$inferSelect;
+export type VenueClient = typeof venueClients.$inferSelect;

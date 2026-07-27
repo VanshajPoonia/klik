@@ -30,6 +30,7 @@ export interface CreateEventInput {
   clientName?: string | null;
   clientEmail?: string | null;
   clientPhone?: string | null;
+  clientId?: string | null;
   visibility?: EventVisibility;
   password?: string | null;
   moderation?: boolean;
@@ -58,6 +59,7 @@ export async function prepareEventInsert(input: CreateEventInput) {
       clientName: input.clientName ?? null,
       clientEmail: input.clientEmail ?? null,
       clientPhone: input.clientPhone ?? null,
+      clientId: input.clientId ?? null,
       visibility: input.visibility ?? "public",
       passwordHash,
       moderation: input.moderation ?? false,
@@ -85,10 +87,23 @@ export function toOrganizerEvent(event: Event) {
 
 /** Guest-safe event shape that also removes private client contact details. */
 export function toPublicEvent(event: Event) {
-  const { clientName, clientEmail, clientPhone, ...rest } = toOrganizerEvent(event);
+  const {
+    ownerId,
+    clientId,
+    clientName,
+    clientEmail,
+    clientPhone,
+    accessVersion,
+    venueFeatured,
+    ...rest
+  } = toOrganizerEvent(event);
+  void ownerId;
+  void clientId;
   void clientName;
   void clientEmail;
   void clientPhone;
+  void accessVersion;
+  void venueFeatured;
   return rest;
 }
 
