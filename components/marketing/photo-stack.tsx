@@ -1,95 +1,100 @@
+import Image from "next/image";
 import type { CSSProperties } from "react";
 
 type Frame = {
   id: string;
+  src: string;
   left: number;
   top: number;
   width: number;
   rotate: number;
   delay: number;
   aspect: string;
-  look: string;
+  position?: string;
   tag?: string;
   live?: boolean;
+  preload?: boolean;
 };
 
 const frames: Frame[] = [
   {
-    id: "a",
-    left: 1,
-    top: 10,
-    width: 27,
-    rotate: -9,
+    id: "birthday",
+    src: "/images/sample-events/birthday-party.png",
+    left: 0,
+    top: 8,
+    width: 32,
+    rotate: -5,
     delay: 0,
-    aspect: "4 / 5",
-    look: "radial-gradient(circle at 25% 25%, rgba(237,238,0,0.5), transparent 42%), radial-gradient(circle at 75% 65%, rgba(243,241,233,0.18), transparent 38%), linear-gradient(160deg, #1c1c12, #050505)",
-    tag: "MAYA · 9:42 PM",
+    aspect: "4 / 3",
+    tag: "BIRTHDAY · JUST NOW",
   },
   {
-    id: "b",
-    left: 32,
+    id: "wedding",
+    src: "/images/sample-events/wedding-reception.png",
+    left: 34,
     top: 0,
-    width: 24,
-    rotate: 6,
+    width: 31,
+    rotate: 3,
     delay: 90,
-    aspect: "1 / 1",
-    look: "radial-gradient(circle at 70% 30%, rgba(243,241,233,0.3), transparent 40%), radial-gradient(circle at 30% 75%, rgba(237,238,0,0.25), transparent 35%), linear-gradient(150deg, #17170f, #050505)",
+    aspect: "16 / 10",
+    preload: true,
   },
   {
-    id: "c",
-    left: 60,
-    top: 13,
-    width: 30,
-    rotate: -4,
+    id: "company",
+    src: "/images/sample-events/company-party.png",
+    left: 67,
+    top: 9,
+    width: 33,
+    rotate: -3,
     delay: 180,
-    aspect: "4 / 5",
-    look: "radial-gradient(circle at 30% 30%, rgba(237,238,0,0.4), transparent 45%), radial-gradient(circle at 80% 20%, rgba(243,241,233,0.22), transparent 30%), linear-gradient(165deg, #1a1a12, #050505)",
+    aspect: "4 / 3",
     live: true,
   },
   {
-    id: "d",
-    left: 5,
-    top: 55,
-    width: 22,
-    rotate: 7,
-    delay: 270,
-    aspect: "4 / 5",
-    look: "radial-gradient(circle at 60% 70%, rgba(243,241,233,0.2), transparent 40%), radial-gradient(circle at 20% 20%, rgba(237,238,0,0.3), transparent 35%), linear-gradient(155deg, #16160e, #050505)",
-  },
-  {
-    id: "e",
-    left: 35,
-    top: 50,
-    width: 26,
-    rotate: -6,
-    delay: 360,
-    aspect: "1 / 1",
-    look: "radial-gradient(circle at 40% 60%, rgba(237,238,0,0.45), transparent 40%), radial-gradient(circle at 80% 30%, rgba(243,241,233,0.2), transparent 35%), linear-gradient(160deg, #1c1c12, #050505)",
-    tag: "DEV · 10:03 PM",
-  },
-  {
-    id: "f",
-    left: 68,
+    id: "family",
+    src: "/images/sample-events/family-reunion.png",
+    left: 2,
     top: 54,
-    width: 25,
-    rotate: 8,
+    width: 31,
+    rotate: 4,
+    delay: 270,
+    aspect: "16 / 10",
+    position: "center 45%",
+  },
+  {
+    id: "baby-shower",
+    src: "/images/sample-events/baby-shower.png",
+    left: 34,
+    top: 48,
+    width: 34,
+    rotate: -4,
+    delay: 360,
+    aspect: "4 / 3",
+    tag: "BABY SHOWER · 2M AGO",
+  },
+  {
+    id: "graduation",
+    src: "/images/sample-events/graduation.png",
+    left: 70,
+    top: 53,
+    width: 30,
+    rotate: 5,
     delay: 450,
-    aspect: "4 / 5",
-    look: "radial-gradient(circle at 30% 70%, rgba(243,241,233,0.22), transparent 40%), radial-gradient(circle at 75% 25%, rgba(237,238,0,0.3), transparent 35%), linear-gradient(160deg, #18180f, #050505)",
+    aspect: "16 / 10",
   },
 ];
 
 export function PhotoStack() {
   return (
     <div
-      className="relative h-[380px] w-full sm:h-[440px] lg:h-[520px]"
+      className="relative h-[300px] w-full sm:h-[390px] lg:h-[520px]"
       role="img"
-      aria-label="Photos from a shared event gallery, arriving live as guests upload them"
+      aria-label="Sample photos from birthday, wedding, company, family, baby shower, and graduation galleries"
     >
       {frames.map((f) => (
         <div
           key={f.id}
-          className="klik-frame absolute overflow-hidden rounded-[28px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] ring-1 ring-white/5"
+          className="klik-frame absolute overflow-hidden rounded-[18px] bg-canvas-raised shadow-[3px_5px_30px_rgba(0,0,0,0.22)] ring-1 ring-white/10"
           style={
             {
               left: `${f.left}%`,
@@ -97,19 +102,27 @@ export function PhotoStack() {
               width: `${f.width}%`,
               aspectRatio: f.aspect,
               transform: `rotate(${f.rotate}deg)`,
-              background: f.look,
               "--delay": `${f.delay}ms`,
               "--tilt": `${f.rotate}deg`,
             } as CSSProperties
           }
         >
+          <Image
+            src={f.src}
+            alt=""
+            fill
+            preload={f.preload}
+            sizes="(max-width: 640px) 34vw, (max-width: 1024px) 31vw, 360px"
+            className="object-cover"
+            style={{ objectPosition: f.position ?? "center" }}
+          />
           {f.tag && (
-            <span className="absolute bottom-3 left-3 hidden whitespace-nowrap rounded-full bg-black/50 px-2.5 py-1 font-mono text-[10px] tracking-wide text-paper/90 backdrop-blur-sm sm:inline-block">
+            <span className="absolute bottom-3 left-3 z-10 hidden whitespace-nowrap rounded-full bg-black/60 px-2.5 py-1 font-mono text-[10px] tracking-wide text-paper/90 backdrop-blur-sm sm:inline-block">
               {f.tag}
             </span>
           )}
           {f.live && (
-            <span className="absolute right-3 top-3 hidden items-center gap-1.5 whitespace-nowrap rounded-full bg-black/50 py-1 pl-1.5 pr-2.5 backdrop-blur-sm sm:flex">
+            <span className="absolute right-3 top-3 z-10 hidden items-center gap-1.5 whitespace-nowrap rounded-full bg-black/60 py-1 pl-1.5 pr-2.5 backdrop-blur-sm sm:flex">
               <span className="relative flex h-2 w-2 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-volt opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-volt" />
