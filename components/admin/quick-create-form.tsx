@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
+import { PLANS, type PlanKey } from "@/lib/plans";
 
 type Visibility = "public" | "password" | "private";
 
@@ -24,6 +25,7 @@ const initialForm = {
   moderation: false,
   visibility: "public" as Visibility,
   galleryPassword: "",
+  planKey: "event" as PlanKey,
 };
 
 export function QuickCreateForm() {
@@ -49,6 +51,7 @@ export function QuickCreateForm() {
         moderation: form.moderation,
         visibility: form.visibility,
         galleryPassword: form.visibility === "password" ? form.galleryPassword : undefined,
+        planKey: form.planKey,
       }),
     });
 
@@ -177,6 +180,25 @@ export function QuickCreateForm() {
             required
             placeholder="Anita & Raj's wedding"
           />
+        </Field>
+        <Field label="Plan" hint="The plan controls event count, upload window, and video size">
+          <select
+            className={inputClass}
+            value={form.planKey}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                planKey: event.target.value as PlanKey,
+              }))
+            }
+          >
+            {Object.values(PLANS).map((plan) => (
+              <option key={plan.key} value={plan.key}>
+                {plan.name} · {plan.maxActiveEvents} active{" "}
+                {plan.maxActiveEvents === 1 ? "event" : "events"}
+              </option>
+            ))}
+          </select>
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Event date (optional)">

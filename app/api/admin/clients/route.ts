@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { users, events, EVENT_VISIBILITIES } from "@/lib/schema";
+import { PLAN_KEYS, type PlanKey } from "@/lib/plans";
 import { requireSuperadmin } from "@/lib/roles";
 import { generateUsername, generatePassword, hashPassword } from "@/lib/credentials";
 import { prepareEventInsert, toPublicEvent, type CreateEventInput } from "@/lib/events";
@@ -16,6 +17,7 @@ const createClientSchema = z.object({
   moderation: z.boolean().optional(),
   visibility: z.enum(EVENT_VISIBILITIES).optional(),
   galleryPassword: z.string().min(4).max(72).optional(),
+  planKey: z.enum(PLAN_KEYS).default("event"),
 });
 
 export async function GET() {
@@ -27,6 +29,7 @@ export async function GET() {
       userId: users.id,
       username: users.username,
       contactName: users.name,
+      planKey: users.planKey,
       eventId: events.id,
       eventName: events.name,
       eventSlug: events.slug,
@@ -34,8 +37,8 @@ export async function GET() {
       expiresAt: events.expiresAt,
       createdAt: events.createdAt,
     })
-    .from(events)
-    .innerJoin(users, eq(events.ownerId, users.id))
+    .from(users)
+    .leftJoin(events, eq(events.ownerId, users.id))
     .where(eq(users.role, "organizer"))
     .orderBy(desc(events.createdAt));
 
@@ -50,6 +53,7 @@ export async function GET() {
  */
 async function createOrganizerUserAndEvent(
   contactName: string,
+  planKey: PlanKey,
   eventInput: Omit<CreateEventInput, "ownerId">,
 ) {
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -60,7 +64,14 @@ async function createOrganizerUserAndEvent(
 
     const userQuery = db
       .insert(users)
-      .values({ id: userId, name: contactName, role: "organizer", username, passwordHash })
+      .values({
+        id: userId,
+        name: contactName,
+        role: "organizer",
+        planKey,
+        username,
+        passwordHash,
+      })
       .returning();
     const { query: eventQuery } = await prepareEventInsert({ ownerId: userId, ...eventInput });
 
@@ -96,6 +107,7 @@ export async function POST(request: Request) {
     moderation,
     visibility,
     galleryPassword,
+    planKey,
   } = parsed.data;
 
   if (visibility === "password" && !galleryPassword) {
@@ -105,14 +117,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const { user, event, password } = await createOrganizerUserAndEvent(contactName, {
-    name: eventName,
-    eventDate,
-    expiresAt,
-    moderation,
-    visibility,
-    password: galleryPassword,
-  });
+  const { user, event, password } = await createOrganizerUserAndEvent(
+    contactName,
+    planKey,
+    {
+      name: eventName,
+      eventDate,
+      expiresAt,
+      moderation,
+      visibility,
+      password: galleryPassword,
+    },
+  );
 
   return NextResponse.json(
     {
