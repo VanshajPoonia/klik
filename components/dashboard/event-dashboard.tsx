@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { MediaGrid } from "@/components/dashboard/media-grid";
 import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
+import { Lightbox } from "@/components/guest/lightbox";
 import type { PublicEvent } from "@/lib/events";
 import type { Media, MediaStatus } from "@/lib/schema";
 
@@ -25,22 +26,80 @@ export function EventDashboard({
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
   const [mediaItems, setMediaItems] = useState(initialMedia);
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const pending = mediaItems.filter((item) => item.status === "pending");
   const approved = mediaItems.filter((item) => item.status === "approved");
+  const rejected = mediaItems.filter((item) => item.status === "rejected");
+  const lightboxIndex = lightboxId
+    ? mediaItems.findIndex((item) => item.id === lightboxId)
+    : -1;
+  const downloadBaseUrl = `/api/e/${event.slug}/media`;
 
-  function setStatus(mediaId: string, status: MediaStatus) {
-    setMediaItems((items) => items.map((item) => (item.id === mediaId ? { ...item, status } : item)));
-    fetch(`/api/events/${event.id}/media/${mediaId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+  function setBusy(mediaId: string, busy: boolean) {
+    setBusyIds((current) => {
+      const next = new Set(current);
+      if (busy) next.add(mediaId);
+      else next.delete(mediaId);
+      return next;
     });
   }
 
-  function deleteMedia(mediaId: string) {
-    setMediaItems((items) => items.filter((item) => item.id !== mediaId));
-    fetch(`/api/events/${event.id}/media/${mediaId}`, { method: "DELETE" });
+  async function setStatus(mediaId: string, status: MediaStatus) {
+    const previousStatus = mediaItems.find((item) => item.id === mediaId)?.status;
+    if (!previousStatus) return;
+
+    setMediaError(null);
+    setBusy(mediaId, true);
+    setMediaItems((items) =>
+      items.map((item) => (item.id === mediaId ? { ...item, status } : item)),
+    );
+
+    try {
+      const response = await fetch(`/api/events/${event.id}/media/${mediaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? "Could not update this item.");
+      }
+    } catch (error) {
+      setMediaItems((items) =>
+        items.map((item) => (item.id === mediaId ? { ...item, status: previousStatus } : item)),
+      );
+      setMediaError(error instanceof Error ? error.message : "Could not update this item.");
+    } finally {
+      setBusy(mediaId, false);
+    }
+  }
+
+  async function deleteMedia(mediaId: string) {
+    const item = mediaItems.find((candidate) => candidate.id === mediaId);
+    if (!item) return;
+    if (!window.confirm(`Delete this ${item.kind}? This cannot be undone.`)) return;
+
+    setMediaError(null);
+    setBusy(mediaId, true);
+
+    try {
+      const response = await fetch(`/api/events/${event.id}/media/${mediaId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? "Could not delete this item.");
+      }
+      setMediaItems((items) => items.filter((candidate) => candidate.id !== mediaId));
+      if (lightboxId === mediaId) setLightboxId(null);
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "Could not delete this item.");
+    } finally {
+      setBusy(mediaId, false);
+    }
   }
 
   return (
@@ -64,11 +123,12 @@ export function EventDashboard({
           </div>
         </header>
 
-        <nav className="mb-8 flex gap-1 border-b border-canvas-line">
+        <nav className="mb-8 flex gap-1 border-b border-canvas-line" aria-label="Event sections">
           {(["gallery", "settings", "qr"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
+              aria-current={tab === t ? "page" : undefined}
               className={`border-b-2 px-4 py-2.5 text-sm font-medium capitalize transition-colors ${
                 tab === t ? "border-volt text-paper" : "border-transparent text-muted hover:text-paper"
               }`}
@@ -80,6 +140,14 @@ export function EventDashboard({
 
         {tab === "gallery" && (
           <div className="space-y-10">
+            {mediaError && (
+              <div
+                className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+                role="alert"
+              >
+                {mediaError}
+              </div>
+            )}
             {pending.length > 0 && (
               <section>
                 <h2 className="mb-4 text-xs font-medium tracking-wide text-muted uppercase">
@@ -87,9 +155,12 @@ export function EventDashboard({
                 </h2>
                 <MediaGrid
                   items={pending}
-                  onApprove={(id) => setStatus(id, "approved")}
-                  onReject={(id) => setStatus(id, "rejected")}
+                  onApprove={(id) => void setStatus(id, "approved")}
+                  onReject={(id) => void setStatus(id, "rejected")}
                   onDelete={deleteMedia}
+                  onOpen={setLightboxId}
+                  downloadBaseUrl={downloadBaseUrl}
+                  busyIds={busyIds}
                 />
               </section>
             )}
@@ -99,18 +170,50 @@ export function EventDashboard({
               </h2>
               {approved.length === 0 ? (
                 <Card className="text-center text-sm text-muted">
-                  No photos yet - share the QR code to get started.
+                  No approved photos or videos yet. Share the QR code to get started.
                 </Card>
               ) : (
-                <MediaGrid items={approved} onDelete={deleteMedia} />
+                <MediaGrid
+                  items={approved}
+                  onDelete={deleteMedia}
+                  onOpen={setLightboxId}
+                  downloadBaseUrl={downloadBaseUrl}
+                  busyIds={busyIds}
+                />
               )}
             </section>
+            {rejected.length > 0 && (
+              <section>
+                <h2 className="mb-4 text-xs font-medium tracking-wide text-muted uppercase">
+                  Rejected ({rejected.length})
+                </h2>
+                <MediaGrid
+                  items={rejected}
+                  onApprove={(id) => void setStatus(id, "approved")}
+                  onDelete={deleteMedia}
+                  onOpen={setLightboxId}
+                  downloadBaseUrl={downloadBaseUrl}
+                  busyIds={busyIds}
+                />
+              </section>
+            )}
           </div>
         )}
 
         {tab === "settings" && <EventSettingsForm event={event} />}
         {tab === "qr" && <QrPanel eventId={event.id} slug={event.slug} guestUrl={guestUrl} />}
       </div>
+
+      {lightboxIndex >= 0 && (
+        <Lightbox
+          items={mediaItems}
+          index={lightboxIndex}
+          onIndexChange={(next) => setLightboxId(mediaItems[next]?.id ?? null)}
+          onClose={() => setLightboxId(null)}
+          canDownload
+          downloadBaseUrl={downloadBaseUrl}
+        />
+      )}
     </div>
   );
 }
