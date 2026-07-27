@@ -9,7 +9,13 @@ import { PasswordInput } from "@/components/ui/password-input";
 
 type Visibility = "public" | "password" | "private";
 
-export function CreateEventForm() {
+export function CreateEventForm({
+  canCreate = true,
+  limitMessage,
+}: {
+  canCreate?: boolean;
+  limitMessage?: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -49,7 +55,16 @@ export function CreateEventForm() {
   }
 
   if (!open) {
-    return <Button onClick={() => setOpen(true)}>New event</Button>;
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <Button onClick={() => setOpen(true)} disabled={!canCreate}>
+          New event
+        </Button>
+        {!canCreate && limitMessage && (
+          <p className="max-w-xl text-xs leading-relaxed text-muted">{limitMessage}</p>
+        )}
+      </div>
+    );
   }
 
   return (

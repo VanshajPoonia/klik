@@ -8,6 +8,9 @@ import { events } from "@/lib/schema";
 import { CreateEventForm } from "@/components/dashboard/create-event-form";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getAccountPlan } from "@/lib/account-plans";
+import { isExpired } from "@/lib/access";
+import { formatFileSize } from "@/lib/plans";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -18,6 +21,11 @@ export default async function DashboardPage() {
     .from(events)
     .where(eq(events.ownerId, session.user.id))
     .orderBy(events.createdAt);
+  const plan = await getAccountPlan(session.user.id);
+  const activeEventCount = rows.filter(
+    (event) => !isExpired(event, plan.galleryAccessDays),
+  ).length;
+  const canCreateEvent = activeEventCount < plan.maxActiveEvents;
 
   return (
     <div className="min-h-screen px-6 py-10 md:px-10">
@@ -37,16 +45,40 @@ export default async function DashboardPage() {
           </form>
         </header>
 
-        <h1 className="mb-8 font-display text-2xl text-paper">Your events</h1>
+        <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div>
+            <h1 className="font-display text-2xl text-paper">Your events</h1>
+            <p className="mt-2 text-sm text-muted">
+              View, moderate, download, and manage every event from here.
+            </p>
+          </div>
+          <div className="rounded-xl border border-volt/30 bg-volt/10 px-4 py-3 sm:text-right">
+            <p className="text-xs font-medium text-volt">{plan.name}</p>
+            <p className="mt-1 text-sm text-paper">
+              {activeEventCount} of {plan.maxActiveEvents} active{" "}
+              {plan.maxActiveEvents === 1 ? "event" : "events"}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              {plan.uploadWindowDays}-day uploads · {formatFileSize(plan.maxVideoBytes)} videos
+            </p>
+          </div>
+        </div>
 
         <div className="mb-10">
-          <CreateEventForm />
+          <CreateEventForm
+            canCreate={canCreateEvent}
+            limitMessage={
+              canCreateEvent
+                ? undefined
+                : `${plan.name} has reached its active event limit. Ask an administrator to change the plan or wait for an event to end.`
+            }
+          />
         </div>
 
         <div className="space-y-3">
           {rows.length === 0 && (
             <Card className="text-center text-sm text-muted">
-              No events yet - create your first one above.
+              No events yet. Create your first one above.
             </Card>
           )}
           {rows.map((event) => (
