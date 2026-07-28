@@ -8,6 +8,9 @@ export function MediaGrid({
   onReject,
   onDelete,
   onOpen,
+  selectionMode = false,
+  selectedIds,
+  onSelectionToggle,
   downloadBaseUrl,
   busyIds,
   albums,
@@ -18,6 +21,9 @@ export function MediaGrid({
   onReject?: (id: string) => void;
   onDelete: (id: string) => void;
   onOpen: (id: string) => void;
+  selectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionToggle?: (id: string) => void;
   downloadBaseUrl: string;
   busyIds?: Set<string>;
   albums?: Array<{ id: string; name: string }>;
@@ -27,18 +33,31 @@ export function MediaGrid({
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
       {items.map((item) => {
         const busy = busyIds?.has(item.id) ?? false;
+        const selected = selectedIds?.has(item.id) ?? false;
+        const selectionLabel = `${selected ? "Deselect" : "Select"} this ${item.kind}`;
 
         return (
           <article
             key={item.id}
-            className="overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised"
+            className={`relative overflow-hidden rounded-xl border bg-canvas-raised transition ${
+              selected
+                ? "border-[#0066cc] ring-2 ring-[#0066cc]"
+                : "border-canvas-line"
+            }`}
             aria-busy={busy}
           >
             <button
               type="button"
-              onClick={() => onOpen(item.id)}
-              className="relative block aspect-square w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-volt"
-              aria-label={`View ${item.kind}`}
+              onClick={() =>
+                selectionMode && onSelectionToggle
+                  ? onSelectionToggle(item.id)
+                  : onOpen(item.id)
+              }
+              className={`relative block aspect-square w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset ${
+                selectionMode ? "focus-visible:ring-[#0066cc]" : "focus-visible:ring-volt"
+              }`}
+              aria-label={selectionMode ? selectionLabel : `View ${item.kind}`}
+              aria-pressed={selectionMode ? selected : undefined}
             >
               {item.kind === "video" ? (
                 <>
@@ -64,8 +83,28 @@ export function MediaGrid({
                   className="object-cover"
                 />
               )}
+              {selectionMode && (
+                <>
+                  <span
+                    className={`absolute inset-0 transition-colors ${
+                      selected ? "bg-[#0066cc]/15" : "bg-black/5 hover:bg-black/15"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span
+                    className={`absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border-2 shadow-sm transition-colors ${
+                      selected
+                        ? "border-[#0066cc] bg-[#0066cc] text-white"
+                        : "border-white bg-black/45 text-transparent"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    <Check className="h-4 w-4" strokeWidth={3} />
+                  </span>
+                </>
+              )}
             </button>
-            {albums && albums.length > 0 && onAlbumChange && (
+            {!selectionMode && albums && albums.length > 0 && onAlbumChange && (
               <label className="block border-t border-canvas-line bg-canvas-raised px-2 py-2">
                 <span className="sr-only">Album for this {item.kind}</span>
                 <select
@@ -83,49 +122,51 @@ export function MediaGrid({
                 </select>
               </label>
             )}
-            <div className="grid grid-cols-2 gap-px bg-canvas-line">
-              {onApprove && (
+            {!selectionMode && (
+              <div className="grid grid-cols-2 gap-px bg-canvas-line">
+                {onApprove && (
+                  <button
+                    type="button"
+                    onClick={() => onApprove(item.id)}
+                    disabled={busy}
+                    className="flex min-h-11 items-center justify-center gap-1.5 bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas disabled:opacity-50"
+                  >
+                    <Check className="h-3.5 w-3.5 text-volt" aria-hidden="true" />
+                    {item.status === "rejected" ? "Restore" : "Approve"}
+                  </button>
+                )}
+                {onReject && (
+                  <button
+                    type="button"
+                    onClick={() => onReject(item.id)}
+                    disabled={busy}
+                    className="flex min-h-11 items-center justify-center gap-1.5 bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+                    Reject
+                  </button>
+                )}
+                <a
+                  href={`${downloadBaseUrl}/${item.id}/download`}
+                  className={`flex min-h-11 items-center justify-center gap-1.5 bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas ${
+                    busy ? "pointer-events-none opacity-50" : ""
+                  }`}
+                  aria-label={`Download ${item.kind}`}
+                >
+                  <Download className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+                  Download
+                </a>
                 <button
                   type="button"
-                  onClick={() => onApprove(item.id)}
+                  onClick={() => onDelete(item.id)}
                   disabled={busy}
-                  className="flex min-h-11 items-center justify-center gap-1.5 bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas disabled:opacity-50"
+                  className="flex min-h-11 items-center justify-center gap-1.5 bg-canvas-raised px-2 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"
                 >
-                  <Check className="h-3.5 w-3.5 text-volt" aria-hidden="true" />
-                  {item.status === "rejected" ? "Restore" : "Approve"}
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  Delete
                 </button>
-              )}
-              {onReject && (
-                <button
-                  type="button"
-                  onClick={() => onReject(item.id)}
-                  disabled={busy}
-                  className="flex min-h-11 items-center justify-center gap-1.5 bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas disabled:opacity-50"
-                >
-                  <X className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
-                  Reject
-                </button>
-              )}
-              <a
-                href={`${downloadBaseUrl}/${item.id}/download`}
-                className={`flex min-h-11 items-center justify-center gap-1.5 bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas ${
-                  busy ? "pointer-events-none opacity-50" : ""
-                }`}
-                aria-label={`Download ${item.kind}`}
-              >
-                <Download className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
-                Download
-              </a>
-              <button
-                type="button"
-                onClick={() => onDelete(item.id)}
-                disabled={busy}
-                className="flex min-h-11 items-center justify-center gap-1.5 bg-canvas-raised px-2 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Delete
-              </button>
-            </div>
+              </div>
+            )}
           </article>
         );
       })}

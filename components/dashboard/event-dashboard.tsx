@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { Check, Download, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MediaGrid } from "@/components/dashboard/media-grid";
@@ -64,10 +64,14 @@ export function EventDashboard({
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const pending = mediaItems.filter((item) => item.status === "pending");
   const approved = mediaItems.filter((item) => item.status === "approved");
   const rejected = mediaItems.filter((item) => item.status === "rejected");
+  const selectedItems = approved.filter((item) => selectedIds.has(item.id));
+  const selectedDownloadParts = buildDownloadBatches(selectedItems);
   const downloadParts = buildDownloadBatches(approved).map((items) => ({
     itemCount: items.length,
     sizeBytes: items.reduce((total, item) => total + item.sizeBytes, 0),
@@ -76,6 +80,24 @@ export function EventDashboard({
     ? mediaItems.findIndex((item) => item.id === lightboxId)
     : -1;
   const downloadBaseUrl = `/api/e/${event.slug}/media`;
+
+  function toggleSelection(mediaId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(mediaId)) next.delete(mediaId);
+      else next.add(mediaId);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function stopSelecting() {
+    clearSelection();
+    setSelectionMode(false);
+  }
 
   function setBusy(mediaId: string, busy: boolean) {
     setBusyIds((current) => {
@@ -95,6 +117,13 @@ export function EventDashboard({
     setMediaItems((items) =>
       items.map((item) => (item.id === mediaId ? { ...item, status } : item)),
     );
+    if (status !== "approved") {
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
+    }
 
     try {
       const response = await fetch(`/api/events/${event.id}/media/${mediaId}`, {
@@ -133,6 +162,11 @@ export function EventDashboard({
         throw new Error(data?.error ?? "Could not delete this item.");
       }
       setMediaItems((items) => items.filter((candidate) => candidate.id !== mediaId));
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(mediaId);
+        return next;
+      });
       if (lightboxId === mediaId) setLightboxId(null);
     } catch (error) {
       setMediaError(error instanceof Error ? error.message : "Could not delete this item.");
@@ -269,9 +303,47 @@ export function EventDashboard({
               </section>
             )}
             <section>
-              <h2 className="mb-4 text-xs font-medium tracking-wide text-muted uppercase">
-                Gallery ({approved.length})
-              </h2>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xs font-medium tracking-wide text-muted uppercase">
+                  Gallery ({approved.length})
+                </h2>
+                {approved.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    {selectionMode && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedIds.size === approved.length
+                            ? clearSelection()
+                            : setSelectedIds(new Set(approved.map((item) => item.id)))
+                        }
+                        className="min-h-10 rounded-full px-3 text-sm text-[#2997ff] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc]"
+                      >
+                        {selectedIds.size === approved.length ? "Deselect all" : "Select all"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectionMode) stopSelecting();
+                        else setSelectionMode(true);
+                      }}
+                      className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc] ${
+                        selectionMode
+                          ? "border-white/30 text-white hover:border-white/60"
+                          : "border-canvas-line text-paper hover:border-[#0066cc]/70 hover:text-[#2997ff]"
+                      }`}
+                    >
+                      {selectionMode ? (
+                        <X className="h-4 w-4" aria-hidden="true" />
+                      ) : (
+                        <Check className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      {selectionMode ? "Cancel" : "Select items"}
+                    </button>
+                  </div>
+                )}
+              </div>
               {approved.length === 0 ? (
                 <Card className="text-center text-sm text-muted">
                   No approved photos or videos yet. Share the QR code to get started.
@@ -281,6 +353,9 @@ export function EventDashboard({
                   items={approved}
                   onDelete={deleteMedia}
                   onOpen={setLightboxId}
+                  selectionMode={selectionMode}
+                  selectedIds={selectedIds}
+                  onSelectionToggle={toggleSelection}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
                   albums={canManageAlbums ? albums : undefined}
@@ -351,6 +426,54 @@ export function EventDashboard({
           />
         )}
       </div>
+
+      {tab === "gallery" && selectionMode && selectedItems.length > 0 && (
+        <aside
+          className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-3xl flex-wrap items-center gap-3 rounded-2xl bg-[#f5f5f7] p-3 pl-4 text-[#1d1d1f] shadow-[0_12px_40px_rgba(0,0,0,0.28)] sm:rounded-full"
+          aria-label="Selected media download"
+        >
+          <div className="mr-auto min-w-0">
+            <p className="text-sm font-semibold">
+              {selectedItems.length} {selectedItems.length === 1 ? "item" : "items"} selected
+            </p>
+            <p className="text-xs text-[#7a7a7a]">
+              {formatFileSize(
+                selectedItems.reduce((total, item) => total + item.sizeBytes, 0),
+              )}
+              {selectedDownloadParts.length > 1
+                ? ` in ${selectedDownloadParts.length} ZIP files`
+                : " in one ZIP file"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="min-h-10 rounded-full px-3 text-sm text-[#333333] transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc]"
+          >
+            Clear
+          </button>
+          {selectedDownloadParts.map((part, index) => (
+            <form
+              key={part.map((item) => item.id).join("-")}
+              action={`/api/events/${event.id}/download`}
+              method="post"
+            >
+              {part.map((item) => (
+                <input key={item.id} type="hidden" name="mediaId" value={item.id} />
+              ))}
+              <button
+                type="submit"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#0066cc] px-4 text-sm font-medium text-white transition-colors hover:bg-[#0071e3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                {selectedDownloadParts.length === 1
+                  ? `Download ${selectedItems.length}`
+                  : `ZIP ${index + 1} of ${selectedDownloadParts.length}`}
+              </button>
+            </form>
+          ))}
+        </aside>
+      )}
 
       {lightboxIndex >= 0 && (
         <Lightbox
