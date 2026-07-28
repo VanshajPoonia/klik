@@ -13,7 +13,13 @@ import { buildDownloadBatches } from "@/lib/download-batches";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-function archiveFilename(slug: string, part: number, totalParts: number) {
+function archiveFilename(
+  slug: string,
+  part: number,
+  totalParts: number,
+  selectedMedia: boolean,
+) {
+  if (selectedMedia) return `klik-${slug}-selected.zip`;
   return totalParts > 1
     ? `klik-${slug}-part-${part}-of-${totalParts}.zip`
     : `klik-${slug}.zip`;
@@ -27,9 +33,10 @@ function mediaFilename(
   return `${position}-${item.kind}-${item.id.slice(0, 8)}.${extensionForMime(item.mimeType)}`;
 }
 
-export async function GET(
+async function createDownload(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
+  selectedMediaIds?: Set<string>,
 ) {
   const { id } = await params;
   const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
@@ -38,7 +45,7 @@ export async function GET(
   const session = await requireEventManagerSession(event.id, event.ownerId);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const items = await db
+  const approvedItems = await db
     .select({
       id: media.id,
       kind: media.kind,
@@ -50,13 +57,30 @@ export async function GET(
     .where(and(eq(media.eventId, event.id), eq(media.status, "approved")))
     .orderBy(asc(media.createdAt));
 
+  const items = selectedMediaIds
+    ? approvedItems.filter((item) => selectedMediaIds.has(item.id))
+    : approvedItems;
+
+  if (selectedMediaIds && items.length !== selectedMediaIds.size) {
+    return NextResponse.json(
+      { error: "Some selected media is no longer available" },
+      { status: 400 },
+    );
+  }
+
   if (items.length === 0) {
     return NextResponse.json({ error: "There is no approved media to download" }, { status: 404 });
   }
 
   const batches = buildDownloadBatches(items);
+  if (selectedMediaIds && batches.length > 1) {
+    return NextResponse.json(
+      { error: "This selection is too large for one ZIP file" },
+      { status: 413 },
+    );
+  }
   const requestedPartValue = new URL(request.url).searchParams.get("part");
-  const requestedPart = requestedPartValue ? Number(requestedPartValue) : 1;
+  const requestedPart = selectedMediaIds ? 1 : requestedPartValue ? Number(requestedPartValue) : 1;
   if (!Number.isInteger(requestedPart) || requestedPart < 1 || requestedPart > batches.length) {
     return NextResponse.json(
       { error: `Choose a ZIP part between 1 and ${batches.length}` },
@@ -96,10 +120,36 @@ export async function GET(
         event.slug,
         requestedPart,
         batches.length,
+        Boolean(selectedMediaIds),
       )}"`,
       "Content-Type": "application/zip",
       "X-Klik-Zip-Part": String(requestedPart),
       "X-Klik-Zip-Parts": String(batches.length),
     },
   });
+}
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  return createDownload(request, context);
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const formData = await request.formData();
+  const selectedMediaIds = new Set(
+    formData
+      .getAll("mediaId")
+      .filter((value): value is string => typeof value === "string" && value.length > 0),
+  );
+
+  if (selectedMediaIds.size === 0) {
+    return NextResponse.json({ error: "Select at least one photo" }, { status: 400 });
+  }
+
+  return createDownload(request, context, selectedMediaIds);
 }
