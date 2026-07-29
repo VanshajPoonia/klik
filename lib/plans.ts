@@ -8,6 +8,7 @@ export type PlanDefinition = {
   name: string;
   price: string;
   priceSuffix: string;
+  billingNote?: string;
   priceNote?: string;
   description: string;
   maxActiveEvents: number;
@@ -25,13 +26,12 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     key: "event",
     name: "Klik Event",
     price: "$39",
-    priceSuffix: "one-time launch price",
-    priceNote: "$49 after the introductory period",
+    priceSuffix: "one-time",
     description: "For birthdays, graduations, reunions, and smaller weddings.",
     maxActiveEvents: 1,
     maxEventsPerMonth: 1,
-    uploadWindowDays: 90,
-    galleryAccessDays: 365,
+    uploadWindowDays: 30,
+    galleryAccessDays: 180,
     maxPhotoBytes: 25 * MB,
     maxVideoBytes: 200 * MB,
     features: [
@@ -39,10 +39,11 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "Photos and videos",
       "Shared live gallery",
       "Public, password, or private access",
-      "Host moderation and guest download controls",
+      "Host moderation",
+      "Guest download controls",
       "Download-all ZIP",
-      "3-month upload window",
-      "12-month gallery access",
+      "30-day upload window",
+      "6-month gallery access",
       "One QR code and one gallery",
       "No subscription",
     ],
@@ -76,8 +77,9 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
   venue: {
     key: "venue",
     name: "Klik Venue",
-    price: "~$69",
+    price: "$69",
     priceSuffix: "per month",
+    billingNote: "3-month minimum commitment",
     priceNote: "$690 annual option",
     description: "For venues and professionals managing several live events.",
     maxActiveEvents: 5,

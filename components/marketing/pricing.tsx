@@ -1,4 +1,14 @@
-import { Check, CloudDownload, QrCode, ShieldCheck, Users } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  Check,
+  CloudDownload,
+  QrCode,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { PLANS, type PlanDefinition } from "@/lib/plans";
 import { Container } from "./container";
 import { CtaLink } from "./cta-link";
@@ -11,19 +21,15 @@ function PlanFeatures({
   inverted?: boolean;
 }) {
   return (
-    <ul className="mt-8 space-y-3">
+    <ul className="space-y-3.5">
       {plan.features.map((feature) => (
         <li
           key={feature}
-          className={`flex items-start gap-3 text-sm leading-relaxed ${
-            inverted ? "text-paper/80" : "text-canvas/75"
+          className={`flex items-start gap-3 text-[15px] leading-relaxed ${
+            inverted ? "text-paper/80" : "text-canvas/80"
           }`}
         >
-          <span
-            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-              inverted ? "bg-volt text-canvas" : "bg-canvas text-volt"
-            }`}
-          >
+          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-volt text-canvas">
             <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
           </span>
           {feature}
@@ -33,20 +39,129 @@ function PlanFeatures({
   );
 }
 
+function PlanCard({
+  plan,
+  inverted = false,
+  icon: Icon,
+  cta,
+}: {
+  plan: PlanDefinition;
+  inverted?: boolean;
+  icon: LucideIcon;
+  cta: string;
+}) {
+  const isFeatured = Boolean(plan.featured);
+
+  return (
+    <article
+      className={`flex min-w-0 flex-col overflow-hidden rounded-[18px] border ${
+        inverted
+          ? "border-canvas bg-canvas text-paper"
+          : isFeatured
+            ? "border-volt bg-paper text-canvas"
+            : "border-canvas/20 bg-paper text-canvas"
+      }`}
+    >
+      {isFeatured && (
+        <p className="bg-volt px-6 py-2 text-center text-xs font-semibold tracking-[0.14em] text-canvas uppercase">
+          Most popular
+        </p>
+      )}
+
+      <div className="flex flex-1 flex-col">
+        <div className="px-6 pb-7 pt-7 sm:px-7">
+          <h3 className="text-3xl font-semibold leading-tight tracking-[-0.03em]">{plan.name}</h3>
+          <div className="mt-6 flex flex-wrap items-end gap-x-3 gap-y-2">
+            <span
+              className={`text-6xl font-semibold leading-none tracking-[-0.06em] sm:text-7xl ${
+                inverted ? "text-volt" : "text-canvas"
+              }`}
+            >
+              {plan.price}
+            </span>
+            <span
+              className={`max-w-24 pb-1 text-xs font-semibold leading-tight uppercase ${
+                inverted ? "text-paper/65" : "text-canvas/60"
+              }`}
+            >
+              {plan.priceSuffix}
+            </span>
+          </div>
+          {plan.billingNote && (
+            <p className="mt-5 rounded-full bg-volt px-4 py-2 text-center text-xs font-semibold tracking-wide text-canvas uppercase">
+              {plan.billingNote}
+            </p>
+          )}
+        </div>
+
+        <div
+          className={`flex-1 border-t px-6 py-7 sm:px-7 ${
+            inverted ? "border-paper/15" : "border-canvas/15"
+          }`}
+        >
+          <PlanFeatures plan={plan} inverted={inverted} />
+        </div>
+
+        <div
+          className={`mt-auto border-t p-5 ${
+            inverted
+              ? "border-paper/15 bg-canvas-raised"
+              : isFeatured
+                ? "border-volt bg-volt text-canvas"
+                : "border-canvas/15 bg-canvas text-paper"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${
+                inverted || !isFeatured
+                  ? "border-volt text-volt"
+                  : "border-canvas text-canvas"
+              }`}
+            >
+              <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+            </span>
+            <p
+              className={`pt-0.5 text-sm leading-relaxed ${
+                inverted || !isFeatured ? "text-paper/75" : "text-canvas/75"
+              }`}
+            >
+              {plan.description}
+            </p>
+          </div>
+          <CtaLink
+            href="/login"
+            variant={inverted ? "primary" : "ghost"}
+            className={`mt-5 w-full ${
+              inverted
+                ? ""
+                : isFeatured
+                  ? "border-canvas bg-canvas text-paper hover:border-canvas"
+                  : "border-paper bg-paper text-canvas hover:border-paper"
+            }`}
+          >
+            {cta}
+          </CtaLink>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function Pricing() {
   const eventPlan = PLANS.event;
   const premiumPlan = PLANS.premium;
   const venuePlan = PLANS.venue;
   const assurances = [
     {
-      icon: Users,
-      title: "Share with everyone",
-      body: "Unlimited guests can join.",
+      icon: CalendarDays,
+      title: "No subscription",
+      body: "One-time event pricing.",
     },
     {
       icon: ShieldCheck,
-      title: "Secure and private",
-      body: "You control gallery access.",
+      title: "Secure & private",
+      body: "You control who can view it.",
     },
     {
       icon: CloudDownload,
@@ -55,118 +170,44 @@ export function Pricing() {
     },
     {
       icon: QrCode,
-      title: "One scan to join",
-      body: "Every event gets a QR code.",
+      title: "One QR",
+      body: "Everyone shares. You keep everything.",
     },
   ];
 
   return (
     <section id="pricing" className="scroll-mt-8 bg-paper py-24 text-canvas sm:py-32">
       <Container>
-        <div className="grid gap-8 border-b border-canvas/15 pb-12 lg:grid-cols-[1fr_0.7fr] lg:items-end">
-          <h2 className="max-w-3xl font-display text-4xl leading-[1.04] tracking-tight sm:text-6xl">
-            One event, a longer run, or the whole venue.
+        <div className="border-b border-canvas/15 pb-12 text-center">
+          <p className="text-xs font-semibold tracking-[0.18em] text-canvas/55 uppercase">
+            Simple pricing
+          </p>
+          <h2 className="mx-auto mt-4 max-w-4xl font-display text-4xl leading-[1.04] tracking-tight sm:text-6xl">
+            Share more. Remember everything.
           </h2>
-          <p className="max-w-xl text-base leading-relaxed text-canvas/65 lg:justify-self-end">
-            No surprise guest fees. Your assigned plan controls active events, upload time, gallery
-            access, and video size.
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-canvas/65">
+            Choose one event, a premium experience, or a plan for the whole venue. Every option
+            includes unlimited guests with no per-person fees.
           </p>
         </div>
 
-        <div className="mt-12 grid items-stretch gap-4 lg:grid-cols-12">
-          <article className="flex flex-col overflow-hidden rounded-2xl border border-volt bg-paper lg:col-span-4">
-            <div className="bg-volt px-6 py-2 text-center text-sm font-semibold text-canvas">
-              Most popular
-            </div>
-            <div className="flex flex-1 flex-col p-6 sm:p-8">
-              <div>
-                <h3 className="font-display text-3xl leading-tight">{eventPlan.name}</h3>
-                <p className="mt-3 max-w-xs text-sm leading-relaxed text-canvas/65">
-                  {eventPlan.description}
-                </p>
-              </div>
-              <div className="mt-8 flex items-end gap-3">
-                <span className="font-display text-6xl leading-none text-volt-dim">
-                  {eventPlan.price}
-                </span>
-                <span className="max-w-24 pb-1 text-xs font-medium leading-tight text-canvas/65">
-                  {eventPlan.priceSuffix}
-                </span>
-              </div>
-              {eventPlan.priceNote && (
-                <p className="mt-3 border-b border-canvas/20 pb-6 text-sm font-medium text-canvas/70">
-                  {eventPlan.priceNote}
-                </p>
-              )}
-              <PlanFeatures plan={eventPlan} />
-              <CtaLink href="/login" className="mt-8 w-full">
-                Start with Event
-              </CtaLink>
-            </div>
-          </article>
-
-          <article className="flex flex-col rounded-2xl bg-canvas p-6 text-paper lg:col-span-4 sm:p-8">
-            <div>
-              <h3 className="font-display text-3xl leading-tight">{premiumPlan.name}</h3>
-              <p className="mt-3 max-w-xs text-sm leading-relaxed text-paper/65">
-                {premiumPlan.description}
-              </p>
-            </div>
-            <div className="mt-8 flex items-end gap-3">
-              <span className="font-display text-6xl leading-none text-volt">
-                {premiumPlan.price}
-              </span>
-              <span className="pb-1 text-xs text-muted">{premiumPlan.priceSuffix}</span>
-            </div>
-            <div className="mt-6 border-b border-paper/15" />
-            <PlanFeatures plan={premiumPlan} inverted />
-            <CtaLink href="/login" className="mt-auto w-full">
-              Choose Premium
-            </CtaLink>
-          </article>
-
-          <article className="flex flex-col rounded-2xl border border-canvas/20 bg-paper p-6 lg:col-span-4 sm:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="font-display text-3xl leading-tight">{venuePlan.name}</h3>
-                <p className="mt-3 max-w-xs text-sm leading-relaxed text-canvas/65">
-                  {venuePlan.description}
-                </p>
-              </div>
-              <span className="rounded-full bg-volt px-3 py-1 text-xs font-medium text-canvas">
-                Up to 5
-              </span>
-            </div>
-            <div className="mt-8 flex items-end gap-3">
-              <span className="font-display text-6xl leading-none">{venuePlan.price}</span>
-              <span className="max-w-20 pb-1 text-xs leading-tight text-canvas/65">
-                {venuePlan.priceSuffix}
-              </span>
-            </div>
-            {venuePlan.priceNote && (
-              <p className="mt-3 text-xs text-canvas/60">{venuePlan.priceNote}</p>
-            )}
-            <div className="mt-6 border-b border-canvas/20" />
-            <PlanFeatures plan={venuePlan} />
-            <CtaLink
-              href="/login"
-              variant="ghost"
-              className="mt-auto w-full border-canvas bg-canvas text-paper hover:border-canvas"
-            >
-              Choose Venue
-            </CtaLink>
-          </article>
+        <div className="mt-12 grid items-stretch gap-4 lg:grid-cols-3">
+          <PlanCard plan={eventPlan} icon={Users} cta="Start with Event" />
+          <PlanCard plan={premiumPlan} icon={Sparkles} cta="Choose Premium" inverted />
+          <PlanCard plan={venuePlan} icon={Building2} cta="Choose Venue" />
         </div>
 
-        <div className="mt-6 grid overflow-hidden rounded-2xl bg-canvas text-paper sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid overflow-hidden rounded-[18px] bg-canvas text-paper sm:grid-cols-2 lg:grid-cols-4">
           {assurances.map(({ icon: Icon, title, body }, index) => (
             <div
               key={title}
               className={`flex items-center gap-4 p-5 ${
-                index > 0 ? "border-t border-canvas-line lg:border-t-0 lg:border-l" : ""
-              } ${index === 1 ? "sm:border-t-0 sm:border-l" : ""} ${
-                index === 2 ? "sm:border-l-0" : ""
-              } ${index === 3 ? "sm:border-l" : ""}`}
+                index === 1 ? "border-t border-paper/10 sm:border-l sm:border-t-0" : ""
+              } ${index === 2 ? "border-t border-paper/10 lg:border-l lg:border-t-0" : ""} ${
+                index === 3
+                  ? "border-t border-paper/10 sm:border-l lg:border-t-0"
+                  : ""
+              }`}
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-volt text-volt">
                 <Icon className="h-5 w-5" aria-hidden="true" />
@@ -180,8 +221,8 @@ export function Pricing() {
         </div>
 
         <p className="mx-auto mt-6 max-w-2xl text-center text-sm leading-relaxed text-canvas/60">
-          Plans are assigned by the Klik administrator during onboarding. Payment checkout is not
-          connected yet.
+          Plans are assigned by the Klik administrator during onboarding. Klik Venue requires a
+          three-month minimum commitment, with a $690 annual option.
         </p>
       </Container>
     </section>
