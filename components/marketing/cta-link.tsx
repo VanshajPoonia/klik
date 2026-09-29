@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { twMerge } from "tailwind-merge";
 
 const base =
   "inline-flex items-center justify-center gap-2 rounded-full font-medium transition-transform duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
@@ -28,7 +29,7 @@ export function CtaLink({
   className?: string;
 }) {
   return (
-    <Link href={href} className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+    <Link href={href} className={twMerge(base, variants[variant], sizes[size], className)}>
       {children}
     </Link>
   );
