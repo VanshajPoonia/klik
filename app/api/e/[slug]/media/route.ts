@@ -26,6 +26,7 @@ import {
   type SignatureMatch,
 } from "@/lib/file-signature";
 import { encodeMediaCursor } from "@/lib/media-cursor";
+import { isPlausibleCaptureTime, readCaptureTime } from "@/lib/exif";
 import { mediaContentPath, toPublicMedia } from "@/lib/media-delivery";
 import { canUseAlbums } from "@/lib/plans";
 
@@ -47,7 +48,57 @@ const registerSchema = z.object({
   // True when the browser already resized/re-encoded the photo before
   // upload, which skips redundant server-side recompression of the same file.
   clientCompressed: z.boolean().optional(),
+  // The camera's wall clock, read off the original before the browser's
+  // compression pass destroyed it. Zone-less by nature, so it is carried as a
+  // plain string and range-checked rather than parsed into an instant here.
+  capturedAt: z.string().max(19).optional(),
 });
+
+/**
+ * Re-encodes a photo into the bytes we are willing to store, or returns null
+ * if it cannot.
+ *
+ * Two attempts, because they fail for different reasons. The first is the
+ * normal path. The second drops mozjpeg and tells sharp to tolerate a
+ * truncated or slightly malformed file rather than refuse it, which is the
+ * common shape of a photo that arrived over patchy venue wifi. A file that
+ * fails both is one we cannot decode at all.
+ *
+ * Re-encoding is also what removes EXIF. sharp strips metadata unless
+ * `.withMetadata()` is called, and it is deliberately never called here, so
+ * the returned buffer carries no GPS, no serial number and no owner name.
+ */
+async function sanitizePhoto(
+  buffer: Buffer<ArrayBufferLike>,
+): Promise<{ data: Buffer; info: { width: number; height: number } } | null> {
+  const resize = {
+    width: COMPRESS_MAX_DIMENSION,
+    height: COMPRESS_MAX_DIMENSION,
+    fit: "inside" as const,
+    withoutEnlargement: true,
+  };
+
+  try {
+    return await sharp(buffer)
+      .rotate()
+      .resize(resize)
+      .jpeg({ quality: COMPRESS_QUALITY, mozjpeg: true })
+      .toBuffer({ resolveWithObject: true });
+  } catch (error) {
+    console.error("Photo compression failed, retrying leniently:", error);
+  }
+
+  try {
+    return await sharp(buffer, { failOn: "none" })
+      .rotate()
+      .resize(resize)
+      .jpeg({ quality: COMPRESS_QUALITY })
+      .toBuffer({ resolveWithObject: true });
+  } catch (error) {
+    console.error("Photo could not be decoded at all:", error);
+    return null;
+  }
+}
 
 async function loadEvent(slug: string) {
   const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
@@ -237,12 +288,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
   }
   const blobUrl = mediaContentPath(event.slug, input.mediaId);
+  // Client-supplied for anything the browser compressed, because that pass
+  // strips EXIF before we ever see the file. Advisory metadata rather than a
+  // security boundary, but it still lands in a timestamp column, so it is
+  // range-checked before it is trusted.
+  let capturedAt: string | null =
+    input.capturedAt && isPlausibleCaptureTime(input.capturedAt) ? input.capturedAt : null;
   let sizeBytes = actualSizeBytes;
   let storedMimeType = input.mimeType;
   let width = input.width;
   let height = input.height;
 
   if (kind === "photo" && !input.clientCompressed) {
+    let original: Buffer<ArrayBufferLike>;
     try {
       const storedObject = await r2.send(
         new GetObjectCommand({
@@ -251,44 +309,73 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         }),
       );
       if (!storedObject.Body) throw new Error("Uploaded photo did not return a readable body");
-      let buffer: Buffer<ArrayBufferLike> = Buffer.from(
-        await storedObject.Body.transformToByteArray(),
-      );
+      original = Buffer.from(await storedObject.Body.transformToByteArray());
+    } catch (error) {
+      console.error("Could not read back the uploaded photo:", error);
+      await deleteBlobs([input.pathname]).catch(() => {});
+      return NextResponse.json({ error: "Uploaded file could not be verified" }, { status: 400 });
+    }
 
-      // sharp's bundled libheif can decode AVIF but not HEIC/HEIF (the format
-      // iPhones shoot by default), so those need converting to JPEG first.
-      if (input.mimeType === "image/heic" || input.mimeType === "image/heif") {
-        buffer = await heicConvert({ buffer, format: "JPEG", quality: 1 });
+    // Before anything re-encodes the file. Every pass below strips EXIF, which
+    // is exactly what it should do, so this is the only moment at which the
+    // capture time still exists on the server. See lib/exif.ts.
+    capturedAt = capturedAt ?? readCaptureTime(original);
+
+    let decoded = original;
+    // sharp's bundled libheif can decode AVIF but not HEIC/HEIF (the format
+    // iPhones shoot by default), so those need converting to JPEG first.
+    if (input.mimeType === "image/heic" || input.mimeType === "image/heif") {
+      try {
+        decoded = await heicConvert({ buffer: original, format: "JPEG", quality: 1 });
+      } catch (error) {
+        console.error("HEIC conversion failed:", error);
+        await deleteBlobs([input.pathname]).catch(() => {});
+        return NextResponse.json(
+          { error: "That photo could not be processed. Try saving it as a JPEG first." },
+          { status: 422 },
+        );
       }
+    }
 
-      const compressed = await sharp(buffer)
-        .rotate()
-        .resize({
-          width: COMPRESS_MAX_DIMENSION,
-          height: COMPRESS_MAX_DIMENSION,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: COMPRESS_QUALITY, mozjpeg: true })
-        .toBuffer({ resolveWithObject: true });
+    const sanitized = await sanitizePhoto(decoded);
 
+    // This used to fall through to "store the original untouched", which was
+    // the wrong default in a way that only showed up when something broke: the
+    // bytes a camera produces carry GPS coordinates, a device serial and often
+    // the owner's name, and a gallery link is shareable. Rejecting a photo we
+    // cannot sanitise is a worse upload experience and a much better privacy
+    // guarantee, and it keeps one rule true everywhere: we store only bytes we
+    // produced ourselves.
+    if (!sanitized) {
+      await deleteBlobs([input.pathname]).catch(() => {});
+      return NextResponse.json(
+        { error: "That photo could not be processed. Try saving it as a JPEG first." },
+        { status: 422 },
+      );
+    }
+
+    try {
       await r2.send(
         new PutObjectCommand({
           Bucket: process.env.R2_BUCKET_NAME,
           Key: input.pathname,
-          Body: compressed.data,
+          Body: sanitized.data,
           ContentType: "image/jpeg",
         }),
       );
-
-      sizeBytes = compressed.data.byteLength;
-      storedMimeType = "image/jpeg";
-      width = compressed.info.width;
-      height = compressed.info.height;
     } catch (error) {
-      // Compression is a best-effort optimization. Fall back to the original upload untouched.
-      console.error("Photo compression failed, storing original:", error);
+      // The original is still sitting at this key, so there is no version of
+      // this that ends with a usable row. Remove it rather than record a
+      // pointer to bytes we decided not to keep.
+      console.error("Could not store the processed photo:", error);
+      await deleteBlobs([input.pathname]).catch(() => {});
+      return NextResponse.json({ error: "Upload could not be completed" }, { status: 500 });
     }
+
+    sizeBytes = sanitized.data.byteLength;
+    storedMimeType = "image/jpeg";
+    width = sanitized.info.width;
+    height = sanitized.info.height;
   }
 
   const [row] = await db
@@ -309,6 +396,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       height: height ?? null,
       durationS: input.durationS ?? null,
       posterPathname: kind === "video" ? (input.posterPathname ?? null) : null,
+      capturedAt,
     })
     .returning();
 

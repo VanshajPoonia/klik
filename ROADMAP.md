@@ -460,11 +460,17 @@ Three real gaps remain:
 1. **The compression fallback.** When the pass throws (a HEIC convert failure, a corrupt file, a timeout) the `catch` stores the original **untouched, with full EXIF including GPS**. It is a narrow path, but it is exactly the path an unusual file takes, and it fails open.
 2. **Videos are never touched at all.** QuickTime and MP4 store location in a `©xyz` atom and `sharp` cannot help. This is the bigger leak now, and it needs ffmpeg, which means it rides along with OPS-1's transcode job rather than being fixed alone.
 3. **`DateTimeOriginal` is being thrown away.** AI-1 needs capture time for its moment clustering, and the current pass discards it with everything else. It has to be read and stored on the `media` row *before* stripping, or that feature quietly has nothing to work with.
-- Read `DateTimeOriginal` before the re-encode and store it on the `media` row.
-- Close the fallback: if compression fails, re-encode for stripping alone rather than storing the original, and reject only if even that fails.
-- Video metadata waits for OPS-1, or gets an explicit note that it is preserved.
+**DONE 2026-10-01 for gaps 1 and 3.** Gap 2 (video) stays open and rides with OPS-1.
+
+- `lib/exif.ts` reads `DateTimeOriginal` and nothing else. Hand-written rather than a dependency, because the same code has to run server-side over a Buffer from R2 and in the browser over the original `File`, before the canvas compression pass destroys it.
+- `media.captured_at` is a **zone-less** `timestamp` (migration `0009`). EXIF carries no offset, so storing an instant would mean inventing one. Null means "we do not know" and is deliberately not backfilled from `created_at`: upload time is a different fact the row already records, and copying it across would turn an honest gap into a confident wrong answer that AI-1 would then cluster on.
+- **The fallback is closed, and the rule is now "we store only bytes we produced."** `sanitizePhoto` tries the normal pass, then retries with `failOn: "none"` and without mozjpeg, which measurably rescues a truncated file the strict pass throws on (verified: strict threw, lenient decoded). If both fail, the upload is rejected with a 422 and the object is deleted. A failed HEIC convert and a failed `PutObject` now take the same path, where both previously left the original in place.
+- **This is a behaviour change**: a photo that cannot be decoded is now refused rather than stored intact. That is a worse upload experience and a much better privacy guarantee, and it was the right way round because the bytes a camera produces carry GPS, a device serial and often the owner's name, into a gallery whose whole purpose is a shareable link.
+- **HEIC keeps no capture time.** Its metadata lives in an ISO base media container, not a JPEG APP1 segment, and `heic-convert` does not carry EXIF across. iPhone photos fall back to upload time until OPS-1 puts a real decoder in the pipeline. Documented in `lib/exif.ts` rather than left to be rediscovered.
+
+Still open here:
+- **Videos.** QuickTime and MP4 store location in a `©xyz` atom and `sharp` cannot help. This is now the only remaining leak, and it needs ffmpeg, so it rides with OPS-1.
 - Add an organizer setting "keep full photo metadata", default off, for the professional-photographer case where EXIF is part of the deliverable.
-- Videos carry location too and `sharp` does not touch them. Either strip with ffmpeg in the transcode pass (NEW-8) or document plainly that video metadata is preserved.
 
 ### MED-9. Reactions and comments
 **Size:** M. **Depends on:** ACC-5. **Decided 2026-09-30 (C-5).**
