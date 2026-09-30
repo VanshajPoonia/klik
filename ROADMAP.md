@@ -454,10 +454,15 @@ The current ZIP route streams inline and 413s above 2 GB. Move large exports to 
 
 ### MED-8. Strip EXIF and GPS from stored media
 **Size:** S. **Promoted from NEW-10 on 2026-09-30.** Do this early; it is a live leak, not a feature.
-Phone photos carry GPS coordinates, device serial hints, and capture software in EXIF, and right now all of it survives into R2 and straight out again through the ZIP export. A guest uploading a photo from inside someone's home is publishing that address to everyone the organizer shares the gallery with.
-- Strip on the existing server-side compression pass. `sharp` already re-encodes every photo there, so this costs almost nothing: drop the metadata by default rather than copying it through.
-- **Keep two fields**: orientation (or the image renders sideways) and `DateTimeOriginal`, which AI-1 needs for time clustering. Copy those two onto the `media` row so the pixel data can be stripped clean while the roadmap's grouping features still work.
-- Backfill existing media through a job (F-5), since everything uploaded to date still carries full EXIF.
+**Scope corrected 2026-10-01 after reading the code properly. It is narrower than I first described.** `sharp` drops metadata unless you call `.withMetadata()`, and the pipeline does not, so photos that go through the server compression pass are already stripped and `.rotate()` already bakes in orientation. Client-compressed photos go through a canvas re-encode, which also strips. Most photos are therefore already clean.
+
+Three real gaps remain:
+1. **The compression fallback.** When the pass throws (a HEIC convert failure, a corrupt file, a timeout) the `catch` stores the original **untouched, with full EXIF including GPS**. It is a narrow path, but it is exactly the path an unusual file takes, and it fails open.
+2. **Videos are never touched at all.** QuickTime and MP4 store location in a `©xyz` atom and `sharp` cannot help. This is the bigger leak now, and it needs ffmpeg, which means it rides along with OPS-1's transcode job rather than being fixed alone.
+3. **`DateTimeOriginal` is being thrown away.** AI-1 needs capture time for its moment clustering, and the current pass discards it with everything else. It has to be read and stored on the `media` row *before* stripping, or that feature quietly has nothing to work with.
+- Read `DateTimeOriginal` before the re-encode and store it on the `media` row.
+- Close the fallback: if compression fails, re-encode for stripping alone rather than storing the original, and reject only if even that fails.
+- Video metadata waits for OPS-1, or gets an explicit note that it is preserved.
 - Add an organizer setting "keep full photo metadata", default off, for the professional-photographer case where EXIF is part of the deliverable.
 - Videos carry location too and `sharp` does not touch them. Either strip with ffmpeg in the transcode pass (NEW-8) or document plainly that video metadata is preserved.
 
