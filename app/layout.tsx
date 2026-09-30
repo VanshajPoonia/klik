@@ -21,9 +21,12 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Klik - Every phone in the room becomes a camera",
+  title: {
+    default: "Klik: Every phone in the room becomes a camera",
+    template: "%s | Klik",
+  },
   description:
-    "Give your event a QR code. Guests scan it, upload photos and videos from their own phone, and watch one shared gallery fill up live - no app, no account.",
+    "Give your event a QR code. Guests scan it, upload photos and videos from their own phone, and watch one shared gallery fill up live. No app, no account.",
 };
 
 export default function RootLayout({

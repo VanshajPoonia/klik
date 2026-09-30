@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { QuickCreateForm } from "@/components/admin/quick-create-form";
+
+export const metadata: Metadata = {
+  title: "New client",
+  robots: { index: false },
+};
 
 export default async function NewClientPage() {
   const session = await auth();

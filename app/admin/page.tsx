@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
@@ -10,6 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
 import { PlanAssignmentControl } from "@/components/admin/plan-assignment-control";
+
+export const metadata: Metadata = {
+  title: "Admin",
+  robots: { index: false },
+};
 
 export default async function AdminPage() {
   const session = await auth();

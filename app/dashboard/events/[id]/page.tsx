@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
@@ -19,6 +20,11 @@ import {
 import { withProtectedMediaUrl } from "@/lib/media-delivery";
 import { EventDashboard } from "@/components/dashboard/event-dashboard";
 import { requireEventManagerSession } from "@/lib/roles";
+
+export const metadata: Metadata = {
+  title: "Manage event",
+  robots: { index: false },
+};
 
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

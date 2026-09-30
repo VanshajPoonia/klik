@@ -1,3 +1,5 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
@@ -24,9 +26,25 @@ import { requireEventManagerSession } from "@/lib/roles";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
+// Shared by the page and its metadata so one request runs one query.
+const getEventBySlug = cache(async (slug: string) => {
+  const [event] = await db.select().from(events).where(eq(events.slug, slug)).limit(1);
+  return event ?? null;
+});
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const event = await getEventBySlug(slug);
+  return { title: event?.name, robots: { index: false } };
+}
+
 export default async function GuestEventPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [event] = await db.select().from(events).where(eq(events.slug, slug)).limit(1);
+  const event = await getEventBySlug(slug);
   if (!event) notFound();
   const plan = await getAccountPlan(event.ownerId);
 

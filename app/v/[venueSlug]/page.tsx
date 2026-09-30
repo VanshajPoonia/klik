@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, users } from "@/lib/schema";
 import { isEventActive } from "@/lib/access";
+
+export const metadata: Metadata = {
+  robots: { index: false },
+};
 
 export default async function VenueHubPage({
   params,
@@ -31,8 +36,7 @@ export default async function VenueHubPage({
   return (
     <main className="flex min-h-screen items-center justify-center px-6 text-center">
       <div className="max-w-md">
-        <p className="text-xs font-medium tracking-wide text-volt uppercase">Klik Venue</p>
-        <h1 className="mt-3 font-display text-3xl text-paper">
+        <h1 className="font-display text-3xl text-paper">
           {venue.name || "This venue"} has no live gallery right now.
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-muted">
