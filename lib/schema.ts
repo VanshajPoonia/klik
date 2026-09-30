@@ -84,6 +84,10 @@ export const venueClients = pgTable(
     name: text("name").notNull(),
     email: text("email"),
     phone: text("phone"),
+    // Soft delete: a client row carries contact details, and events reference it
+    // with ON DELETE SET NULL, so a hard delete silently detached every event
+    // that client ever had with no way back.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -117,7 +121,16 @@ export const events = pgTable(
     downloadsEnabled: boolean("downloads_enabled").notNull().default(true),
     uploadsEnabled: boolean("uploads_enabled").notNull().default(true),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    // Pinned when the event is created, from the owner's plan at that moment,
+    // and only ever extended. Retention must not be recomputed from a mutable
+    // plan field at purge time: doing so let a downgrade retroactively shorten
+    // the window and make media that was safe yesterday eligible for permanent
+    // deletion tonight. See ROADMAP.md SEC-1.
+    retentionUntil: timestamp("retention_until", { withTimezone: true }),
     purgedAt: timestamp("purged_at", { withTimezone: true }),
+    // Soft delete. Rows stay readable to recovery tooling for 30 days, then the
+    // purge cron removes them and their objects for good.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -133,6 +146,12 @@ export const eventCoHosts = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // Soft delete, like everything else. Note this row grants ACCESS, so unlike
+    // other soft-deleted records a missed filter here does not show stale data,
+    // it leaves a removed co-host still able to manage the gallery. That is why
+    // exactly one function reads this table for authorization
+    // (requireEventManagerSession in lib/roles.ts) and the filter lives there.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -149,6 +168,10 @@ export const albums = pgTable(
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // Soft delete: media references an album with ON DELETE SET NULL, so a hard
+    // delete silently unfiled every photo in it. Sorting 2,000 wedding photos
+    // into folders is real work to lose to one mis-tap.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("albums_event_idx").on(table.eventId)],
@@ -163,6 +186,10 @@ export const guests = pgTable(
       .references(() => events.id, { onDelete: "cascade" }),
     displayName: text("display_name"),
     consentedAt: timestamp("consented_at", { withTimezone: true }).notNull(),
+    // WHICH consent text this guest agreed to. consented_at alone records when
+    // someone ticked a box, not what the box said, so it cannot answer the only
+    // question that matters if they later object. See lib/consent.ts.
+    consentVersion: text("consent_version"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("guests_event_idx").on(table.eventId)],
@@ -187,13 +214,59 @@ export const media = pgTable(
     width: integer("width"),
     height: integer("height"),
     durationS: real("duration_s"),
+    // Small still extracted on the uploader's device at upload time. Lets the
+    // gallery grid use preload="none" and a plain image instead of asking the
+    // browser for video "metadata", which on iPhone .mov files means reaching
+    // to the end of the file for the moov atom. See lib/video-poster.ts.
+    posterPathname: text("poster_pathname"),
+    // Soft delete. A deleted photo is irreplaceable and the storage to keep it
+    // for 30 days is not, so every read path filters on this rather than the
+    // row being gone. See ROADMAP.md SEC-4.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),
     index("media_event_hash_idx").on(table.eventId, table.contentHash),
+    // The soft-delete indexes are PARTIAL (WHERE deleted_at IS NULL / IS NOT
+    // NULL) and live in drizzle/0007_soft_delete_indexes.sql, because that is
+    // the shape the gallery and purge queries actually need and it keeps both
+    // indexes small. They are not declared here: drizzle-kit push would
+    // recreate them as full indexes and quietly undo that.
   ],
 );
+
+/**
+ * Postgres-backed counters for rate limiting. One row per key per window, and
+ * `consume()` in lib/ratelimit.ts updates it in a single atomic statement so
+ * concurrent requests cannot both read a stale count. Expired rows are swept
+ * by the purge cron.
+ */
+export const ERASURE_SUBJECTS = ["user", "guest", "event"] as const;
+export type ErasureSubjectType = (typeof ERASURE_SUBJECTS)[number];
+
+/**
+ * Proof that an erasure happened, without keeping the thing that was erased.
+ * The subject is stored as a SHA-256 hash rather than an id: the log has to
+ * survive the deletion to be useful, and a raw identifier would recreate in
+ * the audit trail exactly the record the request was meant to remove.
+ */
+export const erasureLog = pgTable("erasure_log", {
+  id: text("id").primaryKey(),
+  subjectType: text("subject_type").$type<ErasureSubjectType>().notNull(),
+  subjectHash: text("subject_hash").notNull(),
+  mediaDeleted: integer("media_deleted").notNull().default(0),
+  bytesDeleted: bigint("bytes_deleted", { mode: "number" }).notNull().default(0),
+  requestedBy: text("requested_by"),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+  count: integer("count").notNull().default(0),
+});
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
