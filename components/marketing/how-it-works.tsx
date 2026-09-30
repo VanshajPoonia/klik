@@ -28,7 +28,7 @@ export function HowItWorks() {
         <div className="mt-16 grid grid-cols-1 gap-12 md:grid-cols-3 md:gap-8">
           {steps.map((step) => (
             <div key={step.n}>
-              <span className="font-display text-6xl text-volt/30">{step.n}</span>
+              <span className="font-display text-6xl text-volt/60">{step.n}</span>
               <h3 className="mt-4 text-xl font-medium text-paper">{step.title}</h3>
               <p className="mt-3 leading-relaxed text-muted">{step.body}</p>
             </div>

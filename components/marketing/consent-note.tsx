@@ -4,8 +4,7 @@ export function ConsentNote() {
   return (
     <section className="bg-canvas py-24 sm:py-32">
       <Container className="max-w-2xl text-center">
-        <span className="font-mono text-xs uppercase tracking-[0.2em] text-volt">Privacy</span>
-        <h2 className="mt-5 font-display text-3xl leading-tight tracking-tight text-paper sm:text-4xl">
+        <h2 className="font-display text-3xl leading-tight tracking-tight text-paper sm:text-4xl">
           Guests know exactly what they&rsquo;re sharing.
         </h2>
         <p className="mt-5 leading-relaxed text-muted">

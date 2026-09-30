@@ -25,7 +25,7 @@ function PlanFeatures({
       {plan.features.map((feature) => (
         <li
           key={feature}
-          className={`flex items-start gap-3 text-[15px] leading-relaxed ${
+          className={`flex items-start gap-3 text-sm leading-relaxed ${
             inverted ? "text-paper/80" : "text-canvas/80"
           }`}
         >
@@ -92,6 +92,13 @@ function PlanCard({
               {plan.billingNote}
             </p>
           )}
+          {plan.priceNote && (
+            <p
+              className={`mt-3 text-center text-sm ${inverted ? "text-paper/70" : "text-canvas/70"}`}
+            >
+              {plan.priceNote}
+            </p>
+          )}
         </div>
 
         <div
@@ -155,8 +162,8 @@ export function Pricing() {
   const assurances = [
     {
       icon: CalendarDays,
-      title: "No subscription",
-      body: "One-time event pricing.",
+      title: "Pay once",
+      body: "Event and Premium have no subscription.",
     },
     {
       icon: ShieldCheck,
@@ -179,10 +186,7 @@ export function Pricing() {
     <section id="pricing" className="scroll-mt-8 bg-paper py-24 text-canvas sm:py-32">
       <Container>
         <div className="border-b border-canvas/15 pb-12 text-center">
-          <p className="text-xs font-semibold tracking-[0.18em] text-canvas/55 uppercase">
-            Simple pricing
-          </p>
-          <h2 className="mx-auto mt-4 max-w-4xl font-display text-4xl leading-[1.04] tracking-tight sm:text-6xl">
+          <h2 className="mx-auto max-w-4xl font-display text-4xl leading-[1.04] tracking-tight sm:text-6xl">
             Share more. Remember everything.
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-canvas/65">
@@ -221,8 +225,7 @@ export function Pricing() {
         </div>
 
         <p className="mx-auto mt-6 max-w-2xl text-center text-sm leading-relaxed text-canvas/60">
-          Plans are assigned by the Klik administrator during onboarding. Klik Venue requires a
-          three-month minimum commitment, with a $690 annual option.
+          Plans are assigned by the Klik administrator during onboarding.
         </p>
       </Container>
     </section>

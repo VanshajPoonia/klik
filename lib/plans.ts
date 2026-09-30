@@ -95,7 +95,6 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "Client and event management",
       "Downloadable event QR signs",
       "12-month event storage",
-      "$690 annual option",
     ],
   },
 };

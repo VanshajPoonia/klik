@@ -27,7 +27,7 @@ export function Nav() {
           </Link>
           <Link
             href="/login"
-            className="hidden text-sm text-muted transition-colors hover:text-paper sm:block"
+            className="text-sm text-muted transition-colors hover:text-paper"
           >
             Log in
           </Link>
