@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { events, guests } from "@/lib/schema";
 import { isExpired } from "@/lib/access";
+import { CURRENT_CONSENT } from "@/lib/consent";
 import { getAccountPlan } from "@/lib/account-plans";
 import {
   signGuestSession,
@@ -24,7 +25,7 @@ const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [event] = await db.select().from(events).where(eq(events.slug, slug)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const plan = await getAccountPlan(event.ownerId);
   if (isExpired(event, plan.galleryAccessDays)) {
@@ -66,6 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       eventId: event.id,
       displayName: parsed.data.name || null,
       consentedAt: new Date(),
+      consentVersion: CURRENT_CONSENT.id,
     })
     .returning();
 
