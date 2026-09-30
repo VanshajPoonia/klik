@@ -59,7 +59,7 @@
 | What breaks first | Scalability read against a 200-guest wedding |
 | Architecture decisions | Six things worth reviewing rather than inheriting |
 | v1 scope and build order | The single-threaded order to actually work through |
-| Credentials and setup | Which accounts to create, how, and the gotchas |
+| Credentials and setup | Which accounts to create, how, and the gotchas, plus a click-by-click runbook |
 
 Work is requested by task ID: "do MED-8", or "do F-1 through F-5".
 
@@ -708,7 +708,7 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 
 **EXPANDED 2026-09-30: this now also carries the caching work, and both are in v1.** They are the same question ("how do bytes reach the viewer") and the same cutover, so doing them separately means migrating delivery twice.
 
-Steps: create `klik-media-us` with a US jurisdiction; copy objects with `rclone` or a short script; attach the custom domain `media.klik.kreativvantage.com` (already present in `next.config.ts`'s `remotePatterns`, so this was always the intent); switch public-gallery delivery from signed **URLs** to signed **cookies** so Cloudflare's edge can actually cache; flip `R2_BUCKET_NAME` and drop the `.eu.` endpoint in `lib/storage.ts`; verify a full upload and playback round trip; delete the old bucket once nothing references it. `blob_pathname` is bucket-relative, so no database change is needed.
+Steps: create `klik-media-us` with a US jurisdiction; create `klik-media-backup` beside it, with the app's token scoped to the primary bucket only and a copy step writing every new object across, because R2 has no object versioning and a second bucket is the only recovery path from a deletion bug; copy existing objects with `rclone` or a short script; attach the custom domain `media.klik.kreativvantage.com` (already present in `next.config.ts`'s `remotePatterns`, so this was always the intent); switch public-gallery delivery from signed **URLs** to signed **cookies** so Cloudflare's edge can actually cache; flip `R2_BUCKET_NAME` and drop the `.eu.` endpoint in `lib/storage.ts`; verify a full upload and playback round trip; delete the old bucket once nothing references it. `blob_pathname` is bucket-relative, so no database change is needed.
 
 **Keep private and password galleries on signed URLs.** Caching is only safe where the content is genuinely public; a cached response for a password-gated gallery is a disclosure. The split has to be explicit in the delivery route, not incidental.
 
@@ -893,17 +893,17 @@ This overturns an assumption baked into several places, and one of them is time-
 One person, so nothing below assumes parallel work, and each block ends somewhere you could stop.
 
 **Block 0, this week, cheap and time-sensitive**
-1. ~~Set `APP_URL`~~ done 2026-09-30 (`https://klik.kreativvantage.com`; still needs setting in Vercel)
-2. **MED-8** strip EXIF and GPS (a live privacy leak, and small)
-3. **F-1** rewrite ARCHITECTURE.md, **F-6** Zod env validation
-4. **LAW-2** register the DMCA agent (an afternoon, and safe harbor is not retroactive)
+1. ~~Set `APP_URL`~~ done in code 2026-09-30 (`https://klik.kreativvantage.com`); still needs setting in Vercel, see the runbook below
+2. **MED-8** metadata handling, at its corrected narrower scope
+3. **F-7** test harness. **Moved up from Block 1 on 2026-10-01.** ACT-1 rewrites how every capability check resolves, on top of six migrations that went to production with nothing behind them. Doing that with no tests is how an authorization bug ships quietly.
+4. **F-1** rewrite ARCHITECTURE.md (**F-6** done 2026-09-30)
+5. **LAW-2** register the DMCA agent (an afternoon, and safe harbor is not retroactive)
 
 **Block 0.5, the delivery cutover, before real traffic**
 5. **OPS-4** US bucket **plus** custom domain **plus** signed-cookie caching, as one migration (decided 2026-09-30)
 
-**Block 1, the floor under the money**
-5. **F-7** test harness, before anything touches payments
-6. **F-3** permissions resolver, **F-4** usage accounting
+**Block 1, the floor under activation**
+6. **F-3** permissions resolver, **F-4** usage accounting (**F-7** moved into Block 0)
 
 **Block 2, activation (replaces the old payments block)**
 7. **ACT-1** entitlement ledger. This is the migration that retires `users.plan_key`, so re-read SEC-1 **and** architecture note 2 first: the plpgsql plan-limit triggers read that column directly and must be resolved here, not later.
@@ -955,7 +955,9 @@ R2_BUCKET_NAME=klik-media-us
 
 `next.config.ts` already lists that hostname in `remotePatterns`, so this was always the intent.
 
-**Also enable object versioning with a 30-day lifecycle rule.** This is the single most valuable setting on this page: it is the only thing standing between a bug in the erasure or purge code and permanently losing someone's wedding photos. Soft delete protects against user mistakes; nothing currently protects against a logic error, because those call `DeleteObjects` for real.
+**Create a second bucket in the same step: `klik-media-backup`, also US.** An earlier version of this file told you to enable object versioning here. That was wrong, and corrected on 2026-10-01: **R2 has no object versioning.** See the data-loss note for what was checked and why Bucket Lock, the nearest feature, breaks both the rejected-upload cleanup and the erasure path.
+
+The protection is structural instead. The app's R2 token is scoped to the primary bucket only, a copy step writes each new object into the backup bucket, and nothing the app can reach can delete from it. A bug in erasure or purge then cannot destroy the only copy, and a genuine erasure request becomes a deliberate two-step action, which is what it should have been anyway.
 
 #### 3. Sentry, for F-9
 
@@ -993,6 +995,64 @@ Also set `CRON_SECRET`, or the purge route is open to anyone who finds it.
 
 **Neon.** Confirm your plan's point-in-time-restore window and then actually test a restore into a branch. An untested backup is a belief, not a backup. Also create a second branch as **staging**: six migrations have now gone straight to the only database that exists, which was fine at 12 rows and stops being fine the day a real customer's event is in there.
 
+### Setup runbook, in order, click by click
+
+Four things need a browser. This order matters: Resend first because DNS has to propagate while other work happens, Vercel second because the purge cron has been failing closed without it, then Neon, then the DMCA filing whenever there is an afternoon.
+
+#### Step 1. Resend, about 20 minutes plus propagation
+
+1. Sign up at resend.com with an account that will own production email long term. Moving a verified domain between Resend accounts means verifying it again.
+2. **Domains, then Add Domain.** Enter `mail.klik.kreativvantage.com` and pick the **US region**, matching the product's jurisdiction. Not the root `klik.kreativvantage.com`: a subdomain keeps a deliverability problem away from the root domain's sending reputation, and that is not a mistake you can undo quickly.
+3. Resend shows three or four DNS records. Open a second tab on **Cloudflare, the `kreativvantage.com` zone, DNS, Records**, and add each one. The shape is:
+   - `MX` on `send.mail.klik`, pointing at a `feedback-smtp.<region>.amazonses.com` host, priority 10
+   - `TXT` on `send.mail.klik`, value `v=spf1 include:amazonses.com ~all`
+   - `TXT` on `resend._domainkey.mail.klik`, value the long `p=MIGf...` public key
+   - `TXT` on `_dmarc.mail.klik`, value `v=DMARC1; p=none;`
+
+   Copy the real values from the Resend page, not from here. The MX host and the DKIM key differ per account and per region.
+4. **The Cloudflare gotcha that wastes an hour.** Cloudflare appends the zone name to whatever goes in the Name field, and Resend displays fully qualified hostnames. Pasting `send.mail.klik.kreativvantage.com` produces `send.mail.klik.kreativvantage.com.kreativvantage.com`. Type only the part before `.kreativvantage.com`, then read the saved record list back and confirm the names are what you intended.
+5. Back in Resend, **Verify DNS Records**. On Cloudflare this is usually minutes. When it stalls, the cause is almost always a doubled name from step 4.
+6. **API Keys, then Create API Key.** Permission **Sending access**, restricted to this domain. Copy the `re_...` value immediately; it is shown once.
+7. Record both values, for `.env.local` now and Vercel in step 2:
+
+```
+AUTH_RESEND_KEY=re_...
+AUTH_EMAIL_FROM="Klik <no-reply@mail.klik.kreativvantage.com>"
+```
+
+8. Leave DMARC at `p=none` until sign-in emails have been landing reliably for a few weeks. Tightening it early means debugging deliverability and the signup flow at the same time, and they look identical from the outside.
+
+#### Step 2. Vercel environment, about 10 minutes
+
+1. Generate a cron secret locally: `openssl rand -base64 32`.
+2. **Vercel, the Klik project, Settings, Environment Variables.** Add for Production and Preview:
+   - `APP_URL` = `https://klik.kreativvantage.com`
+   - `CRON_SECRET` = the value from step 1
+   - `AUTH_RESEND_KEY` and `AUTH_EMAIL_FROM` from the Resend step
+3. Confirm `DATABASE_URL`, `AUTH_SECRET` and the four `R2_*` variables are already present. `lib/env.ts` parses at module load, so a missing one now fails the build rather than a guest's request, which is the entire point of F-6.
+4. **Deployments, the latest one, Redeploy.** A variable added without a redeploy does not reach the running build.
+5. Then open **Settings, Cron Jobs** and look at the last run. `isAuthorized` in `app/api/cron/purge-expired/route.ts` returns false whenever `CRON_SECRET` is unset, so every nightly run to date has returned 401 and nothing has ever been purged. That was the correct failure mode, but it means the purge path has never executed in production. The first run after this redeploy is its first real exercise, so check the response rather than assuming.
+
+#### Step 3. Neon, about 30 minutes
+
+1. **Neon console, the project, Settings, Storage**, and read the actual **history retention** window. The free tier is short. Write the number down: it is the real answer to "how far back can we recover", and until it is written down that answer is a guess.
+2. **Branches, New Branch.** Name it `staging`, from `production` at the current timestamp. Put its connection string into a Preview-scoped `DATABASE_URL` in Vercel, so preview deployments and future migrations stop landing on the only database that exists. Eight migrations have now gone straight to production. That was fine at 12 media rows.
+3. **Test a restore, once, now.** Create a throwaway branch from a timestamp an hour in the past, connect with `psql`, and run `select count(*) from media;`. A plausible count means point-in-time restore is real. Delete the branch afterwards. An untested backup is a belief, not a backup.
+
+#### Step 4. DMCA agent, an afternoon
+
+1. dmca.copyright.gov, create an account for the service provider rather than for yourself personally.
+2. Designate an agent: the provider's legal name plus any alternate names the service is known by (include `Klik`), a physical address, a phone number, and an email address somebody actually reads.
+3. Pay the fee. It is small, and the registration needs renewing every three years or it lapses.
+4. Safe harbor is **not retroactive**, which is why this is not deferrable: every day unregistered is a day of uncovered exposure for photos guests upload. The agent's contact details also have to be published on the site, which is the code half of LAW-2.
+
+#### Deliberately not now
+
+- **Do not create the US bucket yet.** OPS-4 is a single cutover: US bucket, backup bucket, object copy, custom domain, signed-cookie delivery, and removing the `.eu.` endpoint. Doing the bucket half early means running two buckets and migrating delivery twice.
+- **Do not go looking for R2 object versioning.** It does not exist. See the corrected note above.
+- **Stripe: nothing at all.** Deferred out of v1.
+- **Sentry: when F-9 comes up**, not before. The DSN takes two minutes and all of its value is in alert rules that need the code first.
+
 ### The gap that needs nothing from you
 
 **F-7, tests.** Still none. Recent work touched deletion, erasure, retention and rate limiting, and the confidence behind it rests on two throwaway scripts that were deleted afterwards. It is Block 1 for a reason.
@@ -1018,7 +1078,11 @@ An honest audit of what happens today when something fails, because "we will add
 ### What does not protect us yet, worst first
 
 1. **Nothing tells you when something breaks.** No error tracking, no alerting, no uptime check. A 500 on the upload path at a Saturday wedding surfaces as a support email on Monday, if at all. F-9 is one afternoon of work and it is the highest-value unbuilt item in this table.
-2. **R2 has no versioning, so deletion is absolute.** Soft delete protects against a user mistake. It does not protect against a *bug* in the erasure or purge code, because those call `DeleteObjects` for real. If `eraseUser` ever selects the wrong rows, the objects are gone with no recovery path. Enable R2 object versioning with a 30-day lifecycle rule; it costs little at this scale and it is the only thing standing between a logic bug and permanent loss of someone's wedding.
+2. **Deletion from R2 is absolute, and there is no versioning to undo it.** Soft delete protects against a user mistake. It does not protect against a *bug* in the erasure or purge code, because those call `DeleteObjects` for real. If `eraseUser` ever selects the wrong rows, the objects are gone with no recovery path.
+
+   **Corrected 2026-10-01.** This used to say "enable R2 object versioning", as though it were one toggle. **R2 has no object versioning.** Checked against Cloudflare's own API surface: an R2 bucket exposes CORS, lifecycle, lock, sippy, custom domains and event notifications, and nothing that keeps a version history. The nearest feature is **Bucket Lock**, which blocks deletes and overwrites for an age, until a date, or indefinitely, and it does not fit this codebase as a blanket rule for two concrete reasons. `app/api/e/[slug]/media/route.ts` deletes the object it just uploaded whenever validation rejects it, so an age-based lock would leave every rejected upload as a permanent orphan, silently, because those calls are `.catch(() => {})`. And `lib/erasure.ts` could not honour a deletion request for anything recent, which is the one deletion path that is legally required to work.
+
+   The fix that does fit is structural: a **second bucket the application holds no credentials to delete from**. Folded into OPS-4, since that cutover is already creating buckets.
 3. **No verified database backup.** Neon provides point-in-time restore on paid tiers, but nobody has confirmed the retention window or tested a restore. An untested backup is a belief, not a backup.
 4. **No staging environment.** Migrations have been applied straight to the one database that exists. That was fine at 12 media rows and stops being fine the day a real customer's event is in there.
 5. **The cron is unmonitored.** If `/api/cron/purge-expired` starts failing, or the circuit breaker trips every night, nothing says so. The breaker returns a 500 specifically so a monitor can catch it, once a monitor exists.
@@ -1026,7 +1090,7 @@ An honest audit of what happens today when something fails, because "we will add
 
 ### What to do about it, cheapest first
 
-- **Enable R2 object versioning now.** One setting, no code. Insurance against the class of bug that has no other recovery.
+- **Scope the R2 API token to the one bucket**, if it is currently account-wide. Two minutes, no code, and it caps what a leaked key or a wrong bucket name can reach. Real byte-level recovery needs the backup bucket in OPS-4; there is no toggle for it.
 - **Confirm the Neon plan's PITR window, then actually test a restore** into a branch.
 - **F-9 error tracking**, with an alert on the cron route and the Stripe webhook specifically, since both fail silently by nature.
 - **A second Neon branch as staging** before the first paying customer, so migrations stop going straight to production.
@@ -1105,7 +1169,7 @@ A scalability read of the current architecture against one realistic worst case:
 |---|---|
 | User mistake | Covered. 30-day soft delete everywhere, restore API built. |
 | Retention misconfiguration | Covered. Pinned `retention_until`, circuit breaker, null means skip. |
-| **Bug in deletion code** | **Not covered.** Erasure and purge call `DeleteObjects` for real. R2 has no versioning enabled, so a logic error is unrecoverable. One browser setting fixes this. |
+| **Bug in deletion code** | **Not covered.** Erasure and purge call `DeleteObjects` for real, and R2 has no object versioning to roll back to. Needs the write-only backup bucket folded into OPS-4. |
 | **Database loss** | **Unverified.** Neon PITR depends on plan, and no restore has ever been tested. An untested backup is a belief. |
 | **Bad migration** | **Not covered.** No staging. Four migrations have gone straight to the only database that exists. |
 
