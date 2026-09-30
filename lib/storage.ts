@@ -1,14 +1,15 @@
 import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { baseMimeType } from "./media-constants";
+import { env } from "./env";
 
 // klik-media is an EU-jurisdiction bucket, which requires the .eu. endpoint
 // instead of R2's default global one, or every request 403s.
 export const r2 = new S3Client({
   region: "auto",
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.eu.r2.cloudflarestorage.com`,
+  endpoint: `https://${env.R2_ACCOUNT_ID}.eu.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    accessKeyId: env.R2_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
   },
 });
 
