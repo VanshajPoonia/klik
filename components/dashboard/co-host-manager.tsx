@@ -5,6 +5,8 @@ import { Plus, UserRound, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { apiRequest } from "@/lib/api-client";
 
 interface CoHost {
   id: string;
@@ -29,31 +31,31 @@ export function CoHostManager({
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const response = await fetch(`/api/events/${eventId}/co-hosts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier }),
-    });
-    const data = await response.json().catch(() => ({}));
+    const result = await apiRequest<{ coHost: CoHost }>(
+      `/api/events/${eventId}/co-hosts`,
+      { method: "POST", body: { identifier } },
+      "Could not add this co-host",
+    );
     setBusy(false);
-    if (!response.ok) {
-      setError(data.error ?? "Could not add this co-host");
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-    setCoHosts((current) => [...current, data.coHost]);
+    setCoHosts((current) => [...current, result.data.coHost]);
     setIdentifier("");
   }
 
   async function removeCoHost(userId: string) {
     setBusy(true);
     setError(null);
-    const response = await fetch(`/api/events/${eventId}/co-hosts/${userId}`, {
-      method: "DELETE",
-    });
-    const data = await response.json().catch(() => ({}));
+    const result = await apiRequest(
+      `/api/events/${eventId}/co-hosts/${userId}`,
+      { method: "DELETE" },
+      "Could not remove this co-host",
+    );
     setBusy(false);
-    if (!response.ok) {
-      setError(data.error ?? "Could not remove this co-host");
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
     setCoHosts((current) => current.filter((coHost) => coHost.id !== userId));
@@ -84,7 +86,7 @@ export function CoHostManager({
       {coHosts.length > 0 && (
         <ul className="divide-y divide-canvas-line rounded-xl border border-canvas-line">
           {coHosts.map((coHost) => (
-            <li key={coHost.id} className="flex min-h-14 items-center gap-3 px-3">
+            <li key={coHost.id} className="flex min-h-14 items-center gap-3 pl-3 pr-1">
               <UserRound className="h-4 w-4 shrink-0 text-volt" aria-hidden="true" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-paper">
@@ -96,20 +98,23 @@ export function CoHostManager({
                   </span>
                 )}
               </span>
-              <button
-                type="button"
+              <IconButton
+                tone="danger"
+                label={`Remove ${coHost.name || coHost.username || "co-host"}`}
                 onClick={() => void removeCoHost(coHost.id)}
                 disabled={busy}
-                className="rounded-lg p-2 text-muted hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
-                aria-label={`Remove ${coHost.name || coHost.username || "co-host"}`}
               >
                 <X className="h-4 w-4" aria-hidden="true" />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )}
     </Card>
   );
 }

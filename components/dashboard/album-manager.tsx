@@ -6,6 +6,8 @@ import { Plus, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { apiRequest } from "@/lib/api-client";
 
 export function AlbumManager({
   eventId,
@@ -26,18 +28,17 @@ export function AlbumManager({
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const response = await fetch(`/api/events/${eventId}/albums`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    const data = await response.json().catch(() => ({}));
+    const result = await apiRequest<{ album: { id: string; name: string } }>(
+      `/api/events/${eventId}/albums`,
+      { method: "POST", body: { name } },
+      "Could not create the album",
+    );
     setBusy(false);
-    if (!response.ok) {
-      setError(data.error ?? "Could not create the album");
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-    setAlbums((current) => [...current, data.album]);
+    setAlbums((current) => [...current, result.data.album]);
     setName("");
     router.refresh();
   }
@@ -46,13 +47,14 @@ export function AlbumManager({
     if (!window.confirm("Delete this album? Its media will stay in the main gallery.")) return;
     setBusy(true);
     setError(null);
-    const response = await fetch(`/api/events/${eventId}/albums/${albumId}`, {
-      method: "DELETE",
-    });
-    const data = await response.json().catch(() => ({}));
+    const result = await apiRequest(
+      `/api/events/${eventId}/albums/${albumId}`,
+      { method: "DELETE" },
+      "Could not delete the album",
+    );
     setBusy(false);
-    if (!response.ok) {
-      setError(data.error ?? "Could not delete the album");
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
     setAlbums((current) => current.filter((album) => album.id !== albumId));
@@ -85,22 +87,25 @@ export function AlbumManager({
       {albums.length > 0 && (
         <ul className="divide-y divide-canvas-line rounded-xl border border-canvas-line">
           {albums.map((album) => (
-            <li key={album.id} className="flex min-h-12 items-center justify-between gap-3 px-3">
+            <li key={album.id} className="flex min-h-12 items-center justify-between gap-3 pl-3 pr-1">
               <span className="text-sm text-paper">{album.name}</span>
-              <button
-                type="button"
+              <IconButton
+                tone="danger"
+                label={`Delete ${album.name} album`}
                 onClick={() => void deleteAlbum(album.id)}
                 disabled={busy}
-                className="rounded-lg p-2 text-muted hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
-                aria-label={`Delete ${album.name} album`}
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )}
     </Card>
   );
 }

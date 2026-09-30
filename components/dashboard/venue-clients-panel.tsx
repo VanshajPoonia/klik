@@ -6,6 +6,8 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { apiRequest } from "@/lib/api-client";
 import type { VenueClient } from "@/lib/schema";
 
 type ClientDraft = { name: string; email: string; phone: string };
@@ -40,24 +42,21 @@ export function VenueClientsPanel({ initialClients }: { initialClients: VenueCli
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const response = await fetch(
+    const result = await apiRequest<{ client: VenueClient }>(
       editingId ? `/api/venue/clients/${editingId}` : "/api/venue/clients",
-      {
-        method: editingId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
-      },
+      { method: editingId ? "PATCH" : "POST", body: draft },
+      "Could not save this client",
     );
-    const data = await response.json().catch(() => ({}));
     setBusy(false);
-    if (!response.ok) {
-      setError(data.error ?? "Could not save this client");
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
+    const saved = result.data.client;
     setClients((current) =>
       editingId
-        ? current.map((client) => (client.id === editingId ? data.client : client))
-        : [...current, data.client].sort((a, b) => a.name.localeCompare(b.name)),
+        ? current.map((client) => (client.id === editingId ? saved : client))
+        : [...current, saved].sort((a, b) => a.name.localeCompare(b.name)),
     );
     resetForm();
     router.refresh();
@@ -67,11 +66,14 @@ export function VenueClientsPanel({ initialClients }: { initialClients: VenueCli
     if (!window.confirm(`Delete ${client.name} from the client directory?`)) return;
     setBusy(true);
     setError(null);
-    const response = await fetch(`/api/venue/clients/${client.id}`, { method: "DELETE" });
-    const data = await response.json().catch(() => ({}));
+    const result = await apiRequest(
+      `/api/venue/clients/${client.id}`,
+      { method: "DELETE" },
+      "Could not delete this client",
+    );
     setBusy(false);
-    if (!response.ok) {
-      setError(data.error ?? "Could not delete this client");
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
     setClients((current) => current.filter((candidate) => candidate.id !== client.id));
@@ -82,8 +84,7 @@ export function VenueClientsPanel({ initialClients }: { initialClients: VenueCli
   return (
     <Card className="mb-10 space-y-5">
       <div>
-        <p className="text-xs font-medium tracking-wide text-volt uppercase">Venue tools</p>
-        <h2 className="mt-1 font-display text-xl text-paper">Client directory</h2>
+        <h2 className="font-display text-xl text-paper">Client directory</h2>
         <p className="mt-1 text-sm text-muted">
           Save contacts once, then link them to new and existing events.
         </p>
@@ -153,28 +154,27 @@ export function VenueClientsPanel({ initialClients }: { initialClients: VenueCli
                 </p>
               </div>
               <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => beginEdit(client)}
-                  className="rounded-lg p-2 text-muted hover:bg-paper/5 hover:text-paper"
-                  aria-label={`Edit ${client.name}`}
-                >
+                <IconButton label={`Edit ${client.name}`} onClick={() => beginEdit(client)}>
                   <Pencil className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
+                </IconButton>
+                <IconButton
+                  tone="danger"
+                  label={`Delete ${client.name}`}
                   onClick={() => void deleteClient(client)}
-                  className="rounded-lg p-2 text-muted hover:bg-red-500/10 hover:text-red-300"
-                  aria-label={`Delete ${client.name}`}
+                  disabled={busy}
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </button>
+                </IconButton>
               </div>
             </div>
           ))}
         </div>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )}
     </Card>
   );
 }
