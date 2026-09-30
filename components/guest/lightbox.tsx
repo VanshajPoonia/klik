@@ -32,6 +32,7 @@ export function Lightbox({
   canSlideshow?: boolean;
 }) {
   const touchStartX = useRef<number | null>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const [slideshowPlaying, setSlideshowPlaying] = useState(false);
   const item = items[index];
 
@@ -66,6 +67,13 @@ export function Lightbox({
     return () => window.clearTimeout(timer);
   }, [index, item, items.length, onIndexChange, slideshowPlaying]);
 
+  // Move focus into the viewer, and hand it back to the tile that opened it.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => opener?.focus?.();
+  }, []);
+
   // Keep the page behind from scrolling under the viewer.
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -79,6 +87,9 @@ export function Lightbox({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Media viewer"
       className="fixed inset-0 z-[110] flex flex-col bg-black/95"
       onTouchStart={(e) => {
         touchStartX.current = e.touches[0].clientX;
@@ -120,6 +131,7 @@ export function Lightbox({
             </a>
           )}
           <button
+            ref={closeRef}
             onClick={onClose}
             aria-label="Close"
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
@@ -134,6 +146,7 @@ export function Lightbox({
           <video
             key={item.id}
             src={item.blobUrl}
+            aria-label={`Video ${index + 1} of ${items.length}`}
             className="h-full w-full object-contain"
             controls
             autoPlay
@@ -143,7 +156,7 @@ export function Lightbox({
           <Image
             key={item.id}
             src={item.blobUrl}
-            alt=""
+            alt={`Photo ${index + 1} of ${items.length}`}
             fill
             unoptimized
             sizes="100vw"
@@ -158,7 +171,7 @@ export function Lightbox({
             aria-label="Previous"
             className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-paper backdrop-blur transition-transform active:scale-90"
           >
-            <ChevronLeft className="h-6 w-6" />
+            <ChevronLeft className="h-6 w-6" aria-hidden="true" />
           </button>
         )}
         {index < items.length - 1 && (
@@ -167,7 +180,7 @@ export function Lightbox({
             aria-label="Next"
             className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-paper backdrop-blur transition-transform active:scale-90"
           >
-            <ChevronRight className="h-6 w-6" />
+            <ChevronRight className="h-6 w-6" aria-hidden="true" />
           </button>
         )}
       </div>

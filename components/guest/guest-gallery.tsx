@@ -50,6 +50,7 @@ interface FailedUpload extends PendingUpload {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 const UPLOAD_CONCURRENCY = 3;
+const MAX_FILES_PER_PICK = 20;
 const DEFAULT_BACKGROUND = "#050505";
 const PAGE_SIZE = 60;
 const RETRY_DELAYS = [600, 1800];
@@ -134,7 +135,15 @@ export function GuestGallery({
   );
   const [hasMore, setHasMore] = useState(initialMedia.length === PAGE_SIZE);
 
+  // Items that were already in the gallery when it loaded (or arrived as older
+  // history). Only genuinely new arrivals get the camera-flash entrance.
+  const [settledIds, setSettledIds] = useState(
+    () => new Set(initialMedia.map((item) => item.id)),
+  );
+
   const [uploading, setUploading] = useState<UploadProgress[]>([]);
+  const [remaining, setRemaining] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
   const [failed, setFailed] = useState<FailedUpload[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   // Tracked by id, not position: new photos stream in at the head every poll,
@@ -172,6 +181,7 @@ export function GuestGallery({
       if (polled.media.length === 0) return;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems(polled.media);
+      setSettledIds(new Set(polled.media.map((item) => item.id)));
       setCursor(polled.nextCursor ?? null);
       setHasMore(Boolean(polled.nextCursor));
       return;
@@ -250,6 +260,7 @@ export function GuestGallery({
         setFailed((current) => [...current, { id: mediaId, file, prepared }]);
       } finally {
         setUploading((current) => current.filter((item) => item.id !== mediaId));
+        setRemaining((count) => Math.max(0, count - 1));
       }
     },
     [event.id, event.slug, mutate, uploadAlbumId],
@@ -258,7 +269,14 @@ export function GuestGallery({
   const uploadFiles = useCallback(
     (uploads: PendingUpload[]) => {
       if (uploads.length === 0) return;
-      void processInBatches(uploads.slice(0, 20), UPLOAD_CONCURRENCY, uploadOne);
+      const batch = uploads.slice(0, MAX_FILES_PER_PICK);
+      setNotice(
+        uploads.length > batch.length
+          ? `Added the first ${batch.length} of ${uploads.length}. Pick the rest again once these finish.`
+          : null,
+      );
+      setRemaining((count) => count + batch.length);
+      void processInBatches(batch, UPLOAD_CONCURRENCY, uploadOne);
     },
     [uploadOne],
   );
@@ -288,6 +306,11 @@ export function GuestGallery({
       );
       if (!res.ok) throw new Error("Failed to load more");
       const json: { media: MediaItem[]; nextCursor: string | null } = await res.json();
+      setSettledIds((current) => {
+        const next = new Set(current);
+        for (const item of json.media ?? []) next.add(item.id);
+        return next;
+      });
       setItems((current) => {
         const seen = new Set(current.map((item) => item.id));
         const older = (json.media ?? []).filter((item) => !seen.has(item.id));
@@ -365,7 +388,8 @@ export function GuestGallery({
           <div>
             <h1 className="font-display text-2xl text-paper">{event.name}</h1>
             <p className="mt-1 text-sm text-muted">
-              {items.length} {items.length === 1 ? "item" : "items"} shared
+              {items.length}
+              {hasMore ? "+" : ""} {items.length === 1 && !hasMore ? "item" : "items"} shared
               {isOwner && " · viewing as organizer"}
             </p>
           </div>
@@ -408,21 +432,38 @@ export function GuestGallery({
           )}
         </header>
 
-        {uploading.length > 0 && (
-          <div className="mb-6 space-y-2">
+        {(remaining > 0 || notice) && (
+          <div className="mb-6 space-y-2" role="status" aria-live="polite">
+            {remaining > 0 && (
+              <p className="text-sm text-muted">
+                Uploading {remaining} {remaining === 1 ? "item" : "items"}…
+              </p>
+            )}
             {uploading.map((item) => (
-              <div key={item.id} className="h-1.5 w-full overflow-hidden rounded-full bg-canvas-line">
+              <div
+                key={item.id}
+                role="progressbar"
+                aria-label="Upload progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(item.progress)}
+                className="h-1.5 w-full overflow-hidden rounded-full bg-canvas-line"
+              >
                 <div
                   className="h-full bg-volt transition-[width] duration-300"
                   style={{ width: `${item.progress}%` }}
                 />
               </div>
             ))}
+            {notice && <p className="text-sm text-muted">{notice}</p>}
           </div>
         )}
 
         {failed.length > 0 && (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+          <div
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3"
+            role="alert"
+          >
             <span className="text-sm text-red-300">
               {failed.length} {failed.length === 1 ? "upload" : "uploads"} didn&apos;t go through.
             </span>
@@ -474,7 +515,10 @@ export function GuestGallery({
               <button
                 key={item.id}
                 onClick={() => setLightboxId(item.id)}
-                className="klik-frame relative aspect-square overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised"
+                aria-label={item.kind === "video" ? "Open video" : "Open photo"}
+                className={`relative aspect-square overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
+                  settledIds.has(item.id) ? "" : "klik-frame"
+                }`}
               >
                 {item.kind === "video" ? (
                   <>
@@ -512,7 +556,7 @@ export function GuestGallery({
 
         {hasMore && (
           <div ref={sentinelRef} className="py-8 text-center text-sm text-muted">
-            {loadingMore ? "Loading more..." : ""}
+            {loadingMore ? "Loading more…" : ""}
           </div>
         )}
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Download, X } from "lucide-react";
+import { ArrowLeft, Check, Download, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MediaGrid } from "@/components/dashboard/media-grid";
@@ -205,11 +205,19 @@ export function EventDashboard({
   }
 
   return (
-    <div className="min-h-screen px-6 py-10 md:px-10">
+    <div
+      className={`min-h-screen px-6 pt-10 md:px-10 ${
+        tab === "gallery" && selectionMode && selectedItems.length > 0 ? "pb-32" : "pb-10"
+      }`}
+    >
       <div className="mx-auto max-w-5xl">
         <div className="mb-6">
-          <Link href={backHref} className="text-sm text-muted hover:text-paper">
-            ← All events
+          <Link
+            href={backHref}
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm text-muted transition-colors hover:text-paper"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            All events
           </Link>
         </div>
 
@@ -244,7 +252,7 @@ export function EventDashboard({
               key={t}
               onClick={() => setTab(t)}
               aria-current={tab === t ? "page" : undefined}
-              className={`border-b-2 px-4 py-2.5 text-sm font-medium capitalize transition-colors ${
+              className={`min-h-11 border-b-2 px-4 text-sm font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-volt ${
                 tab === t ? "border-volt text-paper" : "border-transparent text-muted hover:text-paper"
               }`}
             >

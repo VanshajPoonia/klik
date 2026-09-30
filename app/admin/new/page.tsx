@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { QuickCreateForm } from "@/components/admin/quick-create-form";
@@ -12,8 +13,12 @@ export default async function NewClientPage() {
     <div className="min-h-screen px-6 py-10 md:px-10">
       <div className="mx-auto max-w-xl">
         <div className="mb-6">
-          <Link href="/admin" className="text-sm text-muted hover:text-paper">
-            ← All clients
+          <Link
+            href="/admin"
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm text-muted transition-colors hover:text-paper"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            All clients
           </Link>
         </div>
         <h1 className="mb-2 font-display text-2xl text-paper">Provision a new client</h1>
