@@ -8,6 +8,7 @@ import { nanoid } from "nanoid";
 import { Camera, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
+import { isLightColor, readableOn } from "@/lib/color";
 import { compressImageForUpload } from "@/lib/image-compress";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { CapturedItem } from "@/components/guest/camera-capture";
@@ -49,6 +50,7 @@ interface FailedUpload extends PendingUpload {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 const UPLOAD_CONCURRENCY = 3;
+const DEFAULT_BACKGROUND = "#050505";
 const PAGE_SIZE = 60;
 const RETRY_DELAYS = [600, 1800];
 
@@ -144,7 +146,7 @@ export function GuestGallery({
   const inputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Before anything has loaded, there's no "newest" cursor to poll since - fall
+  // Before anything has loaded, there's no "newest" cursor to poll since, so fall
   // back to the plain first page so a brand new, empty event still notices its
   // first upload.
   const newestLoadedCursor = items[0] ? encodeMediaCursor(items[0]) : null;
@@ -159,7 +161,7 @@ export function GuestGallery({
   );
 
   // Folding each poll into the accumulating `items` list is exactly the
-  // "sync local state from an external store" case effects are for - SWR's
+  // "sync local state from an external store" case effects are for. SWR's
   // own cache is keyed per-URL and has no concept of an accumulator growing
   // across many different since= keys over time.
   useEffect(() => {
@@ -318,6 +320,21 @@ export function GuestGallery({
       ? items
       : items.filter((item) => item.albumId === activeAlbumId);
 
+  // Premium galleries pick their own colors. Keep text, borders, and buttons
+  // readable whatever was chosen. The camera and viewer sit outside the content
+  // wrapper on purpose: they are always dark, so they only take the accent.
+  const customBackground = event.backgroundColor.toLowerCase() !== DEFAULT_BACKGROUND;
+  const lightBackground = isLightColor(event.backgroundColor);
+  const blendToward = lightBackground ? "black" : "white";
+  const contentTheme = customBackground
+    ? {
+        ["--color-paper" as string]: lightBackground ? "#141412" : "#f3f1e9",
+        ["--color-muted" as string]: lightBackground ? "#5c5a52" : "#a3a196",
+        ["--color-canvas-raised" as string]: `color-mix(in srgb, ${event.backgroundColor} 94%, ${blendToward})`,
+        ["--color-canvas-line" as string]: `color-mix(in srgb, ${event.backgroundColor} 84%, ${blendToward})`,
+      }
+    : undefined;
+
   return (
     <div
       className="min-h-screen px-6 py-10 md:px-10"
@@ -325,10 +342,11 @@ export function GuestGallery({
         backgroundColor: event.backgroundColor,
         ["--event-accent" as string]: event.accentColor,
         ["--color-volt" as string]: event.accentColor,
+        ["--color-on-volt" as string]: readableOn(event.accentColor),
         ["--color-canvas" as string]: event.backgroundColor,
       }}
     >
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-5xl" style={contentTheme}>
         {coverUrl && (
           <div className="relative mb-8 aspect-[16/6] overflow-hidden rounded-2xl border border-white/10">
             <Image
@@ -418,9 +436,10 @@ export function GuestGallery({
           <nav className="mb-6 flex gap-2 overflow-x-auto pb-1" aria-label="Gallery albums">
             <button
               onClick={() => setActiveAlbumId("all")}
-              className={`min-h-10 shrink-0 rounded-full border px-4 text-sm transition-colors ${
+              aria-pressed={activeAlbumId === "all"}
+              className={`min-h-11 shrink-0 rounded-full border px-4 text-sm transition-colors ${
                 activeAlbumId === "all"
-                  ? "border-transparent bg-[var(--event-accent)] text-black"
+                  ? "border-transparent bg-volt text-on-volt"
                   : "border-canvas-line text-muted hover:text-paper"
               }`}
             >
@@ -430,9 +449,10 @@ export function GuestGallery({
               <button
                 key={album.id}
                 onClick={() => setActiveAlbumId(album.id)}
-                className={`min-h-10 shrink-0 rounded-full border px-4 text-sm transition-colors ${
+                aria-pressed={activeAlbumId === album.id}
+                className={`min-h-11 shrink-0 rounded-full border px-4 text-sm transition-colors ${
                   activeAlbumId === album.id
-                    ? "border-transparent bg-[var(--event-accent)] text-black"
+                    ? "border-transparent bg-volt text-on-volt"
                     : "border-canvas-line text-muted hover:text-paper"
                 }`}
               >

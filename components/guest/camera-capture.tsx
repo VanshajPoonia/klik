@@ -636,7 +636,7 @@ export function CameraCapture({
 
         {/* Error / permission state */}
         {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-canvas px-8 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-black px-8 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full border border-canvas-line">
               <Camera className="h-7 w-7 text-muted" />
             </div>
@@ -644,7 +644,7 @@ export function CameraCapture({
             <div className="flex gap-3">
               <button
                 onClick={() => void start()}
-                className="rounded-full bg-volt px-5 py-2.5 text-sm font-medium text-canvas transition-transform active:scale-[0.96]"
+                className="rounded-full bg-volt px-5 py-2.5 text-sm font-medium text-on-volt transition-transform active:scale-[0.96]"
               >
                 Try again
               </button>
@@ -671,7 +671,7 @@ export function CameraCapture({
                     setZoomPreset(f);
                   }}
                   className={`flex h-9 min-w-9 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums transition-colors ${
-                    active ? "bg-volt text-canvas" : "text-white/80"
+                    active ? "bg-volt text-on-volt" : "text-white/80"
                   }`}
                 >
                   {active ? `${(zoom / zoomBase).toFixed(1)}×` : `${f}×`}
@@ -699,7 +699,7 @@ export function CameraCapture({
                   key={l.id}
                   onClick={() => selectLook(l.id, l.label)}
                   className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                    look === l.id ? "bg-volt text-canvas" : "bg-white/10 text-paper"
+                    look === l.id ? "bg-volt text-on-volt" : "bg-white/10 text-paper"
                   }`}
                 >
                   {l.label}
@@ -749,7 +749,7 @@ export function CameraCapture({
                       className="h-full w-full object-cover"
                     />
                   )}
-                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-volt px-1 text-[11px] font-bold text-canvas">
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-volt px-1 text-[11px] font-bold text-on-volt">
                     {shots.length}
                   </span>
                 </>
@@ -794,7 +794,7 @@ export function CameraCapture({
           {shots.length > 0 && !recording && (
             <button
               onClick={finish}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-volt py-3 text-sm font-semibold text-canvas transition-transform active:scale-[0.98]"
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-volt py-3 text-sm font-semibold text-on-volt transition-transform active:scale-[0.98]"
             >
               <Check className="h-4 w-4" />
               Add {shots.length} {shots.length === 1 ? "item" : "items"}
@@ -875,7 +875,7 @@ function IconButton({
         onClick();
       }}
       className={`flex h-10 w-10 items-center justify-center rounded-full backdrop-blur transition-transform active:scale-90 ${
-        active ? "bg-volt text-canvas" : "bg-black/40 text-paper"
+        active ? "bg-volt text-on-volt" : "bg-black/40 text-paper"
       }`}
     >
       {children}

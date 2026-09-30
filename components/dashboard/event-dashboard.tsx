@@ -317,7 +317,7 @@ export function EventDashboard({
                             ? clearSelection()
                             : setSelectedIds(new Set(approved.map((item) => item.id)))
                         }
-                        className="min-h-10 rounded-full px-3 text-sm text-[#2997ff] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc]"
+                        className="min-h-10 rounded-full px-3 text-sm text-volt transition-colors hover:text-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
                       >
                         {selectedIds.size === approved.length ? "Deselect all" : "Select all"}
                       </button>
@@ -328,10 +328,10 @@ export function EventDashboard({
                         if (selectionMode) stopSelecting();
                         else setSelectionMode(true);
                       }}
-                      className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc] ${
+                      className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
                         selectionMode
-                          ? "border-white/30 text-white hover:border-white/60"
-                          : "border-canvas-line text-paper hover:border-[#0066cc]/70 hover:text-[#2997ff]"
+                          ? "border-volt text-volt"
+                          : "border-canvas-line text-paper hover:border-volt/50 hover:text-volt"
                       }`}
                     >
                       {selectionMode ? (
@@ -429,14 +429,14 @@ export function EventDashboard({
 
       {tab === "gallery" && selectionMode && selectedItems.length > 0 && (
         <aside
-          className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-3xl flex-wrap items-center gap-3 rounded-2xl bg-[#f5f5f7] p-3 pl-4 text-[#1d1d1f] shadow-[0_12px_40px_rgba(0,0,0,0.28)] sm:rounded-full"
+          className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-3xl flex-wrap items-center gap-3 rounded-2xl bg-paper/95 p-3 pl-4 text-canvas backdrop-blur sm:rounded-full"
           aria-label="Selected media download"
         >
           <div className="mr-auto min-w-0">
             <p className="text-sm font-semibold">
               {selectedItems.length} {selectedItems.length === 1 ? "item" : "items"} selected
             </p>
-            <p className="text-xs text-[#7a7a7a]">
+            <p className="text-xs text-canvas/65">
               {formatFileSize(
                 selectedItems.reduce((total, item) => total + item.sizeBytes, 0),
               )}
@@ -448,7 +448,7 @@ export function EventDashboard({
           <button
             type="button"
             onClick={clearSelection}
-            className="min-h-10 rounded-full px-3 text-sm text-[#333333] transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc]"
+            className="min-h-10 rounded-full px-3 text-sm text-canvas/80 transition-colors hover:bg-canvas/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-canvas"
           >
             Clear
           </button>
@@ -463,7 +463,7 @@ export function EventDashboard({
               ))}
               <button
                 type="submit"
-                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#0066cc] px-4 text-sm font-medium text-white transition-colors hover:bg-[#0071e3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5f5f7]"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-canvas px-4 text-sm font-medium text-paper transition-colors hover:bg-canvas-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-canvas focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
               >
                 <Download className="h-4 w-4" aria-hidden="true" />
                 {selectedDownloadParts.length === 1

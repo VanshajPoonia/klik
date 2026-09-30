@@ -1,10 +1,11 @@
 import type { ButtonHTMLAttributes } from "react";
+import { twMerge } from "tailwind-merge";
 
 const base =
   "inline-flex items-center justify-center gap-2 rounded-full font-medium transition-transform duration-150 ease-out active:scale-[0.96] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
 
 const variants = {
-  primary: "bg-volt text-canvas hover:brightness-95",
+  primary: "bg-volt text-on-volt hover:brightness-95",
   ghost: "border border-canvas-line text-paper hover:border-paper/40",
   danger: "border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20",
 };
@@ -24,7 +25,7 @@ export function buttonClassName({
   size?: keyof typeof sizes;
   className?: string;
 } = {}) {
-  return `${base} ${variants[variant]} ${sizes[size]} ${className}`;
+  return twMerge(base, variants[variant], sizes[size], className);
 }
 
 export function Button({

@@ -40,9 +40,7 @@ export function MediaGrid({
           <article
             key={item.id}
             className={`relative overflow-hidden rounded-xl border bg-canvas-raised transition ${
-              selected
-                ? "border-[#0066cc] ring-2 ring-[#0066cc]"
-                : "border-canvas-line"
+              selected ? "border-volt ring-2 ring-volt" : "border-canvas-line"
             }`}
             aria-busy={busy}
           >
@@ -53,9 +51,7 @@ export function MediaGrid({
                   ? onSelectionToggle(item.id)
                   : onOpen(item.id)
               }
-              className={`relative block aspect-square w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset ${
-                selectionMode ? "focus-visible:ring-[#0066cc]" : "focus-visible:ring-volt"
-              }`}
+              className="relative block aspect-square w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-volt"
               aria-label={selectionMode ? selectionLabel : `View ${item.kind}`}
               aria-pressed={selectionMode ? selected : undefined}
             >
@@ -87,14 +83,14 @@ export function MediaGrid({
                 <>
                   <span
                     className={`absolute inset-0 transition-colors ${
-                      selected ? "bg-[#0066cc]/15" : "bg-black/5 hover:bg-black/15"
+                      selected ? "bg-volt/15" : "bg-black/5 hover:bg-black/15"
                     }`}
                     aria-hidden="true"
                   />
                   <span
-                    className={`absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border-2 shadow-sm transition-colors ${
+                    className={`absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${
                       selected
-                        ? "border-[#0066cc] bg-[#0066cc] text-white"
+                        ? "border-volt bg-volt text-on-volt"
                         : "border-white bg-black/45 text-transparent"
                     }`}
                     aria-hidden="true"

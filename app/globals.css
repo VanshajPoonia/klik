@@ -5,6 +5,7 @@
   --color-canvas-raised: #121210;
   --color-canvas-line: #232320;
   --color-volt: #edee00;
+  --color-on-volt: #050505;
   --color-volt-dim: #727300;
   --color-paper: #f3f1e9;
   --color-muted: #8c8a80;
@@ -15,6 +16,7 @@
   --color-canvas-raised: var(--color-canvas-raised);
   --color-canvas-line: var(--color-canvas-line);
   --color-volt: var(--color-volt);
+  --color-on-volt: var(--color-on-volt);
   --color-volt-dim: var(--color-volt-dim);
   --color-paper: var(--color-paper);
   --color-muted: var(--color-muted);
@@ -34,7 +36,22 @@ body {
   position: relative;
 }
 
-/* A faint film-grain texture over every surface - the one atmospheric
+::selection {
+  background: var(--color-volt);
+  color: var(--color-on-volt);
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* A faint film-grain texture over every surface. It is the one atmospheric
    effect in the system, standing in for photographic paper rather than
    a decorative gradient. */
 body::before {
