@@ -15,9 +15,13 @@ export function VenueQrPanel({
   const [copied, setCopied] = useState(false);
 
   async function copyLink() {
-    await navigator.clipboard.writeText(venueUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(venueUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be blocked; the link is still shown below to copy by hand.
+    }
   }
 
   return (
@@ -32,8 +36,7 @@ export function VenueQrPanel({
         />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium tracking-wide text-volt uppercase">Reusable venue QR</p>
-        <h2 className="mt-1 font-display text-xl text-paper">One code for every live event</h2>
+        <h2 className="font-display text-xl text-paper">One code for every live event</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">
           Feature an event in its settings. This permanent link will send guests there, and it
           stays ready for your next event.
@@ -43,7 +46,7 @@ export function VenueQrPanel({
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button variant="ghost" size="sm" onClick={() => void copyLink()}>
-            {copied ? "Copied!" : "Copy venue link"}
+            {copied ? "Copied" : "Copy venue link"}
           </Button>
           <a
             href="/api/venue/qr"

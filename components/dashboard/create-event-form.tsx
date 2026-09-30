@@ -4,11 +4,11 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
+import { VisibilityField, type Visibility } from "@/components/dashboard/visibility-field";
 import type { VenueClient } from "@/lib/schema";
-
-type Visibility = "public" | "password" | "private";
 
 export function CreateEventForm({
   canCreate = true,
@@ -40,31 +40,36 @@ export function CreateEventForm({
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        eventDate: eventDate || null,
-        clientName: canManageClients ? clientName : undefined,
-        clientEmail: canManageClients ? clientEmail : undefined,
-        clientPhone: canManageClients ? clientPhone : undefined,
-        clientId: canManageClients ? clientId || null : undefined,
-        visibility,
-        password: visibility === "password" ? password : undefined,
-        moderation,
-      }),
-    });
+    try {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          eventDate: eventDate || null,
+          clientName: canManageClients ? clientName : undefined,
+          clientEmail: canManageClients ? clientEmail : undefined,
+          clientPhone: canManageClients ? clientPhone : undefined,
+          clientId: canManageClients ? clientId || null : undefined,
+          visibility,
+          password: visibility === "password" ? password : undefined,
+          moderation,
+        }),
+      });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Could not create event");
+        setLoading(false);
+        return;
+      }
+
+      const { event: created } = await res.json();
+      router.push(`/dashboard/events/${created.id}`);
+    } catch {
+      setError("Could not create the event. Check your connection and try again.");
       setLoading(false);
-      setError(data.error ?? "Could not create event");
-      return;
     }
-
-    const { event: created } = await res.json();
-    router.push(`/dashboard/events/${created.id}`);
   }
 
   if (!open) {
@@ -171,17 +176,7 @@ export function CreateEventForm({
               onChange={(event) => setEventDate(event.target.value)}
             />
           </Field>
-          <Field label="Gallery access">
-            <select
-              className={inputClass}
-              value={visibility}
-              onChange={(event) => setVisibility(event.target.value as Visibility)}
-            >
-              <option value="public">Public - anyone with the link</option>
-              <option value="password">Password protected</option>
-              <option value="private">Private - organizer only</option>
-            </select>
-          </Field>
+          <VisibilityField value={visibility} onChange={setVisibility} />
         </div>
         {visibility === "password" && (
           <Field label="Gallery password" htmlFor="create-event-gallery-password">
@@ -196,16 +191,14 @@ export function CreateEventForm({
             />
           </Field>
         )}
-        <label className="flex items-center gap-2 text-sm text-paper">
-          <input
-            type="checkbox"
-            checked={moderation}
-            onChange={(event) => setModeration(event.target.checked)}
-            className="h-4 w-4 rounded border-canvas-line accent-volt"
-          />
+        <Checkbox checked={moderation} onChange={(event) => setModeration(event.target.checked)}>
           Review photos before they go public
-        </label>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        </Checkbox>
+        {error && (
+          <p className="text-sm text-red-400" role="alert">
+            {error}
+          </p>
+        )}
         <div className="flex gap-3">
           <Button type="submit" disabled={loading}>
             {loading ? "Creating…" : "Create event"}

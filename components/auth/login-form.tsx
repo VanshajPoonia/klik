@@ -25,17 +25,22 @@ export function LoginForm({
     setError(null);
     setLoading(true);
 
-    const result = await signIn("credentials", { username, password, redirect: false });
+    try {
+      const result = await signIn("credentials", { username, password, redirect: false });
 
-    if (!result || result.error) {
+      if (!result || result.error) {
+        setError("Incorrect username or password.");
+        setLoading(false);
+        return;
+      }
+
+      const session = await fetch("/api/auth/session").then((res) => res.json());
+      router.push(session?.user?.role === "superadmin" ? "/admin" : "/dashboard");
+      router.refresh();
+    } catch {
+      setError("Could not sign in. Check your connection and try again.");
       setLoading(false);
-      setError("Incorrect username or password.");
-      return;
     }
-
-    const session = await fetch("/api/auth/session").then((res) => res.json());
-    router.push(session?.user?.role === "superadmin" ? "/admin" : "/dashboard");
-    router.refresh();
   }
 
   return (
@@ -47,6 +52,9 @@ export function LoginForm({
             value={username}
             onChange={(event) => setUsername(event.target.value)}
             autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             required
           />
         </Field>
@@ -59,7 +67,11 @@ export function LoginForm({
             required
           />
         </Field>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && (
+          <p className="text-sm text-red-400" role="alert">
+            {error}
+          </p>
+        )}
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </Button>

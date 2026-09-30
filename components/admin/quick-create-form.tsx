@@ -5,11 +5,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button, buttonClassName } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
+import { VisibilityField, type Visibility } from "@/components/dashboard/visibility-field";
+import { endOfDayIso } from "@/lib/dates";
 import { PLANS, type PlanKey } from "@/lib/plans";
-
-type Visibility = "public" | "password" | "private";
 
 interface Result {
   username: string;
@@ -40,29 +41,44 @@ export function QuickCreateForm() {
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/admin/clients", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contactName: form.contactName,
-        eventName: form.eventName,
-        eventDate: form.eventDate || null,
-        expiresAt: form.expiresAt || null,
-        moderation: form.moderation,
-        visibility: form.visibility,
-        galleryPassword: form.visibility === "password" ? form.galleryPassword : undefined,
-        planKey: form.planKey,
-      }),
-    });
+    try {
+      const res = await fetch("/api/admin/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactName: form.contactName,
+          eventName: form.eventName,
+          eventDate: form.eventDate || null,
+          expiresAt: endOfDayIso(form.expiresAt),
+          moderation: form.moderation,
+          visibility: form.visibility,
+          galleryPassword: form.visibility === "password" ? form.galleryPassword : undefined,
+          planKey: form.planKey,
+        }),
+      });
 
-    setLoading(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Could not create client");
-      return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Could not create client");
+        return;
+      }
+
+      setResult(await res.json());
+    } catch {
+      setError("Could not create the client. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    setResult(await res.json());
+  async function copyCredentials(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy automatically. Select the details above and copy them by hand.");
+    }
   }
 
   if (result) {
@@ -91,6 +107,11 @@ export function QuickCreateForm() {
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
           The client login password is shown once. Copy it now. It can only be reset later.
         </div>
+        {error && (
+          <p className="text-sm text-red-400" role="alert">
+            {error}
+          </p>
+        )}
 
         <dl className="space-y-2 text-sm">
           <div className="flex items-center justify-between gap-4">
@@ -125,15 +146,8 @@ export function QuickCreateForm() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button
-            type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(credentialsText);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }}
-          >
-            {copied ? "Copied!" : "Copy credentials"}
+          <Button type="button" onClick={() => void copyCredentials(credentialsText)}>
+            {copied ? "Copied" : "Copy credentials"}
           </Button>
           <a
             href={`/api/events/${result.event.id}/qr?format=png&size=1024`}
@@ -142,10 +156,11 @@ export function QuickCreateForm() {
           >
             Download QR
           </a>
-          <Link href={`/dashboard/events/${result.event.id}`}>
-            <Button type="button" variant="ghost">
-              Open dashboard
-            </Button>
+          <Link
+            href={`/dashboard/events/${result.event.id}`}
+            className={buttonClassName({ variant: "ghost" })}
+          >
+            Open dashboard
           </Link>
           <Button
             type="button"
@@ -153,6 +168,8 @@ export function QuickCreateForm() {
             onClick={() => {
               setResult(null);
               setForm(initialForm);
+              setError(null);
+              setCopied(false);
             }}
           >
             Provision another
@@ -211,7 +228,7 @@ export function QuickCreateForm() {
               onChange={(event) => setForm((f) => ({ ...f, eventDate: event.target.value }))}
             />
           </Field>
-          <Field label="Expires on (optional)">
+          <Field label="Expires on (optional)" hint="The gallery closes at the end of this day">
             <input
               type="date"
               className={inputClass}
@@ -220,19 +237,10 @@ export function QuickCreateForm() {
             />
           </Field>
         </div>
-        <Field label="Gallery access">
-          <select
-            className={inputClass}
-            value={form.visibility}
-            onChange={(event) =>
-              setForm((f) => ({ ...f, visibility: event.target.value as Visibility }))
-            }
-          >
-            <option value="public">Public - anyone with the link</option>
-            <option value="password">Password protected</option>
-            <option value="private">Private - organizer only</option>
-          </select>
-        </Field>
+        <VisibilityField
+          value={form.visibility}
+          onChange={(visibility) => setForm((f) => ({ ...f, visibility }))}
+        />
         {form.visibility === "password" && (
           <Field
             label="Gallery password"
@@ -252,16 +260,17 @@ export function QuickCreateForm() {
             />
           </Field>
         )}
-        <label className="flex items-center gap-2 text-sm text-paper">
-          <input
-            type="checkbox"
-            checked={form.moderation}
-            onChange={(event) => setForm((f) => ({ ...f, moderation: event.target.checked }))}
-            className="h-4 w-4 rounded border-canvas-line accent-volt"
-          />
+        <Checkbox
+          checked={form.moderation}
+          onChange={(event) => setForm((f) => ({ ...f, moderation: event.target.checked }))}
+        >
           Review photos before they go public
-        </label>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        </Checkbox>
+        {error && (
+          <p className="text-sm text-red-400" role="alert">
+            {error}
+          </p>
+        )}
         <Button type="submit" disabled={loading} className="w-full">
           {loading ? "Provisioning…" : "Provision client"}
         </Button>

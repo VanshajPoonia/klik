@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 
@@ -27,24 +28,29 @@ export function EntrySheet({
     setLoading(true);
     setError(null);
 
-    const res = await fetch(`/api/e/${slug}/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name || undefined,
-        consent: true,
-        password: requiresPassword ? password : undefined,
-      }),
-    });
+    try {
+      const res = await fetch(`/api/e/${slug}/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name || undefined,
+          consent: true,
+          password: requiresPassword ? password : undefined,
+        }),
+      });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Something went wrong. Try again.");
+        setLoading(false);
+        return;
+      }
+
+      router.refresh();
+    } catch {
+      setError("Could not connect. Check your connection and try again.");
       setLoading(false);
-      setError(data.error ?? "Something went wrong");
-      return;
     }
-
-    router.refresh();
   }
 
   return (
@@ -71,26 +77,29 @@ export function EntrySheet({
               />
             </Field>
           )}
-          <Field label="Your name (optional)" hint="Shown next to your uploads">
+          <Field label="Your first name (optional)">
             <input
               className={inputClass}
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Maya"
+              maxLength={80}
+              autoComplete="given-name"
             />
           </Field>
-          <label className="flex items-start gap-2.5 text-xs text-muted">
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(event) => setConsent(event.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-canvas-line accent-volt"
-              required
-            />
+          <Checkbox
+            checked={consent}
+            onChange={(event) => setConsent(event.target.checked)}
+            required
+          >
             I understand that photos and videos I upload may be visible to everyone with access
             to this event gallery, and I have the right to share them.
-          </label>
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          </Checkbox>
+          {error && (
+            <p className="text-sm text-red-400" role="alert">
+              {error}
+            </p>
+          )}
           <Button type="submit" disabled={loading || !consent} className="w-full">
             {loading ? "Joining…" : "Continue"}
           </Button>

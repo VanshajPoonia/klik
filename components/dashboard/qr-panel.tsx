@@ -18,10 +18,14 @@ export function QrPanel({
 }) {
   const [copied, setCopied] = useState(false);
 
-  function copyLink() {
-    navigator.clipboard.writeText(guestUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(guestUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be blocked; the link is still shown above to copy by hand.
+    }
   }
 
   return (
@@ -39,8 +43,8 @@ export function QrPanel({
         {guestUrl}
       </div>
       <div className="flex flex-wrap justify-center gap-3">
-        <Button variant="ghost" onClick={copyLink}>
-          {copied ? "Copied!" : "Copy link"}
+        <Button variant="ghost" onClick={() => void copyLink()}>
+          {copied ? "Copied" : "Copy link"}
         </Button>
         <a
           href={`/api/events/${eventId}/qr?format=png&size=1024`}
