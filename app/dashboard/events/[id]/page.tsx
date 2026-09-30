@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { albums, eventCoHosts, events, media, users, venueClients } from "@/lib/schema";
@@ -41,7 +41,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       .select()
       .from(media)
       .where(eq(media.eventId, id))
-      .orderBy(media.createdAt)
+      .orderBy(desc(media.createdAt))
       .then((rows) => rows.map((item) => withProtectedMediaUrl(item, event.slug))),
     getAccountPlan(event.ownerId),
     db.select().from(albums).where(eq(albums.eventId, id)).orderBy(albums.createdAt),

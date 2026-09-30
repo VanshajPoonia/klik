@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
@@ -15,6 +16,11 @@ import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
 import { VenueClientsPanel } from "@/components/dashboard/venue-clients-panel";
 import { VenueQrPanel } from "@/components/dashboard/venue-qr-panel";
 import { getAppUrl } from "@/lib/env";
+
+export const metadata: Metadata = {
+  title: "Your events",
+  robots: { index: false },
+};
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -51,7 +57,7 @@ export default async function DashboardPage() {
     ...coHostedRows.filter(
       (coHosted) => !ownedRows.some((owned) => owned.id === coHosted.id),
     ),
-  ];
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const activeEventCount = ownedRows.filter((event) => isEventActive(event)).length;
   const monthlyEventCount = ownedRows.filter((event) =>
     wasCreatedThisUtcMonth(event.createdAt),
@@ -130,10 +136,14 @@ export default async function DashboardPage() {
             </Card>
           )}
           {rows.map((event) => (
-            <Link key={event.id} href={`/dashboard/events/${event.id}`}>
-              <Card className="flex items-center justify-between transition-colors hover:border-paper/30">
-                <div>
-                  <p className="font-medium text-paper">{event.name}</p>
+            <Link
+              key={event.id}
+              href={`/dashboard/events/${event.id}`}
+              className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+            >
+              <Card className="flex items-center justify-between gap-4 transition-colors hover:border-paper/30">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-paper">{event.name}</p>
                   {event.clientName && (
                     <p className="mt-0.5 text-xs text-paper/70">{event.clientName}</p>
                   )}
@@ -142,9 +152,12 @@ export default async function DashboardPage() {
                     <p className="mt-1 text-xs text-volt">Co-hosted event</p>
                   )}
                 </div>
-                <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>
-                  {event.visibility}
-                </Badge>
+                <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  {!isEventActive(event) && <Badge>ended</Badge>}
+                  <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>
+                    {event.visibility}
+                  </Badge>
+                </div>
               </Card>
             </Link>
           ))}
