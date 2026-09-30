@@ -18,9 +18,21 @@ export function slugifyEventName(name: string): string {
   const base = name
     .toLowerCase()
     .trim()
+    // Split accented characters into a base letter plus a combining mark, then
+    // drop the marks. Without this the ASCII filter below deletes the whole
+    // character, so "Café Münch" became "caf-mnch" and "Renée" became "rene".
+    // The slug is the organizer-facing gallery URL and goes on a printed QR
+    // sign, so a mangled one is visible in exactly the wrong place.
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
+    .slice(0, 40)
+    // Truncating to 40 can land mid-separator and leave a trailing dash.
+    .replace(/-+$/g, "");
+  // A name written entirely in a non-Latin script leaves nothing behind. The
+  // caller appends a random suffix, so "event-k3m9dx" is still unique and
+  // still works; it just carries no meaning. Better than an empty slug.
   return base || "event";
 }
 

@@ -224,8 +224,20 @@ AI embeddings, transcoding, large exports, and email all need work that outlives
 `lib/env.ts` currently reads `process.env` ad hoc and `lib/storage.ts` uses non-null assertions on R2 credentials, which fails at request time instead of at deploy time. Add a Zod schema for every variable, parsed once at module load, with a clear error naming the missing key.
 
 ### F-7. Test harness
-**Size:** M.
-There is not a single test in the repo, and Phase PAY introduces money. Add Vitest for `lib/` (access rules, plan gating, usage maths, permissions matrix, cursor encoding, rate limiter concurrency) and Playwright for four flows: guest joins and uploads, organizer moderates and downloads, checkout completes and the plan applies, share link expires. Run both in CI.
+**Size:** M. **Started 2026-10-01. Pure-logic half done, database half blocked.**
+
+Vitest is set up (`vitest.config.mts`, `npm test`), with 66 tests across three files. `@types/node` went from 20 to 24 in the same change, because vitest 5 requires it and the old pin did not match the Node 24 the project actually runs on Vercel.
+
+Coverage was chosen on one rule: **cover what already went wrong once.**
+- `lib/file-signature.test.ts` pins SEC-9. A zip, a PDF, an SVG, a WAV and an AVI are all refused, QuickTime and HEIC are separated by ISO brand rather than extension, and the deliberate "unknown brand is probably video" trade is pinned so it cannot be reversed by accident.
+- `lib/events.test.ts` pins SEC-10, and does it structurally. Beyond asserting the allowlist, it reads the `events` columns out of the Drizzle schema and fails if any column is neither published nor listed as withheld **with a reason**. That turns "someone forgot to exclude the new column" from a silent disclosure into a failing build. This is the single most valuable test in the repo.
+- `lib/exif.test.ts` pins MED-8, including the claim the roadmap got wrong: that the pipeline output carries no EXIF. It also pins that the lenient retry decodes a truncated file the strict pass throws on, so the retry cannot quietly become dead code.
+
+**Found a real bug while writing these.** `slugifyEventName` deleted accented characters instead of folding them, so "Café Münch" became `caf-mnch` and "Renée's Party" became `rene-s-party`. The slug is the organizer-facing gallery URL and it goes on a printed QR sign, which is the worst place for it to look broken. Fixed with NFD normalisation, plus a trailing-dash fix where the 40-character truncation landed on a separator. Names in non-Latin scripts still fall back to `event` plus the random suffix, which is now tested rather than incidental.
+
+**Still blocked, and this is the part that matters most.** The paths that actually destroy data (the purge cron's circuit breaker, `lib/erasure.ts`, and the co-host revocation predicate in `lib/roles.ts`) need a throwaway Postgres to run against. There is nowhere safe to point them until the Neon staging branch exists, and pointing them at production is how you find out what the circuit breaker does. These are the reason F-7 was moved ahead of ACT-1, so F-7 is **not** finished.
+
+Still to do: the database-backed suite above, rate limiter concurrency, and Playwright for four flows (guest joins and uploads, organizer moderates and downloads, activation applies, share link expires). Run all of it in CI.
 
 ### F-8. Transactional email
 **Size:** S. **Depends on:** F-5.
