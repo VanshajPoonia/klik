@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, venueClients, EVENT_VISIBILITIES } from "@/lib/schema";
@@ -32,7 +32,7 @@ export async function GET() {
   const rows = await db
     .select()
     .from(events)
-    .where(eq(events.ownerId, session.user.id))
+    .where(and(eq(events.ownerId, session.user.id), isNull(events.deletedAt)))
     .orderBy(events.createdAt);
 
   return NextResponse.json({ events: rows.map(toOrganizerEvent) });
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
         createdAt: events.createdAt,
       })
       .from(events)
-      .where(eq(events.ownerId, session.user.id)),
+      .where(and(eq(events.ownerId, session.user.id), isNull(events.deletedAt))),
   ]);
   const activeEventCount = existingEvents.filter((event) => isEventActive(event)).length;
   const monthlyEventCount = existingEvents.filter((event) =>
@@ -131,6 +131,7 @@ export async function POST(request: Request) {
         and(
           eq(venueClients.id, clientId),
           eq(venueClients.ownerId, session.user.id),
+          isNull(venueClients.deletedAt),
         ),
       )
       .limit(1);
@@ -153,6 +154,7 @@ export async function POST(request: Request) {
       password,
       moderation,
       expiresAt,
+      retentionDays: plan.galleryAccessDays,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

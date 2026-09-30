@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getPlan, PLAN_KEYS } from "@/lib/plans";
@@ -44,7 +44,7 @@ export async function PATCH(
       createdAt: events.createdAt,
     })
     .from(events)
-    .where(eq(events.ownerId, userId));
+    .where(and(eq(events.ownerId, userId), isNull(events.deletedAt)));
   const activeEventCount = organizerEvents.filter((event) => isEventActive(event)).length;
   const monthlyEventCount = organizerEvents.filter((event) =>
     wasCreatedThisUtcMonth(event.createdAt),
@@ -94,6 +94,23 @@ export async function PATCH(
     }
     throw error;
   }
+
+  // Retention only ever moves outward. An upgrade should genuinely extend how
+  // long a gallery survives, but a downgrade must not retroactively shorten a
+  // window the organizer already had, because the next purge run would then
+  // permanently delete media that was safe when they woke up this morning.
+  // GREATEST() keeps whichever deadline is further away, including for rows
+  // predating this column. See ROADMAP.md SEC-1.
+  await db
+    .update(events)
+    .set({
+      retentionUntil: sql`GREATEST(
+        COALESCE(${events.retentionUntil}, ${events.createdAt}),
+        ${events.createdAt} + (${plan.galleryAccessDays}::int * interval '1 day')
+      )`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(events.ownerId, userId), isNull(events.deletedAt)));
 
   return NextResponse.json({ account: updatedAccount });
 }

@@ -4,7 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { users, events, EVENT_VISIBILITIES } from "@/lib/schema";
-import { PLAN_KEYS, type PlanKey } from "@/lib/plans";
+import { PLAN_KEYS, getPlan, type PlanKey } from "@/lib/plans";
 import { requireSuperadmin } from "@/lib/roles";
 import { generateUsername, generatePassword, hashPassword } from "@/lib/credentials";
 import { prepareEventInsert, toPublicEvent, type CreateEventInput } from "@/lib/events";
@@ -75,7 +75,11 @@ async function createOrganizerUserAndEvent(
         passwordHash,
       })
       .returning();
-    const { query: eventQuery } = await prepareEventInsert({ ownerId: userId, ...eventInput });
+    const { query: eventQuery } = await prepareEventInsert({
+      ownerId: userId,
+      ...eventInput,
+      retentionDays: getPlan(planKey).galleryAccessDays,
+    });
 
     try {
       const [[user], [event]] = await db.batch([userQuery, eventQuery]);
