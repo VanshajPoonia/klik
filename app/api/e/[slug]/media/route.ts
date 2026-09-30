@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import sharp from "sharp";
 import heicConvert from "heic-convert";
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -20,6 +20,11 @@ import {
   r2,
 } from "@/lib/storage";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
+import {
+  SIGNATURE_BYTES,
+  detectMediaSignature,
+  type SignatureMatch,
+} from "@/lib/file-signature";
 import { encodeMediaCursor } from "@/lib/media-cursor";
 import { mediaContentPath, toPublicMedia } from "@/lib/media-delivery";
 import { canUseAlbums } from "@/lib/plans";
@@ -36,6 +41,7 @@ const registerSchema = z.object({
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
   durationS: z.number().positive().optional(),
+  posterPathname: z.string().min(1).optional(),
   contentHash: z.string().optional(),
   albumId: z.string().min(10).max(64).nullable().optional(),
   // True when the browser already resized/re-encoded the photo before
@@ -44,7 +50,7 @@ const registerSchema = z.object({
 });
 
 async function loadEvent(slug: string) {
-  const [event] = await db.select().from(events).where(eq(events.slug, slug)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
   return event ?? null;
 }
 
@@ -134,6 +140,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
   }
 
+  // Deliberately does NOT filter deleted_at. A soft-deleted row still owns its
+  // R2 pathname for 30 days, so letting an id be reused would overwrite an
+  // object sitting in the trash and silently destroy the thing the recovery
+  // window exists to protect.
   const [existingMedia] = await db
     .select({ id: media.id })
     .from(media)
@@ -175,6 +185,57 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const kind = isVideoMime(input.mimeType) ? "video" : "photo";
+
+  // Read the actual leading bytes. The mime allowlist upstream only checks what
+  // the client *claimed*, and R2 signs Content-Type without enforcing it (SEC-9,
+  // verified against the live bucket), so until this point a URL presigned for
+  // a JPEG would accept any bytes at all. One ranged read of 32 bytes settles
+  // what the file really is.
+  let signature: SignatureMatch | null = null;
+  try {
+    const head = await r2.send(
+      new GetObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: input.pathname,
+        Range: `bytes=0-${SIGNATURE_BYTES - 1}`,
+      }),
+    );
+    const bytes = await head.Body!.transformToByteArray();
+    signature = detectMediaSignature(bytes);
+  } catch {
+    await deleteBlobs([input.pathname]).catch(() => {});
+    return NextResponse.json({ error: "Uploaded file could not be verified" }, { status: 400 });
+  }
+
+  // Unrecognised bytes, or an image uploaded as a video (or the reverse), both
+  // mean the declared type cannot be trusted. Delete rather than store: an
+  // object with no media row is invisible to the purge cron and would sit in
+  // the bucket forever.
+  if (!signature || signature.family !== (kind === "video" ? "video" : "image")) {
+    await deleteBlobs([input.pathname]).catch(() => {});
+    return NextResponse.json(
+      { error: "Only photos and videos can be uploaded to a gallery." },
+      { status: 415 },
+    );
+  }
+
+  // Duration is reported by the client, so treat it as advisory: it is a cap on
+  // honest uploads, not a security boundary. Real enforcement needs probing the
+  // container server-side, which arrives with OPS-1's transcode job. Rejecting
+  // the obvious case is still worth doing, because the alternative is a
+  // ten-minute 4K recording streamed to every guest's phone.
+  if (kind === "video" && input.durationS && input.durationS > plan.maxVideoSeconds) {
+    await deleteBlobs([input.pathname]).catch(() => {});
+    return NextResponse.json(
+      {
+        error: `Videos are limited to ${Math.round(plan.maxVideoSeconds / 60)} ${
+          plan.maxVideoSeconds >= 120 ? "minutes" : "minute"
+        } on ${plan.name}.`,
+        maxVideoSeconds: plan.maxVideoSeconds,
+      },
+      { status: 413 },
+    );
+  }
   const blobUrl = mediaContentPath(event.slug, input.mediaId);
   let sizeBytes = actualSizeBytes;
   let storedMimeType = input.mimeType;
@@ -247,6 +308,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       width: width ?? null,
       height: height ?? null,
       durationS: input.durationS ?? null,
+      posterPathname: kind === "video" ? (input.posterPathname ?? null) : null,
     })
     .returning();
 

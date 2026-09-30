@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { PassThrough, Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
@@ -39,7 +39,7 @@ async function createDownload(
   selectedMediaIds?: Set<string>,
 ) {
   const { id } = await params;
-  const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const session = await requireEventManagerSession(event.id, event.ownerId);
@@ -54,7 +54,7 @@ async function createDownload(
       blobPathname: media.blobPathname,
     })
     .from(media)
-    .where(and(eq(media.eventId, event.id), eq(media.status, "approved")))
+    .where(and(eq(media.eventId, event.id), eq(media.status, "approved"), isNull(media.deletedAt)))
     .orderBy(asc(media.createdAt));
 
   const items = selectedMediaIds

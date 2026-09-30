@@ -17,6 +17,13 @@ export type PlanDefinition = {
   galleryAccessDays: number;
   maxPhotoBytes: number;
   maxVideoBytes: number;
+  /**
+   * Hard ceiling on a single clip, in seconds. The byte cap alone is a blunt
+   * control: a heavily compressed 10-minute recording fits inside 500 MB, and
+   * nobody wants to stream that to a phone on venue wifi. Until OPS-1 adds
+   * real transcoding, this is what keeps video sane.
+   */
+  maxVideoSeconds: number;
   features: readonly string[];
   featured?: boolean;
 };
@@ -34,6 +41,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     galleryAccessDays: 180,
     maxPhotoBytes: 25 * MB,
     maxVideoBytes: 200 * MB,
+    maxVideoSeconds: 60,
     features: [
       "Unlimited guests",
       "Photos and videos",
@@ -61,6 +69,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     galleryAccessDays: 365,
     maxPhotoBytes: 25 * MB,
     maxVideoBytes: 500 * MB,
+    maxVideoSeconds: 180,
     features: [
       "Everything in Klik Event",
       "12-month upload window",
@@ -88,6 +97,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     galleryAccessDays: 365,
     maxPhotoBytes: 25 * MB,
     maxVideoBytes: 500 * MB,
+    maxVideoSeconds: 180,
     features: [
       "Up to 5 active events per month",
       "Central venue dashboard",

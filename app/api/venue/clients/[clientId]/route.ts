@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { venueClients } from "@/lib/schema";
@@ -61,12 +61,17 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { clientId } = await params;
 
+  // Soft delete. Events reference a client with ON DELETE SET NULL, so a hard
+  // delete detached every event that client ever had, along with their contact
+  // details, with no way back.
   const [deleted] = await db
-    .delete(venueClients)
+    .update(venueClients)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(
       and(
         eq(venueClients.id, clientId),
         eq(venueClients.ownerId, session.user.id),
+        isNull(venueClients.deletedAt),
       ),
     )
     .returning({ id: venueClients.id });

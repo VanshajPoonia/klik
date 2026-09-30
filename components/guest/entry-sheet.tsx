@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
+import { CURRENT_CONSENT } from "@/lib/consent";
 
 export function EntrySheet({
   slug,
@@ -92,14 +93,14 @@ export function EntrySheet({
             onChange={(event) => setConsent(event.target.checked)}
             required
           >
-            I understand that photos and videos I upload may be visible to everyone with access
-            to this event gallery, and I have the right to share them.
+            {CURRENT_CONSENT.statement}
           </Checkbox>
           {error && (
             <p className="text-sm text-red-400" role="alert">
               {error}
             </p>
           )}
+          <p className="text-xs leading-relaxed text-muted">{CURRENT_CONSENT.detail}</p>
           <Button type="submit" disabled={loading || !consent} className="w-full">
             {loading ? "Joining…" : "Continue"}
           </Button>

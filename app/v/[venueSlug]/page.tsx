@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, users } from "@/lib/schema";
 import { isEventActive } from "@/lib/access";
@@ -25,7 +25,7 @@ export default async function VenueHubPage({
   const venueEvents = await db
     .select()
     .from(events)
-    .where(and(eq(events.ownerId, venue.id), ne(events.visibility, "private")))
+    .where(and(eq(events.ownerId, venue.id), ne(events.visibility, "private"), isNull(events.deletedAt)))
     .orderBy(desc(events.createdAt));
   const eligible = venueEvents.filter(
     (event) => isEventActive(event),

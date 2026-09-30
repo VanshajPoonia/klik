@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { users, accounts, sessions, verificationTokens, type UserRole } from "./schema";
 import { verifyPassword } from "./credentials";
+import { clientIp, consume } from "./ratelimit";
 
 const oauthProviders = [];
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
@@ -35,10 +36,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const username = credentials?.username;
         const password = credentials?.password;
         if (typeof username !== "string" || typeof password !== "string") return null;
+
+        // Throttle before touching the database or bcrypt. This form guards the
+        // superadmin account, and a cost-12 hash is expensive enough that an
+        // unthrottled endpoint is a CPU exhaustion vector on its own, quite
+        // apart from being an open door for credential stuffing.
+        // Both buckets matter: per-IP stops one host spraying many usernames,
+        // per-username stops a botnet converging on one account.
+        const ip = clientIp(request as unknown as Request);
+        const [byIp, byUser] = await Promise.all([
+          consume(`login:ip:${ip}`, 10, 15 * 60),
+          consume(`login:user:${username.toLowerCase()}`, 5, 15 * 60),
+        ]);
+        if (!byIp.allowed || !byUser.allowed) {
+          // Indistinguishable from a wrong password by design, so probing
+          // cannot be used to discover which usernames exist.
+          console.warn(`Credential login throttled for ${ip}`);
+          return null;
+        }
 
         const [user] = await db
           .select()

@@ -1,6 +1,6 @@
 import { auth } from "./auth";
 import type { Session } from "next-auth";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { eventCoHosts, users } from "./schema";
 
@@ -39,6 +39,11 @@ export async function requireEventManagerSession(
       and(
         eq(eventCoHosts.eventId, eventId),
         eq(eventCoHosts.userId, session.user.id),
+        // Removed co-hosts keep a row for 30 days so the removal is reversible.
+        // This predicate is the entire revocation: it is deliberately in the one
+        // query that grants access, and nothing else may read this table to
+        // decide authorization.
+        isNull(eventCoHosts.deletedAt),
         eq(users.planKey, "premium"),
       ),
     )

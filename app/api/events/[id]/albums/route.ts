@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events } from "@/lib/schema";
 import { requireEventManagerSession } from "@/lib/roles";
@@ -13,7 +13,7 @@ const createAlbumSchema = z.object({
 });
 
 async function getManagedEvent(id: string) {
-  const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) return { event: null, session: null };
   const session = await requireEventManagerSession(event.id, event.ownerId);
   return { event, session };
@@ -25,7 +25,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rows = await db.select().from(albums).where(eq(albums.eventId, id)).orderBy(albums.createdAt);
+  const rows = await db.select().from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt))).orderBy(albums.createdAt);
   return NextResponse.json({ albums: rows });
 }
 
@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Enter an album name" }, { status: 400 });
   }
 
-  const existing = await db.select({ id: albums.id }).from(albums).where(eq(albums.eventId, id));
+  const existing = await db.select({ id: albums.id }).from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt)));
   if (existing.length >= 20) {
     return NextResponse.json({ error: "An event can have up to 20 albums" }, { status: 409 });
   }

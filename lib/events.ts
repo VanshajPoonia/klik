@@ -2,6 +2,7 @@ import { nanoid, customAlphabet } from "nanoid";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { events, type Event, type EventVisibility } from "./schema";
+import { PLANS, getPlanDeadline } from "./plans";
 
 const slugSuffix = customAlphabet("23456789abcdefghjkmnpqrstuvwxyz", 6);
 
@@ -35,6 +36,13 @@ export interface CreateEventInput {
   password?: string | null;
   moderation?: boolean;
   expiresAt?: Date | null;
+  /**
+   * Gallery retention for this event, in days, taken from the owner's plan at
+   * creation. Passed in rather than looked up because admin quick-create
+   * inserts the owner and the event in one batch, so the user row does not
+   * exist yet when this runs.
+   */
+  retentionDays?: number;
 }
 
 /**
@@ -47,6 +55,9 @@ export async function prepareEventInsert(input: CreateEventInput) {
   const slug = `${slugifyEventName(input.name)}-${slugSuffix()}`;
   const passwordHash = input.password ? await hashGalleryPassword(input.password) : null;
   const id = nanoid();
+  // Pinned from this moment rather than read back from created_at later, so the
+  // stored deadline and the row's own timestamp cannot drift apart.
+  const createdAt = new Date();
 
   const query = db
     .insert(events)
@@ -60,10 +71,15 @@ export async function prepareEventInsert(input: CreateEventInput) {
       clientEmail: input.clientEmail ?? null,
       clientPhone: input.clientPhone ?? null,
       clientId: input.clientId ?? null,
+      createdAt,
       visibility: input.visibility ?? "public",
       passwordHash,
       moderation: input.moderation ?? false,
       expiresAt: input.expiresAt ?? null,
+      retentionUntil: getPlanDeadline(
+        createdAt,
+        input.retentionDays ?? PLANS.event.galleryAccessDays,
+      ),
     })
     .returning();
 
@@ -85,26 +101,37 @@ export function toOrganizerEvent(event: Event) {
   return rest;
 }
 
-/** Guest-safe event shape that also removes private client contact details. */
+/**
+ * Guest-safe event shape.
+ *
+ * This is an **allowlist**, deliberately. It used to strip known-private fields
+ * and spread the rest, which meant every column added to `events` was published
+ * to guests by default and only became private if someone remembered to exclude
+ * it. That failed open, and it had already failed: `retentionUntil`,
+ * `deletedAt` and `purgedAt` were all being handed to guests.
+ *
+ * Adding a field here is a conscious act. Forgetting to add one shows up as a
+ * missing value in the gallery, which is a bug you notice, rather than as a
+ * silent disclosure, which is a bug you do not.
+ */
 export function toPublicEvent(event: Event) {
-  const {
-    ownerId,
-    clientId,
-    clientName,
-    clientEmail,
-    clientPhone,
-    accessVersion,
-    venueFeatured,
-    ...rest
-  } = toOrganizerEvent(event);
-  void ownerId;
-  void clientId;
-  void clientName;
-  void clientEmail;
-  void clientPhone;
-  void accessVersion;
-  void venueFeatured;
-  return rest;
+  return {
+    id: event.id,
+    slug: event.slug,
+    name: event.name,
+    eventDate: event.eventDate,
+    coverMediaId: event.coverMediaId,
+    accentColor: event.accentColor,
+    backgroundColor: event.backgroundColor,
+    qrTemplate: event.qrTemplate,
+    visibility: event.visibility,
+    moderation: event.moderation,
+    isActive: event.isActive,
+    downloadsEnabled: event.downloadsEnabled,
+    uploadsEnabled: event.uploadsEnabled,
+    expiresAt: event.expiresAt,
+    createdAt: event.createdAt,
+  };
 }
 
 export type OrganizerEvent = ReturnType<typeof toOrganizerEvent>;

@@ -1,15 +1,15 @@
 import { SignJWT, jwtVerify } from "jose";
+import { env } from "./env";
 
 export interface GuestSession {
   guestId: string;
   eventId: string;
 }
 
+// Validated at boot by lib/env.ts, so this no longer throws on the first guest
+// session of a misconfigured deploy.
 function secret() {
-  if (!process.env.AUTH_SECRET) {
-    throw new Error("AUTH_SECRET is not set");
-  }
-  return new TextEncoder().encode(process.env.AUTH_SECRET);
+  return new TextEncoder().encode(env.AUTH_SECRET);
 }
 
 export function guestCookieName(eventId: string) {

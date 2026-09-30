@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { auth, signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { eventCoHosts, events, users, venueClients } from "@/lib/schema";
@@ -30,13 +30,22 @@ export default async function DashboardPage() {
     db
       .select()
       .from(events)
-      .where(eq(events.ownerId, session.user.id))
+      .where(and(eq(events.ownerId, session.user.id), isNull(events.deletedAt)))
       .orderBy(events.createdAt),
     db
       .select({ event: events })
       .from(eventCoHosts)
       .innerJoin(events, eq(events.id, eventCoHosts.eventId))
-      .where(eq(eventCoHosts.userId, session.user.id))
+      // Both filters matter: without the first a removed co-host keeps seeing
+      // the event, without the second a soft-deleted event keeps appearing in
+      // their dashboard after the owner deleted it.
+      .where(
+        and(
+          eq(eventCoHosts.userId, session.user.id),
+          isNull(eventCoHosts.deletedAt),
+          isNull(events.deletedAt),
+        ),
+      )
       .orderBy(events.createdAt)
       .then((rows) => rows.map((row) => row.event)),
     getAccountPlan(session.user.id),
@@ -49,7 +58,7 @@ export default async function DashboardPage() {
     db
       .select()
       .from(venueClients)
-      .where(eq(venueClients.ownerId, session.user.id))
+      .where(and(eq(venueClients.ownerId, session.user.id), isNull(venueClients.deletedAt)))
       .orderBy(venueClients.name),
   ]);
   const rows = [

@@ -2,7 +2,7 @@ import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
@@ -28,7 +28,7 @@ import { GuestGallery } from "@/components/guest/guest-gallery";
 
 // Shared by the page and its metadata so one request runs one query.
 const getEventBySlug = cache(async (slug: string) => {
-  const [event] = await db.select().from(events).where(eq(events.slug, slug)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
   return event ?? null;
 });
 
@@ -98,13 +98,13 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   ).map((item) => toPublicMedia(item, event.slug));
   const [albumRows, coverRows] = await Promise.all([
     canUseAlbums(plan.key)
-      ? db.select().from(albums).where(eq(albums.eventId, event.id)).orderBy(albums.createdAt)
+      ? db.select().from(albums).where(and(eq(albums.eventId, event.id), isNull(albums.deletedAt))).orderBy(albums.createdAt)
       : Promise.resolve([]),
     canCustomizeGallery(plan.key) && event.coverMediaId
       ? db
           .select()
           .from(media)
-          .where(eq(media.id, event.coverMediaId))
+          .where(and(eq(media.id, event.coverMediaId), isNull(media.deletedAt)))
           .limit(1)
       : Promise.resolve([]),
   ]);
@@ -128,6 +128,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       albums={albumRows}
       coverUrl={coverUrl}
       canSlideshow={canUseSlideshow(plan.key)}
+      maxVideoSeconds={plan.maxVideoSeconds}
       showBranding={!removesKlikBranding(plan.key)}
     />
   );

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   events,
@@ -10,8 +10,8 @@ import {
   QR_TEMPLATES,
 } from "@/lib/schema";
 import { toOrganizerEvent, hashGalleryPassword } from "@/lib/events";
+import { eraseEvent } from "@/lib/erasure";
 import { requireEventManagerSession, requireOwnerSession } from "@/lib/roles";
-import { deleteBlobs } from "@/lib/storage";
 import { getAccountPlan } from "@/lib/account-plans";
 import {
   canCustomizeGallery,
@@ -46,7 +46,7 @@ const patchSchema = z.object({
 });
 
 async function getOwnedEvent(id: string) {
-  const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) return { event: null, session: null };
   const session = await requireEventManagerSession(event.id, event.ownerId);
   return { event, session };
@@ -149,6 +149,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         and(
           eq(venueClients.id, parsed.data.clientId),
           eq(venueClients.ownerId, event.ownerId),
+          isNull(venueClients.deletedAt),
         ),
       )
       .limit(1);
@@ -161,7 +162,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const ownerEvents = await db
       .select({ isActive: events.isActive, expiresAt: events.expiresAt })
       .from(events)
-      .where(eq(events.ownerId, event.ownerId));
+      .where(and(eq(events.ownerId, event.ownerId), isNull(events.deletedAt)));
     const activeCount = ownerEvents.filter((candidate) => isEventActive(candidate)).length;
     if (activeCount >= plan.maxActiveEvents) {
       return NextResponse.json(
@@ -218,14 +219,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           : {}),
         updatedAt: new Date(),
       })
-      .where(eq(events.id, id))
+      .where(and(eq(events.id, id), isNull(events.deletedAt)))
       .returning();
 
     if (rest.venueFeatured) {
       const clearFeaturedQuery = db
         .update(events)
         .set({ venueFeatured: false, updatedAt: new Date() })
-        .where(eq(events.ownerId, event.ownerId));
+        .where(and(eq(events.ownerId, event.ownerId), isNull(events.deletedAt)));
       const [, updatedRows] = await db.batch([clearFeaturedQuery, updateQuery]);
       [updated] = updatedRows;
     } else {
@@ -251,19 +252,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return NextResponse.json({ event: toOrganizerEvent(updated) });
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { event } = await getOwnedEvent(id);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const session = await requireOwnerSession(event.ownerId);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rows = await db
-    .select({ pathname: media.blobPathname })
-    .from(media)
-    .where(eq(media.eventId, id));
-  await deleteBlobs(rows.map((r) => r.pathname));
-  await db.delete(events).where(eq(events.id, id));
+  // ?erase=true skips the recovery window entirely and destroys the bytes now.
+  // It exists for the case soft delete cannot serve: someone has asked for
+  // their data to be removed, and "it is in a trash folder for 30 days" is not
+  // an answer to that. It is opt-in because it is the only delete here that
+  // cannot be walked back.
+  if (new URL(request.url).searchParams.get("erase") === "true") {
+    const result = await eraseEvent(event.id, session.user?.id ?? null, "event_erasure_request");
+    return NextResponse.json({ ok: true, erased: true, ...result });
+  }
+
+  // Soft delete. Deleting an event destroys every guest's photos from that
+  // night, not just the organizer's own, so it gets the same 30-day recovery
+  // window as a single photo. The purge cron removes the row and the objects
+  // once that window closes. See ROADMAP.md SEC-4.
+  await db
+    .update(events)
+    .set({
+      deletedAt: new Date(),
+      isActive: false,
+      uploadsEnabled: false,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(events.id, id), isNull(events.deletedAt)));
 
   return NextResponse.json({ ok: true });
 }

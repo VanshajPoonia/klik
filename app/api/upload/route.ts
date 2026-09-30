@@ -2,16 +2,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
 import { canUpload } from "@/lib/access";
 import { getAccountPlan } from "@/lib/account-plans";
 import { resolveEventViewer } from "@/lib/event-viewer";
+import { clientIp, consume } from "@/lib/ratelimit";
 import {
   blobPathnameFor,
   extensionForMime,
   isAllowedMime,
+  isVideoMime,
   maxBytesForMime,
   r2,
 } from "@/lib/storage";
@@ -21,9 +23,24 @@ const requestSchema = z.object({
   mediaId: z.string().min(10).max(64).regex(/^[A-Za-z0-9_-]+$/),
   mimeType: z.string().min(1),
   sizeBytes: z.number().int().positive(),
+  /** Size of the poster still, when the client extracted one for a video. */
+  posterBytes: z.number().int().positive().max(2 * 1024 * 1024).optional(),
 });
 
+function throttled(retryAfter: number) {
+  return NextResponse.json(
+    { error: "Too many uploads. Try again shortly." },
+    { status: 429, headers: { "Retry-After": String(retryAfter) } },
+  );
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
+  // Checked before any database work: this endpoint mints presigned URLs, so
+  // an unthrottled caller can request them in a loop and write objects into
+  // the bucket faster than anything reaps them. See ROADMAP.md SEC-2.
+  const ipLimit = await consume(`upload:ip:${clientIp(request)}`, 200, 60 * 60);
+  if (!ipLimit.allowed) return throttled(ipLimit.retryAfter);
+
   const body = await request.json().catch(() => null);
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) {
@@ -34,7 +51,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const { eventId, mediaId, mimeType, sizeBytes } = parsed.data;
 
-  const [event] = await db.select().from(events).where(eq(events.id, eventId)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.id, eventId), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
   const plan = await getAccountPlan(event.ownerId);
   if (!canUpload(event, plan.uploadWindowDays)) {
@@ -51,6 +68,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  // Deliberately does NOT filter deleted_at. A soft-deleted row still owns its
+  // R2 pathname for 30 days, so letting an id be reused would overwrite an
+  // object sitting in the trash and silently destroy the thing the recovery
+  // window exists to protect.
   const [existingMedia] = await db
     .select({ id: media.id })
     .from(media)
@@ -68,17 +89,53 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Not authorized to upload to this event" }, { status: 401 });
   }
 
+  // Per-guest bucket on top of the per-IP one above, since a whole venue shares
+  // one NAT address and would otherwise exhaust a single IP budget between them.
+  // Organizers are exempt: they legitimately bulk-upload their own galleries.
+  if (!viewer.ownerSession && viewer.guestId) {
+    const guestLimit = await consume(`upload:guest:${viewer.guestId}`, 60, 60 * 60);
+    if (!guestLimit.allowed) return throttled(guestLimit.retryAfter);
+  }
+
   const pathname = blobPathnameFor(event.id, mediaId, extensionForMime(mimeType));
+  // ContentLength is signed, not advisory: it lands in X-Amz-SignedHeaders, so
+  // R2 rejects the PUT outright if the body is not exactly the size we checked
+  // against the plan cap above. Without it the signature binds only the key and
+  // content type, and a client could declare 1 MB here and then upload
+  // unlimited bytes. The browser sets Content-Length itself from the blob and
+  // scripts cannot override it, so the honest path matches automatically.
   const command = new PutObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME,
     Key: pathname,
     ContentType: mimeType,
+    ContentLength: sizeBytes,
   });
   const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 5 * 60 });
+
+  // Videos also get a presigned slot for the poster still the client pulled out
+  // of the file. Same ContentLength binding as the media object, so a poster
+  // slot cannot be used to smuggle a large upload past the plan cap.
+  let posterUploadUrl: string | null = null;
+  let posterPathname: string | null = null;
+  if (isVideoMime(mimeType) && parsed.data.posterBytes) {
+    posterPathname = blobPathnameFor(event.id, `${mediaId}-poster`, "jpg");
+    posterUploadUrl = await getSignedUrl(
+      r2,
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: posterPathname,
+        ContentType: "image/jpeg",
+        ContentLength: parsed.data.posterBytes,
+      }),
+      { expiresIn: 5 * 60 },
+    );
+  }
 
   return NextResponse.json({
     uploadUrl,
     pathname,
     maxBytes,
+    posterUploadUrl,
+    posterPathname,
   });
 }

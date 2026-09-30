@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
 import { compressImageForUpload } from "@/lib/image-compress";
+import { formatDuration, probeVideo } from "@/lib/video-poster";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { CapturedItem } from "@/components/guest/camera-capture";
 import { encodeMediaCursor } from "@/lib/media-cursor";
@@ -23,6 +24,8 @@ const CameraCapture = dynamic(
 
 interface MediaItem {
   id: string;
+  posterUrl?: string | null;
+  durationS?: number | null;
   kind: "photo" | "video";
   status: "pending" | "approved" | "rejected";
   blobUrl: string;
@@ -113,6 +116,7 @@ export function GuestGallery({
   coverUrl = null,
   canSlideshow = false,
   showBranding = true,
+  maxVideoSeconds,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -121,6 +125,7 @@ export function GuestGallery({
   coverUrl?: string | null;
   canSlideshow?: boolean;
   showBranding?: boolean;
+  maxVideoSeconds: number;
 }) {
   // A single accumulating, always-sorted list: new arrivals are prepended via
   // a `since` cursor (never re-polls a fixed window, so nothing can be pushed
@@ -211,6 +216,17 @@ export function GuestGallery({
         const isPhoto = !file.type.startsWith("video/");
         const compressed = isPhoto && !prepared ? await compressImageForUpload(file) : null;
 
+        // Pull a still and the duration out of the video here, on the
+        // uploader's device. The still lets every viewer's grid load an image
+        // instead of reaching into a 200 MB file for its moov atom, and the
+        // duration lets the server reject a clip nobody wants to stream.
+        const probe = isPhoto ? null : await probeVideo(file);
+        if (probe?.duration && probe.duration > maxVideoSeconds) {
+          throw new Error(
+            `Videos are limited to ${formatDuration(maxVideoSeconds)}. This one is ${formatDuration(probe.duration)}.`,
+          );
+        }
+
         const uploadBody = compressed?.blob ?? file;
         const mimeType = compressed ? "image/jpeg" : file.type;
 
@@ -222,17 +238,31 @@ export function GuestGallery({
             mediaId,
             mimeType,
             sizeBytes: uploadBody.size,
+            posterBytes: probe?.poster?.size,
           }),
         });
         const signed = await signRes.json().catch(() => ({}));
         if (!signRes.ok) throw new Error(signed.error ?? "Failed to get upload URL");
-        const { uploadUrl, pathname } = signed;
+        const { uploadUrl, pathname, posterUploadUrl, posterPathname } = signed;
 
         await putWithRetry(uploadUrl, uploadBody, mimeType, (percentage) =>
           setUploading((current) =>
             current.map((item) => (item.id === mediaId ? { ...item, progress: percentage } : item)),
           ),
         );
+
+        // Best effort: a gallery with a missing poster falls back to the old
+        // behaviour, which is far better than failing a guest's upload because
+        // a thumbnail would not send.
+        let uploadedPoster: string | null = null;
+        if (posterUploadUrl && posterPathname && probe?.poster) {
+          try {
+            await putObject(posterUploadUrl, probe.poster, "image/jpeg", () => {});
+            uploadedPoster = posterPathname;
+          } catch {
+            uploadedPoster = null;
+          }
+        }
 
         const registerRes = await fetch(`/api/e/${event.slug}/media`, {
           method: "POST",
@@ -242,8 +272,10 @@ export function GuestGallery({
             pathname,
             mimeType,
             sizeBytes: uploadBody.size,
-            width: compressed?.width ?? prepared?.width,
-            height: compressed?.height ?? prepared?.height,
+            width: compressed?.width ?? prepared?.width ?? (probe?.width || undefined),
+            height: compressed?.height ?? prepared?.height ?? (probe?.height || undefined),
+            durationS: probe?.duration ?? undefined,
+            posterPathname: uploadedPoster ?? undefined,
             clientCompressed: Boolean(compressed) || Boolean(prepared),
             albumId: uploadAlbumId || null,
           }),
@@ -263,7 +295,7 @@ export function GuestGallery({
         setRemaining((count) => Math.max(0, count - 1));
       }
     },
-    [event.id, event.slug, mutate, uploadAlbumId],
+    [event.id, event.slug, maxVideoSeconds, mutate, uploadAlbumId],
   );
 
   const uploadFiles = useCallback(
@@ -522,17 +554,38 @@ export function GuestGallery({
               >
                 {item.kind === "video" ? (
                   <>
-                    <video
-                      src={item.blobUrl}
-                      className="pointer-events-none h-full w-full object-cover"
-                      muted
-                      preload="metadata"
-                    />
+                    {/* A poster image where we have one. The old path rendered
+                        <video preload="metadata"> per tile, and on iPhone .mov
+                        files "metadata" means reaching to the end of the file
+                        for the moov atom, once per visible video. Clips that
+                        predate poster extraction still fall back to that. */}
+                    {item.posterUrl ? (
+                      <Image
+                        src={item.posterUrl}
+                        alt=""
+                        fill
+                        unoptimized
+                        sizes="(min-width: 768px) 25vw, 50vw"
+                        className="pointer-events-none object-cover"
+                      />
+                    ) : (
+                      <video
+                        src={item.blobUrl}
+                        className="pointer-events-none h-full w-full object-cover"
+                        muted
+                        preload="metadata"
+                      />
+                    )}
                     <span className="absolute inset-0 flex items-center justify-center">
                       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 backdrop-blur">
                         <Play className="h-4 w-4 text-paper" />
                       </span>
                     </span>
+                    {item.durationS ? (
+                      <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-paper backdrop-blur">
+                        {formatDuration(item.durationS)}
+                      </span>
+                    ) : null}
                   </>
                 ) : (
                   <Image

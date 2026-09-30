@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events } from "@/lib/schema";
 import { requireEventManagerSession } from "@/lib/roles";
@@ -12,13 +12,13 @@ const patchAlbumSchema = z.object({
 });
 
 async function getManagedAlbum(eventId: string, albumId: string) {
-  const [event] = await db.select().from(events).where(eq(events.id, eventId)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.id, eventId), isNull(events.deletedAt))).limit(1);
   if (!event) return { album: null, session: null, event: null };
   const session = await requireEventManagerSession(event.id, event.ownerId);
   const [album] = await db
     .select()
     .from(albums)
-    .where(and(eq(albums.id, albumId), eq(albums.eventId, eventId)))
+    .where(and(eq(albums.id, albumId), eq(albums.eventId, eventId), isNull(albums.deletedAt)))
     .limit(1);
   return { album, session, event };
 }
@@ -70,6 +70,13 @@ export async function DELETE(
     return NextResponse.json({ error: "Album management requires Klik Premium" }, { status: 403 });
   }
 
-  await db.delete(albums).where(eq(albums.id, albumId));
+  // Soft delete. Media keeps its album_id, so the photos show as unfiled while
+  // the folder is in the trash and snap back into place on restore. A hard
+  // delete fired ON DELETE SET NULL across every photo in the folder, which
+  // quietly discarded the sorting work and could not be undone.
+  await db
+    .update(albums)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(albums.id, albumId), isNull(albums.deletedAt)));
   return NextResponse.json({ ok: true });
 }
