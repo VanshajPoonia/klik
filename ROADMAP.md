@@ -28,6 +28,41 @@
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
 - Rate limiting (`lib/ratelimit.ts` does not exist), any tests, any error tracking, any transactional email, any background job runner.
 
+
+## Contents
+
+**This file is the whole plan.** Everything is here: phases, tasks, decisions, findings and build order. There is no second document.
+
+| Section | What it holds |
+|---|---|
+| §0 Where the code actually is | Real state of the codebase, since ARCHITECTURE.md is stale until F-1 |
+| Phase SEC | Security findings from the audit, most already fixed |
+| Phase F | Foundations: tests, permissions, usage, jobs, email, env, error tracking |
+| Phase ID | Global usernames (v1.1) |
+| Phase ACC | Guest accounts and the guest-to-organizer path |
+| Phase ORG | Multiple organizers per event (v1.1) |
+| **Phase ACT** | **Event activation by admin. The v1 replacement for payments** |
+| Phase PAY | Stripe. Deferred out of v1 |
+| Phase MED | Per-photo visibility, share links, folders, EXIF stripping |
+| Phase AI | Grouping, enhancement, safety screening. Post-v1 |
+| Phase QR | QR control and the in-app print studio |
+| Phase CAM | Camera, image editor, disposable mode |
+| Phase GRW | Growth loops: recap email, challenges, referrals |
+| Phase VEN | Venue surfaces: live display, kiosk, custom domains |
+| Phase OPS | Transcoding, resumable uploads, the US bucket move |
+| Phase TRS | Trust, safety, compliance, accessibility |
+| Phase ADM | Admin console |
+| Phase LAW | US compliance: terms, DMCA, COPPA, consent scope |
+| Section B | Proposals, all accepted and promoted |
+| Section C | Every decision made, with reasoning |
+| Production hardening pass | What changed on 2026-09-30 and why |
+| What breaks first | Scalability read against a 200-guest wedding |
+| Architecture decisions | Six things worth reviewing rather than inheriting |
+| v1 scope and build order | The single-threaded order to actually work through |
+| Credentials and setup | Which accounts to create, how, and the gotchas |
+
+Work is requested by task ID: "do MED-8", or "do F-1 through F-5".
+
 ---
 
 # SECTION A: the work you asked for
@@ -290,11 +325,11 @@ Transfer flow (owner picks a manager, that person accepts, billing responsibilit
 
 ---
 
-## Phase PAY: Stripe, plans, and limit warnings
+## Phase ACT: Event activation (the v1 replacement for payments)
 
-### PAY-1. One entitlement model, two ways to grant it
-**Size:** M. **Blocks:** all of PAY. Read this one carefully, it is the architectural decision in this phase.
-**Decision (2026-09-30): Stripe and the admin panel are both first-class grant sources, and neither may overwrite the other.** The admin panel is how things are controlled today and it stays that way after Stripe ships, so the model cannot be "Stripe is truth and admin is a hack".
+### ACT-1. One entitlement model, admin-granted first
+**Size:** M. **Blocks:** ACT-2, ACT-3, and later all of PAY. Formerly PAY-1; renamed 2026-10-01 when payments left v1.
+**Decision: the admin panel and (later) Stripe are both first-class grant sources, and neither may overwrite the other.** The admin panel is how things run today and stays that way after Stripe ships, so the model cannot be "Stripe is truth and admin is a hack". Building the human path first is the point: Stripe later adds a `source`, not a new concept.
 
 `users.plan_key` puts the plan on the **account**, but Klik Event ($39) and Klik Premium ($89) are **one-time per event**. As soon as someone buys a second pass, or buys Premium for a wedding and Event for a birthday, the account-level field is wrong. Replace it with an entitlement ledger:
 - Table `entitlements` (id, user_id, event_id nullable, plan_key, source `stripe | admin | promo`, status `active | consumed | revoked | expired`, granted_by_user_id nullable, reason text, stripe_ref nullable, starts_at, ends_at nullable, created_at, revoked_at). An `event_id`-null active row is an unused pass the dashboard offers to apply to a new event.
@@ -312,9 +347,30 @@ Transfer flow (owner picks a manager, that person accepts, billing responsibilit
 - Keep `events.plan_key` as a denormalised cache of the resolved plan, refreshed whenever entitlements change, so the hot path is one column read rather than a ledger walk. Recompute it in the nightly reconciliation job (F-4).
 - Every `canX(plan.key)` call site moves to the event-scoped resolver.
 
-### PAY-1b. Admin plan control surface
-**Size:** M. **Depends on:** PAY-1. Pull this forward if you want admin control working before Stripe.
-The admin panel already sets `users.plan_key` through `POST /api/admin/clients/[userId]/plan`. Rework it against the ledger: grant a plan to an account or to one specific event, with a reason, an optional end date, and an explicit revoke. Show the grant source on every event in the admin list so it is obvious at a glance whether an account is paying or comped. This task is independent of Stripe and can ship first.
+### ACT-2. Admin activation surface
+**Size:** M. **Depends on:** ACT-1. Formerly PAY-1b. **This is the v1 revenue mechanism: a human decides.**
+The admin panel already sets `users.plan_key` through `POST /api/admin/clients/[userId]/plan`. Rework it against the ledger: grant a plan to an account or to one specific event, with a reason, an optional end date, and an explicit revoke. Show the grant source on every event in the admin list so it is obvious at a glance whether an account is paying or comped.
+
+### ACT-3. The organizer's side of activation
+**Size:** M. **Depends on:** ACT-1. New 2026-10-01.
+An organizer creates an event and it is **inactive**: no live QR, no guest access, no uploads. They can still name it, set the date, pick colours and design the print sign, so the waiting time is useful rather than dead. The dashboard states plainly what is pending and what unlocks when it is activated.
+
+Three things this has to get right, because they are what turn a waiting screen into a support ticket:
+- **Never a dead end.** A blocked action says what is happening and who is doing it, not "403".
+- **The organizer must know when it flips.** They will not sit refreshing. Email on activation (F-8), which is one more reason Resend sits early in the build order.
+- **The QR must not exist until activation.** A QR generated against an inactive event either 404s or silently starts working later; both are worse than not offering it yet. This interacts with QR-1: a slug is permanent once printed, so it should not be mintable before the event is real.
+
+### ACT-4. Activation requests and queue
+**Size:** S. **Depends on:** ACT-2, ACT-3.
+An organizer asks for activation; the request lands in a queue on the admin dashboard with the event, the requester, and the date it is needed by. Without this the trigger is a WhatsApp message and the failure mode is an event going live an hour late. Notify the admin on request, notify the organizer on decision, record both in the audit log (ADM-4).
+
+---
+
+## Phase PAY: Stripe (deferred out of v1, 2026-10-01)
+
+Everything here still stands and none of it is wasted, because ACT-1's ledger was designed for exactly this: Stripe becomes a second `source` writing rows a human already writes today. Start it when you want to stop activating events by hand.
+
+**One thing to re-read before starting:** architecture note 2 below. Plan limits are enforced both in `lib/plans.ts` and in plpgsql triggers that hard-code `venue -> 5, else 1` and read `users.plan_key` directly. ACT-1 moves plan resolution off that column, so the triggers have to be resolved as part of ACT-1, not left for PAY. They agree today only by coincidence.
 
 ### PAY-2. Stripe data model
 **Size:** M. **Depends on:** PAY-1.
@@ -807,7 +863,11 @@ Nothing is blocking. The open items below are judgement calls that can wait unti
 
 ### The v1 line
 
-**v1 is: paid events, no AI.** Phases SEC, F, PAY, MED, QR, ACC, **plus LAW** (added 2026-09-30: you cannot take money from US consumers for user-generated content hosting without terms, a privacy policy, and DMCA registration). The product already works; v1 makes it sellable. Phases AI, GRW, VEN, OPS and TRS come after revenue exists.
+**v1 is: admin-activated events, no payments, no AI.** Phases SEC, F, LAW, ACT, MED, QR, ACC.
+
+**Payments deferred (decided 2026-10-01).** An organizer creates an event; it stays inactive until a **superadmin activates it from the admin dashboard**, which is close to how the business already runs. Stripe (PAY-2 onward) moves out of v1 entirely.
+
+This is a better sequence than it might look. Activation still needs the entitlement model underneath it (ACT-1, formerly PAY-1), because "who is allowed what" has to be answered the same way whether a human or a webhook grants it. Building that against a human grant first means Stripe later becomes a second **source** writing to a ledger that already exists and is already proven, rather than a rewrite of how capability works. It also takes LAW-1 off the critical path for launch, since you are not taking card payments yet, though it stays in v1 because you are still hosting user photos. The product already works; v1 makes it sellable. Phases AI, GRW, VEN, OPS and TRS come after revenue exists.
 
 **One thing I want to flag about that boundary, because I drew it and you picked it.** The option I wrote excluded **Phase ID (global usernames)** and **Phase ORG (multiple organizers per event)**, and both were explicit asks in your original brief. ORG-3 (invite a co-host by username) also depends on ID. I have parked them as **v1.1, immediately after v1**, rather than silently dropping them. If multi-organizer is something you expect to sell on, move it up and say so, because it changes the order below.
 
@@ -840,38 +900,93 @@ One person, so nothing below assumes parallel work, and each block ends somewher
 5. **F-7** test harness, before anything touches payments
 6. **F-3** permissions resolver, **F-4** usage accounting
 
-**Block 2, revenue**
-7. **PAY-1** entitlement ledger, **PAY-1b** admin grants (no Stripe needed; this is also the migration that retires `users.plan_key`, so re-read SEC-1 first)
-8. **PAY-2**, **PAY-3**, **PAY-4** Stripe customers, checkout, webhook
-9. **PAY-5**, **PAY-6**, **PAY-7** billing surface, enforcement, limit warnings
+**Block 2, activation (replaces the old payments block)**
+7. **ACT-1** entitlement ledger. This is the migration that retires `users.plan_key`, so re-read SEC-1 **and** architecture note 2 first: the plpgsql plan-limit triggers read that column directly and must be resolved here, not later.
+8. **ACT-2** admin activation surface, **ACT-3** the organizer's inactive-event experience
+9. **F-5** job runner, **F-8** transactional email, then **ACT-4** the activation request queue
 
-**You could stop here and charge money.**
+**You could stop here and run the business by hand, which is the plan.**
 
-**Block 3, the product people are paying for**
-10. **F-5** job runner, **F-8** transactional email, then **PAY-8** dunning
-11. **ACC-1** through **ACC-5** guest accounts and signup
-12. **MED-1**, **MED-2**, **MED-3** per-photo visibility, share links, access management
-13. **MED-4**, **MED-5** folders and bulk operations
+**Block 3, the product itself**
+10. **ACC-1** through **ACC-5** guest accounts and signup
+11. **MED-1**, **MED-2**, **MED-3** per-photo visibility, share links, access management
+12. **MED-4**, **MED-5** folders and bulk operations
 
 **Block 4, the differentiator**
-14. **QR-1**, **QR-2**, **QR-3** slugs, styling, sharing
-15. **QR-4a** through **QR-4f** the print studio
-16. **F-2** remaining rate limits, **F-9** error tracking
+13. **QR-1**, **QR-2**, **QR-3** slugs, styling, sharing
+14. **QR-4a** through **QR-4f** the print studio
+15. **F-2** remaining rate limits, **F-9** error tracking
+16. **LAW-1** terms and privacy policy, **LAW-4** venue curation
 
 **v1.1:** ID-1 through ID-3, then ORG-1 through ORG-4.
+**Later:** Phase PAY, when activating events by hand stops being worth the time.
 
-### Account setup
+### Credentials and setup
 
-All four are being set up, so nothing is blocked on access. What each needs:
+**Recommendation on sequencing: build first, with two exceptions.** Almost everything in v1 is testable without external services, and code written against a clean interface does not need refactoring when a key arrives. The exceptions are things where the *shape* of the integration is decided by the provider, and those are worth settling now so nothing gets rebuilt: **Resend** (because ACC-2's whole signup flow is email codes, and it is untestable without a key) and the **R2 bucket plus custom domain** (because jurisdiction is fixed at bucket creation and cannot be changed later).
 
-| Service | Env vars | Notes |
-|---|---|---|
-| **Resend** | `AUTH_RESEND_KEY` | Verify the sending domain with SPF and DKIM before any volume, or signup codes land in spam. Highest leverage key on the list. |
-| **Domain** | `APP_URL` (no trailing slash) | Set in Vercel too, not only locally. `lib/env.ts` falls back to the Vercel deployment URL, which silently produces working but wrong QR codes. |
-| **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_EVENT`, `STRIPE_PRICE_PREMIUM`, `STRIPE_PRICE_VENUE_MONTHLY`, `STRIPE_PRICE_VENUE_ANNUAL` | Event and Premium are one-time prices, Venue is recurring. Test mode first; `stripe listen` forwards webhooks locally. |
-| **Google OAuth** | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Redirect URI is `<APP_URL>/api/auth/callback/google`, so it needs the real domain first. |
+Stripe is no longer needed at all for v1.
 
-Add every one to `.env.example` as it lands, and to Vercel, not just `.env.local`.
+#### 1. Resend, needed for Block 2 onward
+
+**Get it:** resend.com, add a domain, choose a **subdomain** such as `mail.klik.kreativvantage.com` rather than the root. A deliverability problem on a subdomain never damages the root domain's sending reputation, and you cannot undo that mistake quickly. Add the DKIM, SPF and DMARC records it gives you to Cloudflare DNS, wait for verification, then create an API key scoped to **sending only**.
+
+```
+AUTH_RESEND_KEY=re_...
+AUTH_EMAIL_FROM="Klik <no-reply@mail.klik.kreativvantage.com>"
+```
+
+**Already fixed for you:** the sender was hard-coded to `no-reply@klik.app`, a domain this project does not own. Resend refuses unverified domains, so every sign-in email would have failed the moment a key was added, and it would have looked like a bad key rather than a bad sender. It is now `AUTH_EMAIL_FROM`.
+
+**The gotcha that costs a week:** send nothing from a brand-new domain in volume on day one. Warm it gradually, and set up DMARC in monitoring mode (`p=none`) before anything stricter, or you will be debugging deliverability at the same time as debugging the signup flow.
+
+#### 2. Cloudflare R2, a US bucket plus a custom domain (OPS-4)
+
+**Get it:** in the existing Cloudflare account, create a new bucket with a **US jurisdiction** (or none). Jurisdiction is set at creation and cannot be changed, which is the whole reason this is not deferrable indefinitely. Then attach `media.klik.kreativvantage.com` as a custom domain to it, which requires the zone to be on Cloudflare (it is, since the app domain is there).
+
+```
+R2_BUCKET_NAME=klik-media-us
+```
+
+`next.config.ts` already lists that hostname in `remotePatterns`, so this was always the intent.
+
+**Also enable object versioning with a 30-day lifecycle rule.** This is the single most valuable setting on this page: it is the only thing standing between a bug in the erasure or purge code and permanently losing someone's wedding photos. Soft delete protects against user mistakes; nothing currently protects against a logic error, because those call `DeleteObjects` for real.
+
+#### 3. Sentry, for F-9
+
+**Get it:** sentry.io, free tier is enough, create a **Next.js** project. You need the DSN (safe to expose, it is in client bundles by design) and, for readable stack traces, an auth token for source map upload.
+
+```
+SENTRY_DSN=https://...
+SENTRY_AUTH_TOKEN=...
+```
+
+**Why it matters more than it sounds:** right now nothing tells you when something breaks. A 500 on the upload path at a Saturday wedding surfaces as a support email on Monday, if at all. Alert specifically on the cron route and, later, the Stripe webhook, because both fail silently by nature.
+
+#### 4. Google OAuth, optional
+
+**Get it:** Google Cloud Console, OAuth consent screen (External, no sensitive scopes so no verification review), then credentials.
+
+Authorised redirect URI, exactly: `https://klik.kreativvantage.com/api/auth/callback/google`, plus `http://localhost:3000/api/auth/callback/google` for local work.
+
+```
+AUTH_GOOGLE_ID=...
+AUTH_GOOGLE_SECRET=...
+```
+
+Genuinely optional. Resend alone makes signup work, and this is a conversion improvement rather than a dependency.
+
+#### 5. Vercel, already yours
+
+Set **every** variable in Project Settings, not only `.env.local`, and redeploy. A variable added without a redeploy does not reach the running build. `APP_URL` especially: without it `lib/env.ts` falls back to the ambient deployment URL, which produces QR codes that scan today and 404 once that deployment is superseded.
+
+Also set `CRON_SECRET`, or the purge route is open to anyone who finds it.
+
+#### 6. Not an API, but on the critical path
+
+**DMCA agent registration (LAW-2).** dmca.copyright.gov, a small fee, renewable every three years. Safe harbor is **not retroactive**, so every day unregistered is a day of uncovered exposure for photos guests upload. An afternoon.
+
+**Neon.** Confirm your plan's point-in-time-restore window and then actually test a restore into a branch. An untested backup is a belief, not a backup. Also create a second branch as **staging**: six migrations have now gone straight to the only database that exists, which was fine at 12 rows and stops being fine the day a real customer's event is in there.
 
 ### The gap that needs nothing from you
 
