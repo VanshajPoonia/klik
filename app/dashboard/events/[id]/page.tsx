@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect, notFound } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { albums, eventCoHosts, events, media, users, venueClients } from "@/lib/schema";
@@ -31,7 +31,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) notFound();
   const managerSession = await requireEventManagerSession(event.id, event.ownerId);
   if (!managerSession) notFound();
@@ -40,11 +40,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     db
       .select()
       .from(media)
-      .where(eq(media.eventId, id))
+      .where(and(eq(media.eventId, id), isNull(media.deletedAt)))
       .orderBy(desc(media.createdAt))
       .then((rows) => rows.map((item) => withProtectedMediaUrl(item, event.slug))),
     getAccountPlan(event.ownerId),
-    db.select().from(albums).where(eq(albums.eventId, id)).orderBy(albums.createdAt),
+    db.select().from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt))).orderBy(albums.createdAt),
     db
       .select({
         id: users.id,
@@ -54,12 +54,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       })
       .from(eventCoHosts)
       .innerJoin(users, eq(users.id, eventCoHosts.userId))
-      .where(eq(eventCoHosts.eventId, id))
+      .where(and(eq(eventCoHosts.eventId, id), isNull(eventCoHosts.deletedAt)))
       .orderBy(eventCoHosts.createdAt),
     db
       .select()
       .from(venueClients)
-      .where(eq(venueClients.ownerId, event.ownerId))
+      .where(and(eq(venueClients.ownerId, event.ownerId), isNull(venueClients.deletedAt)))
       .orderBy(venueClients.name),
   ]);
 

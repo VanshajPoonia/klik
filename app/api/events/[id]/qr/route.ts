@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import QRCode from "qrcode";
 import sharp from "sharp";
 import { db } from "@/lib/db";
@@ -26,7 +26,7 @@ function escapeXml(value: string) {
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const session = await requireEventManagerSession(event.id, event.ownerId);

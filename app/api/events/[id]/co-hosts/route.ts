@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { eventCoHosts, events, users } from "@/lib/schema";
 import { requireOwnerSession } from "@/lib/roles";
@@ -13,7 +13,7 @@ const addCoHostSchema = z.object({
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+  const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const session = await requireOwnerSession(event.ownerId);
@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const existing = await db
     .select({ userId: eventCoHosts.userId })
     .from(eventCoHosts)
-    .where(eq(eventCoHosts.eventId, id));
+    .where(and(eq(eventCoHosts.eventId, id), isNull(eventCoHosts.deletedAt)));
   if (existing.some((row) => row.userId === account.id)) {
     return NextResponse.json({ error: "This organizer is already a co-host" }, { status: 409 });
   }
@@ -65,6 +65,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "An event can have up to 5 co-hosts" }, { status: 409 });
   }
 
-  await db.insert(eventCoHosts).values({ eventId: id, userId: account.id });
+  // Re-adding someone who was removed has to revive their row rather than
+  // insert a second one: (event_id, user_id) is the composite primary key, so a
+  // plain insert would fail with a unique violation and surface as a 500 on a
+  // perfectly reasonable action.
+  await db
+    .insert(eventCoHosts)
+    .values({ eventId: id, userId: account.id })
+    .onConflictDoUpdate({
+      target: [eventCoHosts.eventId, eventCoHosts.userId],
+      set: { deletedAt: null, createdAt: new Date() },
+    });
   return NextResponse.json({ coHost: account }, { status: 201 });
 }

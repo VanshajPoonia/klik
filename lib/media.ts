@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { db } from "./db";
 import { media } from "./schema";
 import { decodeMediaCursor } from "./media-cursor";
@@ -27,7 +27,11 @@ const SINCE_SAFETY_CAP = 300;
  * by the guest gallery API route and the guest page's initial server render. */
 export async function fetchGalleryMedia(eventId: string, options: FetchGalleryOptions) {
   const { isOwner, guestId, cursor, since, limit = 50 } = options;
-  const conditions = [eq(media.eventId, eventId)];
+  // Soft-deleted rows are excluded for everyone, owners included. They exist
+  // only so the 30-day recovery window in the purge cron has something to
+  // restore from, and a deleted photo reappearing in a gallery would defeat
+  // the point of deleting it.
+  const conditions = [eq(media.eventId, eventId), isNull(media.deletedAt)];
   const sinceCursor = since ? decodeMediaCursor(since) : null;
   const pageCursor = cursor ? decodeMediaCursor(cursor) : null;
   if (sinceCursor) {

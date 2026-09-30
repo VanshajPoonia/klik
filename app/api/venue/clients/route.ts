@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { venueClients } from "@/lib/schema";
@@ -27,7 +27,7 @@ export async function GET() {
   const rows = await db
     .select()
     .from(venueClients)
-    .where(eq(venueClients.ownerId, session.user.id))
+    .where(and(eq(venueClients.ownerId, session.user.id), isNull(venueClients.deletedAt)))
     .orderBy(venueClients.name);
   return NextResponse.json({ clients: rows });
 }
