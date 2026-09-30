@@ -1,15 +1,84 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
+import { VisibilityField, type Visibility } from "@/components/dashboard/visibility-field";
+import { endOfDayIso, toDateInputValue } from "@/lib/dates";
 import type { OrganizerEvent } from "@/lib/events";
 import type { Media, VenueClient } from "@/lib/schema";
 
-type Visibility = "public" | "password" | "private";
+const COVER_CHOICES = 30;
+
+function CoverPicker({
+  photos,
+  value,
+  onChange,
+}: {
+  photos: Media[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const selected = photos.find((photo) => photo.id === value);
+  const choices = photos.slice(0, COVER_CHOICES);
+  if (selected && !choices.some((photo) => photo.id === selected.id)) {
+    choices.unshift(selected);
+  }
+
+  return (
+    <fieldset>
+      <legend className="mb-1.5 block text-xs font-medium tracking-wide text-muted uppercase">
+        Cover photo
+      </legend>
+      {choices.length === 0 ? (
+        <p className="text-sm text-muted">
+          Approved photos show up here as guests add them, and you can pick one as the cover.
+        </p>
+      ) : (
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            aria-pressed={value === ""}
+            className={`flex aspect-square items-center justify-center rounded-lg border-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
+              value === ""
+                ? "border-volt text-paper"
+                : "border-canvas-line text-muted hover:text-paper"
+            }`}
+          >
+            None
+          </button>
+          {choices.map((photo, index) => (
+            <button
+              key={photo.id}
+              type="button"
+              onClick={() => onChange(photo.id)}
+              aria-pressed={value === photo.id}
+              aria-label={`Use photo ${index + 1} as the cover`}
+              className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
+                value === photo.id ? "border-volt" : "border-transparent hover:border-paper/40"
+              }`}
+            >
+              <Image
+                src={photo.blobUrl}
+                alt=""
+                fill
+                unoptimized
+                sizes="96px"
+                className="object-cover"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </fieldset>
+  );
+}
 
 export function EventSettingsForm({
   event,
@@ -37,9 +106,7 @@ export function EventSettingsForm({
   const [isActive, setIsActive] = useState(event.isActive);
   const [downloadsEnabled, setDownloadsEnabled] = useState(event.downloadsEnabled);
   const [uploadsEnabled, setUploadsEnabled] = useState(event.uploadsEnabled);
-  const [expiresAt, setExpiresAt] = useState(
-    event.expiresAt ? new Date(event.expiresAt).toISOString().slice(0, 10) : "",
-  );
+  const [expiresAt, setExpiresAt] = useState(toDateInputValue(event.expiresAt));
   const [clientName, setClientName] = useState(event.clientName ?? "");
   const [clientEmail, setClientEmail] = useState(event.clientEmail ?? "");
   const [clientPhone, setClientPhone] = useState(event.clientPhone ?? "");
@@ -50,71 +117,83 @@ export function EventSettingsForm({
   const [qrTemplate, setQrTemplate] = useState(event.qrTemplate);
   const [venueFeatured, setVenueFeatured] = useState(event.venueFeatured);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const needsNewGalleryPassword =
     visibility === "password" && event.visibility !== "password";
+  const approvedPhotos = approvedMedia.filter((item) => item.kind === "photo");
 
   async function handleSave() {
     setSaving(true);
     setError(null);
     setSaved(false);
 
-    const res = await fetch(`/api/events/${event.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        visibility,
-        password: visibility === "password" && password ? password : undefined,
-        moderation,
-        isActive,
-        downloadsEnabled,
-        uploadsEnabled,
-        expiresAt: expiresAt || null,
-        clientId: canManageClients ? clientId || null : undefined,
-        clientName: canManageClients ? clientName || null : undefined,
-        clientEmail: canManageClients ? clientEmail || null : undefined,
-        clientPhone: canManageClients ? clientPhone || null : undefined,
-        coverMediaId: canCustomizeGallery ? coverMediaId || null : undefined,
-        accentColor: canCustomizeGallery ? accentColor : undefined,
-        backgroundColor: canCustomizeGallery ? backgroundColor : undefined,
-        qrTemplate: canCustomizeQr ? qrTemplate : undefined,
-        venueFeatured: canUseVenueHub ? venueFeatured : undefined,
-      }),
-    });
+    try {
+      const res = await fetch(`/api/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visibility,
+          password: visibility === "password" && password ? password : undefined,
+          moderation,
+          isActive,
+          downloadsEnabled,
+          uploadsEnabled,
+          expiresAt: endOfDayIso(expiresAt),
+          clientId: canManageClients ? clientId || null : undefined,
+          clientName: canManageClients ? clientName || null : undefined,
+          clientEmail: canManageClients ? clientEmail || null : undefined,
+          clientPhone: canManageClients ? clientPhone || null : undefined,
+          coverMediaId: canCustomizeGallery ? coverMediaId || null : undefined,
+          accentColor: canCustomizeGallery ? accentColor : undefined,
+          backgroundColor: canCustomizeGallery ? backgroundColor : undefined,
+          qrTemplate: canCustomizeQr ? qrTemplate : undefined,
+          venueFeatured: canUseVenueHub ? venueFeatured : undefined,
+        }),
+      });
 
-    setSaving(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Could not save settings");
-      return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Could not save settings");
+        return;
+      }
+      setPassword("");
+      setSaved(true);
+      router.refresh();
+    } catch {
+      setError("Could not save settings. Check your connection and try again.");
+    } finally {
+      setSaving(false);
     }
-    setPassword("");
-    setSaved(true);
-    router.refresh();
   }
 
   async function handleDelete() {
     if (!confirm(`Delete "${event.name}" and all its photos? This can't be undone.`)) return;
-    await fetch(`/api/events/${event.id}`, { method: "DELETE" });
-    router.push("/dashboard");
+    setDeleting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/events/${event.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Could not delete this event");
+        setDeleting(false);
+        return;
+      }
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("Could not delete this event. Check your connection and try again.");
+      setDeleting(false);
+    }
   }
 
   return (
     <Card className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Gallery access">
-          <select
-            className={inputClass}
-            value={visibility}
-            onChange={(event) => setVisibility(event.target.value as Visibility)}
-          >
-            <option value="public">Public - anyone with the link</option>
-            <option value="password">Password protected</option>
-            <option value="private">Private - organizer only</option>
-          </select>
-        </Field>
-        <Field label="Expires on (optional)">
+        <VisibilityField value={visibility} onChange={setVisibility} />
+        <Field label="Expires on (optional)" hint="The gallery closes at the end of this day">
           <input
             type="date"
             className={inputClass}
@@ -217,22 +296,7 @@ export function EventSettingsForm({
       {canCustomizeGallery && (
         <fieldset className="space-y-4 rounded-xl border border-canvas-line p-4">
           <legend className="px-1 text-sm font-medium text-paper">Gallery appearance</legend>
-          <Field label="Cover photo">
-            <select
-              className={inputClass}
-              value={coverMediaId}
-              onChange={(event) => setCoverMediaId(event.target.value)}
-            >
-              <option value="">No cover photo</option>
-              {approvedMedia
-                .filter((item) => item.kind === "photo")
-                .map((item, index) => (
-                  <option key={item.id} value={item.id}>
-                    Photo {index + 1}
-                  </option>
-                ))}
-            </select>
-          </Field>
+          <CoverPicker photos={approvedPhotos} value={coverMediaId} onChange={setCoverMediaId} />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Accent color">
               <input
@@ -251,6 +315,7 @@ export function EventSettingsForm({
               />
             </Field>
           </div>
+          <p className="text-xs text-muted">Text and buttons adjust automatically to stay readable.</p>
         </fieldset>
       )}
 
@@ -270,69 +335,64 @@ export function EventSettingsForm({
         </Field>
       )}
 
-      <div className="space-y-3">
-        <label className="flex items-center gap-2 text-sm text-paper">
-          <input
-            type="checkbox"
-            checked={isActive}
-            onChange={(event) => setIsActive(event.target.checked)}
-            className="h-4 w-4 rounded border-canvas-line accent-volt"
-          />
+      <div>
+        <Checkbox
+          checked={isActive}
+          onChange={(event) => setIsActive(event.target.checked)}
+          hint="Turn this off when the event is over. It frees up a plan slot and stops uploads."
+        >
           Event is active
-        </label>
+        </Checkbox>
         {canUseVenueHub && (
-          <label className="flex items-center gap-2 text-sm text-paper">
-            <input
-              type="checkbox"
-              checked={venueFeatured}
-              onChange={(event) => setVenueFeatured(event.target.checked)}
-              className="h-4 w-4 rounded border-canvas-line accent-volt"
-            />
+          <Checkbox
+            checked={venueFeatured}
+            onChange={(event) => setVenueFeatured(event.target.checked)}
+          >
             Send the reusable venue QR to this event
-          </label>
+          </Checkbox>
         )}
-        <label className="flex items-center gap-2 text-sm text-paper">
-          <input
-            type="checkbox"
-            checked={moderation}
-            onChange={(event) => setModeration(event.target.checked)}
-            className="h-4 w-4 rounded border-canvas-line accent-volt"
-          />
+        <Checkbox
+          checked={moderation}
+          onChange={(event) => setModeration(event.target.checked)}
+        >
           Review photos before they go public
-        </label>
-        <label className="flex items-center gap-2 text-sm text-paper">
-          <input
-            type="checkbox"
-            checked={uploadsEnabled}
-            onChange={(event) => setUploadsEnabled(event.target.checked)}
-            className="h-4 w-4 rounded border-canvas-line accent-volt"
-          />
+        </Checkbox>
+        <Checkbox
+          checked={uploadsEnabled}
+          onChange={(event) => setUploadsEnabled(event.target.checked)}
+          hint="Pause or resume guest uploads without ending the event."
+        >
           Uploads open
-        </label>
-        <label className="flex items-center gap-2 text-sm text-paper">
-          <input
-            type="checkbox"
-            checked={downloadsEnabled}
-            onChange={(event) => setDownloadsEnabled(event.target.checked)}
-            className="h-4 w-4 rounded border-canvas-line accent-volt"
-          />
+        </Checkbox>
+        <Checkbox
+          checked={downloadsEnabled}
+          onChange={(event) => setDownloadsEnabled(event.target.checked)}
+        >
           Guests can download photos and videos
-        </label>
+        </Checkbox>
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-400" role="alert">
+          {error}
+        </p>
+      )}
 
       <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={saving}>
+        <Button onClick={handleSave} disabled={saving || deleting}>
           {saving ? "Saving…" : "Save settings"}
         </Button>
-        {saved && <span className="text-xs text-muted">Saved</span>}
+        {saved && (
+          <span className="text-xs text-muted" role="status">
+            Saved
+          </span>
+        )}
       </div>
 
       {canDeleteEvent && (
         <div className="border-t border-canvas-line pt-5">
-          <Button variant="danger" onClick={handleDelete}>
-            Delete event
+          <Button variant="danger" onClick={handleDelete} disabled={saving || deleting}>
+            {deleting ? "Deleting…" : "Delete event"}
           </Button>
         </div>
       )}
