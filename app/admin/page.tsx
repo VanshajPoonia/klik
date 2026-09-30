@@ -112,7 +112,7 @@ export default async function AdminPage() {
         <div className="space-y-3">
           {clients.length === 0 && (
             <Card className="text-center text-sm text-muted">
-              No clients yet - provision your first venue to hand off a QR code and login.
+              No clients yet. Provision your first venue to hand off a QR code and login.
             </Card>
           )}
           {clients.map((client) => (

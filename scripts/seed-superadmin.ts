@@ -7,7 +7,7 @@ async function main() {
   try {
     process.loadEnvFile(".env.local");
   } catch {
-    // No .env.local present - assume the caller set env vars directly.
+    // No .env.local present, so assume the caller set env vars directly.
   }
 
   const username = process.env.SUPERADMIN_USERNAME;
@@ -21,7 +21,7 @@ async function main() {
     process.exit(1);
   }
 
-  // Deferred until after env is loaded - lib/db throws at import time if
+  // Deferred until after env is loaded, because lib/db throws at import time if
   // DATABASE_URL isn't set yet.
   const { db } = await import("../lib/db");
 

@@ -11,7 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { PlanKey } from "./plans";
 
-// --- Auth.js tables (organizers only - guests never get a row here) ---
+// --- Auth.js tables (organizers only, guests never get a row here) ---
 
 export const USER_ROLES = ["organizer", "superadmin"] as const;
 export type UserRole = (typeof USER_ROLES)[number];

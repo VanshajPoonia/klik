@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { customAlphabet } from "nanoid";
 
 // Account login credentials (superadmin/venue) guard access to moderation,
-// deletion, and settings - higher stakes than a gallery view-password, so a
+// deletion, and settings. That is higher stakes than a gallery view-password, so a
 // higher cost than the cost-10 convention used for event gallery passwords.
 const ACCOUNT_PASSWORD_COST = 12;
 

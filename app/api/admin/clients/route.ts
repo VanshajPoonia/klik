@@ -135,7 +135,7 @@ export async function POST(request: Request) {
   return NextResponse.json(
     {
       username: user.username,
-      password, // shown once here - never retrievable again after this response
+      password, // shown once here, never retrievable again after this response
       event: toPublicEvent(event),
     },
     { status: 201 },

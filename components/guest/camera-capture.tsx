@@ -183,7 +183,7 @@ export function CameraCapture({
       trackRef.current = track;
       const capabilities = readCapabilities(track);
       setCaps(capabilities);
-      // Reset to each camera's own "no zoom" baseline - not every device uses 1.
+      // Reset to each camera's own "no zoom" baseline, since not every device uses 1.
       setZoom(capabilities.zoom ? capabilities.zoom.min : 1);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -658,7 +658,7 @@ export function CameraCapture({
           </div>
         )}
 
-        {/* Zoom presets - tap to jump, pinch or double-tap for the rest */}
+        {/* Zoom presets: tap to jump, pinch or double-tap for the rest */}
         {!error && !starting && zoomPresets.length > 1 && (
           <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 p-1 backdrop-blur">
             {zoomPresets.map((f) => {
@@ -691,7 +691,7 @@ export function CameraCapture({
       {/* Bottom control deck */}
       {!error && (
         <div className="shrink-0 bg-black px-6 pb-8 pt-4">
-          {/* Looks - hidden only where video can't carry them */}
+          {/* Looks: hidden only where video can't carry them */}
           {looksApplyHere && (
             <div className="-mx-6 mb-4 flex gap-2 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {LOOKS.map((l) => (

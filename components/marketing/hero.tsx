@@ -12,7 +12,7 @@ export function Hero() {
           </h1>
           <p className="mt-7 max-w-xl text-lg leading-relaxed text-muted">
             Put a QR code on the table. Guests scan it, snap photos and videos on their own
-            phone, and watch them land in one shared album - live, before the cake&rsquo;s even
+            phone, and watch them land in one shared album, live, before the cake&rsquo;s even
             cut. No app to download, no account to make.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-4">

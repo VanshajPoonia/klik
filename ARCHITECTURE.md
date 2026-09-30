@@ -1,6 +1,6 @@
 # Klik - Event Photo Sharing: Architecture
 
-> **Status:** Milestones 1–4 (basic) built and deployed; see §11 for the service-side (superadmin + sales-provisioned venues) addition. This document is the source of truth for agents building on it.
+> **Status:** Milestones 1 to 4 (basic) built and deployed; see §11 for the service-side (superadmin + sales-provisioned venues) addition. This document is the source of truth for agents building on it.
 > **Elevator pitch:** Every event gets a unique webpage + QR code. Guests scan, optionally enter a name, and upload photos/videos into one shared, live-updating gallery - no app, no account. Organizers manage everything from a dashboard. Events can be self-serve or provisioned for a venue by an internal sales team (§11).
 
 ---

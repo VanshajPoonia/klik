@@ -9,7 +9,7 @@ const steps = [
   {
     n: "02",
     title: "Add a name, snap away",
-    body: "A first name is optional. After that, it's just their camera roll - photos and videos, straight from the phone.",
+    body: "A first name is optional. After that, it's just their camera roll: photos and videos, straight from the phone.",
   },
   {
     n: "03",

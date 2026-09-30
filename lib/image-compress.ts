@@ -59,7 +59,7 @@ export async function compressImageForUpload(file: File): Promise<CompressedImag
     ctx.drawImage(bitmap, 0, 0, width, height);
     bitmap.close();
 
-    // Only sharpen if we actually downscaled - an already native-resolution
+    // Only sharpen if we actually downscaled. An already native-resolution
     // image doesn't need it and sharpening it only adds size for no benefit.
     if (scale < 1) sharpen(ctx, width, height);
 

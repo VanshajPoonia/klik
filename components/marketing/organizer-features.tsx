@@ -10,7 +10,7 @@ const features = [
   {
     icon: ShieldCheck,
     title: "Moderation",
-    body: "Approve every photo before it's public, or leave the gallery open - your call.",
+    body: "Approve every photo before it's public, or leave the gallery open. Your call.",
   },
   {
     icon: Lock,

@@ -39,7 +39,7 @@ const registerSchema = z.object({
   contentHash: z.string().optional(),
   albumId: z.string().min(10).max(64).nullable().optional(),
   // True when the browser already resized/re-encoded the photo before
-  // upload - skips redundant server-side recompression of the same file.
+  // upload, which skips redundant server-side recompression of the same file.
   clientCompressed: z.boolean().optional(),
 });
 
@@ -225,7 +225,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       width = compressed.info.width;
       height = compressed.info.height;
     } catch (error) {
-      // Compression is a best-effort optimization - fall back to the original upload untouched.
+      // Compression is a best-effort optimization. Fall back to the original upload untouched.
       console.error("Photo compression failed, storing original:", error);
     }
   }

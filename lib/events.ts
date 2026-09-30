@@ -5,7 +5,7 @@ import { events, type Event, type EventVisibility } from "./schema";
 
 const slugSuffix = customAlphabet("23456789abcdefghjkmnpqrstuvwxyz", 6);
 
-// Gallery passwords are shared with party guests, not account credentials -
+// Gallery passwords are shared with party guests, not account credentials, so
 // cost 10 per ARCHITECTURE.md §8's documented security checklist.
 const GALLERY_PASSWORD_COST = 10;
 
