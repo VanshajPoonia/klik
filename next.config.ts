@@ -30,6 +30,12 @@ const nextConfig: NextConfig = {
    */
   outputFileTracingIncludes: {
     "/api/e/[slug]/media": ["./node_modules/@img/**"],
+    // The health check encodes a test image, so it needs the same files. It was
+    // missing them, which is informative: the binding package loads far enough
+    // to attempt a dlopen and only then fails on the shared object, so the
+    // thing tracing misses is specifically the libvips `.so`, which is opened
+    // by the OS and is invisible to any JavaScript tracer.
+    "/api/health": ["./node_modules/@img/**"],
   },
 };
 
