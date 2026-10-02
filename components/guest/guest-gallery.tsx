@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
@@ -12,6 +12,13 @@ import { isLightColor, readableOn } from "@/lib/color";
 import { compressImageForUpload } from "@/lib/image-compress";
 import { formatDuration, probeVideo } from "@/lib/video-poster";
 import { readCaptureTimeFromFile } from "@/lib/exif";
+import {
+  VIEW_ENHANCE_FILTER,
+  getEnhancePreference,
+  getEnhancePreferenceOnServer,
+  setEnhancePreference,
+  subscribeEnhancePreference,
+} from "@/lib/enhance-view";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { CapturedItem } from "@/components/guest/camera-capture";
 import { encodeMediaCursor } from "@/lib/media-cursor";
@@ -155,6 +162,19 @@ export function GuestGallery({
   // Tracked by id, not position: new photos stream in at the head every poll,
   // which would otherwise shift the open item out from under the viewer.
   const [lightboxId, setLightboxId] = useState<string | null>(null);
+  /**
+   * Viewer-side enhancement, on by default, stored per browser. Subscribed to
+   * rather than read into state, so there is no render with the wrong value
+   * before an effect corrects it.
+   */
+  const enhanced = useSyncExternalStore(
+    subscribeEnhancePreference,
+    getEnhancePreference,
+    getEnhancePreferenceOnServer,
+  );
+  // Grid tiles get the cheap GPU approximation. A hundred of them are on screen
+  // at once, so the per-image histogram pass belongs in the lightbox, not here.
+  const gridFilter = enhanced ? VIEW_ENHANCE_FILTER : undefined;
   const [loadingMore, setLoadingMore] = useState(false);
   const [activeAlbumId, setActiveAlbumId] = useState<string>("all");
   const [uploadAlbumId, setUploadAlbumId] = useState<string>("");
@@ -577,6 +597,7 @@ export function GuestGallery({
                         unoptimized
                         sizes="(min-width: 768px) 25vw, 50vw"
                         className="pointer-events-none object-cover"
+                        style={{ filter: gridFilter }}
                       />
                     ) : (
                       <video
@@ -605,6 +626,7 @@ export function GuestGallery({
                     unoptimized
                     sizes="(min-width: 768px) 25vw, 50vw"
                     className="object-cover"
+                    style={{ filter: gridFilter }}
                   />
                 )}
                 {item.status === "pending" && item.mine && (
@@ -653,6 +675,9 @@ export function GuestGallery({
           canDownload={event.downloadsEnabled || isOwner}
           canSlideshow={canSlideshow}
           downloadBaseUrl={`/api/e/${event.slug}/media`}
+          slug={event.slug}
+          enhanced={enhanced}
+          onEnhancedChange={setEnhancePreference}
         />
       )}
     </div>

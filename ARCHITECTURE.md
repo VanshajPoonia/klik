@@ -196,7 +196,11 @@ Optional: `APP_URL`, `CRON_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUT
 
 Coverage was chosen on one rule: **cover what already went wrong once.** `lib/file-signature.test.ts` pins SEC-9, `lib/events.test.ts` pins SEC-10 structurally, `lib/exif.test.ts` pins the metadata behaviour.
 
-**What is not covered is the important part.** The paths that destroy data, meaning the purge circuit breaker, `lib/erasure.ts` and the co-host revocation predicate, need a throwaway Postgres to run against. There is nowhere safe to point them until a Neon staging branch exists. Do not treat the green suite as coverage of those.
+`npm run test:db` is the second suite, 30 tests against a real Postgres, covering the three paths that destroy data: the purge circuit breaker, `lib/erasure.ts` and the co-host revocation predicate. These cannot be written any other way, because the predicates *are* the behaviour and a test that mocks the query away tests nothing.
+
+Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster under `/tmp` on port 55433, so it is neither a system service nor your development database. `test/harness.ts` refuses to run unless the target is named `klik_test` and is not hosted on Neon, because the suite truncates every table.
+
+**One rule for that suite:** production runs `neon-http`, which has no transactions, while the tests run `node-postgres`, which does. Nothing in `test/*.dbtest.ts` may use `db.transaction()`. It would pass there and fail in production, which is worse than no test.
 
 ---
 
