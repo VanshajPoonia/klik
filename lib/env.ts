@@ -46,6 +46,11 @@ const schema = z.object({
   AUTH_GOOGLE_ID: optionalString(z.string().min(1)),
   AUTH_GOOGLE_SECRET: optionalString(z.string().min(1)),
   AUTH_RESEND_KEY: optionalString(z.string().min(1)),
+
+  // The address sign-in emails come from. Resend rejects any domain that is not
+  // verified in your account, so this must match a domain you have actually set
+  // up there, not the product's marketing domain.
+  AUTH_EMAIL_FROM: optionalString(z.string().min(3)),
 });
 
 function parseEnv() {

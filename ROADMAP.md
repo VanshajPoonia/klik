@@ -28,6 +28,41 @@
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
 - Rate limiting (`lib/ratelimit.ts` does not exist), any tests, any error tracking, any transactional email, any background job runner.
 
+
+## Contents
+
+**This file is the whole plan.** Everything is here: phases, tasks, decisions, findings and build order. There is no second document.
+
+| Section | What it holds |
+|---|---|
+| §0 Where the code actually is | Real state of the codebase, since ARCHITECTURE.md is stale until F-1 |
+| Phase SEC | Security findings from the audit, most already fixed |
+| Phase F | Foundations: tests, permissions, usage, jobs, email, env, error tracking |
+| Phase ID | Global usernames (v1.1) |
+| Phase ACC | Guest accounts and the guest-to-organizer path |
+| Phase ORG | Multiple organizers per event (v1.1) |
+| **Phase ACT** | **Event activation by admin. The v1 replacement for payments** |
+| Phase PAY | Stripe. Deferred out of v1 |
+| Phase MED | Per-photo visibility, share links, folders, EXIF stripping |
+| Phase AI | Grouping, enhancement, safety screening. Post-v1 |
+| Phase QR | QR control and the in-app print studio |
+| Phase CAM | Camera, image editor, disposable mode |
+| Phase GRW | Growth loops: recap email, challenges, referrals |
+| Phase VEN | Venue surfaces: live display, kiosk, custom domains |
+| Phase OPS | Transcoding, resumable uploads, the US bucket move |
+| Phase TRS | Trust, safety, compliance, accessibility |
+| Phase ADM | Admin console |
+| Phase LAW | US compliance: terms, DMCA, COPPA, consent scope |
+| Section B | Proposals, all accepted and promoted |
+| Section C | Every decision made, with reasoning |
+| Production hardening pass | What changed on 2026-09-30 and why |
+| What breaks first | Scalability read against a 200-guest wedding |
+| Architecture decisions | Six things worth reviewing rather than inheriting |
+| v1 scope and build order | The single-threaded order to actually work through |
+| Credentials and setup | Which accounts to create, how, and the gotchas, plus a click-by-click runbook |
+
+Work is requested by task ID: "do MED-8", or "do F-1 through F-5".
+
 ---
 
 # SECTION A: the work you asked for
@@ -152,8 +187,13 @@ What is true is narrower: the **purge cron** does not read it, and per C-8 it sh
 These are not glamorous but four of them are hard blockers. Do F-1 through F-5 before anything in Phase PAY, MED, or AI.
 
 ### F-1. Rewrite ARCHITECTURE.md to match reality
-**Size:** S. **Blocks:** everything, because agents treat it as source of truth and it currently describes a storage layer the code abandoned.
-Rewrite §1 (R2 not Blob), §3 (add albums, co-hosts, venue clients, plan fields, accent colours, access version), §4 (the real route tree), §6 (the real upload path including HEIC conversion and compression), §9 (mark what shipped), §10 (co-hosts shipped, so remove it from open questions). Add a "last verified against commit" line at the top so drift is visible next time.
+**Size:** S. **DONE 2026-10-02.**
+
+Replaced rather than patched. The old file described Vercel Blob, Next.js 15, a domain the project does not own, and a security checklist for features later built differently, which is worse than having no document because an agent reads it as fact.
+
+The new one is organised around what actually causes bugs here rather than around the old section numbering. Section 3, "six constraints that will bite you", is the load-bearing part: no transactions on `neon-http`, JWT sessions meaning logins cannot be revoked, plan limits duplicated between `lib/plans.ts` and the plpgsql triggers, soft-delete filters being load-bearing, R2 signing but not enforcing `Content-Type`, and every image view costing an invocation plus a query. Section 7 separates soft delete, retention purge and erasure, which are three different things that get confused into either data loss or a missed legal obligation.
+
+It carries a "last verified against commit" line, so the next person can see at a glance how far it has drifted.
 
 ### F-2. Rate limiting
 **Size:** M. **Blocks:** PAY (webhook abuse), ACC (OTP abuse), ID (username enumeration), MED (share link password brute force).
@@ -189,8 +229,20 @@ AI embeddings, transcoding, large exports, and email all need work that outlives
 `lib/env.ts` currently reads `process.env` ad hoc and `lib/storage.ts` uses non-null assertions on R2 credentials, which fails at request time instead of at deploy time. Add a Zod schema for every variable, parsed once at module load, with a clear error naming the missing key.
 
 ### F-7. Test harness
-**Size:** M.
-There is not a single test in the repo, and Phase PAY introduces money. Add Vitest for `lib/` (access rules, plan gating, usage maths, permissions matrix, cursor encoding, rate limiter concurrency) and Playwright for four flows: guest joins and uploads, organizer moderates and downloads, checkout completes and the plan applies, share link expires. Run both in CI.
+**Size:** M. **Started 2026-10-01. Pure-logic half done, database half blocked.**
+
+Vitest is set up (`vitest.config.mts`, `npm test`), with 66 tests across three files. `@types/node` went from 20 to 24 in the same change, because vitest 5 requires it and the old pin did not match the Node 24 the project actually runs on Vercel.
+
+Coverage was chosen on one rule: **cover what already went wrong once.**
+- `lib/file-signature.test.ts` pins SEC-9. A zip, a PDF, an SVG, a WAV and an AVI are all refused, QuickTime and HEIC are separated by ISO brand rather than extension, and the deliberate "unknown brand is probably video" trade is pinned so it cannot be reversed by accident.
+- `lib/events.test.ts` pins SEC-10, and does it structurally. Beyond asserting the allowlist, it reads the `events` columns out of the Drizzle schema and fails if any column is neither published nor listed as withheld **with a reason**. That turns "someone forgot to exclude the new column" from a silent disclosure into a failing build. This is the single most valuable test in the repo.
+- `lib/exif.test.ts` pins MED-8, including the claim the roadmap got wrong: that the pipeline output carries no EXIF. It also pins that the lenient retry decodes a truncated file the strict pass throws on, so the retry cannot quietly become dead code.
+
+**Found a real bug while writing these.** `slugifyEventName` deleted accented characters instead of folding them, so "Café Münch" became `caf-mnch` and "Renée's Party" became `rene-s-party`. The slug is the organizer-facing gallery URL and it goes on a printed QR sign, which is the worst place for it to look broken. Fixed with NFD normalisation, plus a trailing-dash fix where the 40-character truncation landed on a separator. Names in non-Latin scripts still fall back to `event` plus the random suffix, which is now tested rather than incidental.
+
+**Still blocked, and this is the part that matters most.** The paths that actually destroy data (the purge cron's circuit breaker, `lib/erasure.ts`, and the co-host revocation predicate in `lib/roles.ts`) need a throwaway Postgres to run against. There is nowhere safe to point them until the Neon staging branch exists, and pointing them at production is how you find out what the circuit breaker does. These are the reason F-7 was moved ahead of ACT-1, so F-7 is **not** finished.
+
+Still to do: the database-backed suite above, rate limiter concurrency, and Playwright for four flows (guest joins and uploads, organizer moderates and downloads, activation applies, share link expires). Run all of it in CI.
 
 ### F-8. Transactional email
 **Size:** S. **Depends on:** F-5.
@@ -290,11 +342,11 @@ Transfer flow (owner picks a manager, that person accepts, billing responsibilit
 
 ---
 
-## Phase PAY: Stripe, plans, and limit warnings
+## Phase ACT: Event activation (the v1 replacement for payments)
 
-### PAY-1. One entitlement model, two ways to grant it
-**Size:** M. **Blocks:** all of PAY. Read this one carefully, it is the architectural decision in this phase.
-**Decision (2026-09-30): Stripe and the admin panel are both first-class grant sources, and neither may overwrite the other.** The admin panel is how things are controlled today and it stays that way after Stripe ships, so the model cannot be "Stripe is truth and admin is a hack".
+### ACT-1. One entitlement model, admin-granted first
+**Size:** M. **Blocks:** ACT-2, ACT-3, and later all of PAY. Formerly PAY-1; renamed 2026-10-01 when payments left v1.
+**Decision: the admin panel and (later) Stripe are both first-class grant sources, and neither may overwrite the other.** The admin panel is how things run today and stays that way after Stripe ships, so the model cannot be "Stripe is truth and admin is a hack". Building the human path first is the point: Stripe later adds a `source`, not a new concept.
 
 `users.plan_key` puts the plan on the **account**, but Klik Event ($39) and Klik Premium ($89) are **one-time per event**. As soon as someone buys a second pass, or buys Premium for a wedding and Event for a birthday, the account-level field is wrong. Replace it with an entitlement ledger:
 - Table `entitlements` (id, user_id, event_id nullable, plan_key, source `stripe | admin | promo`, status `active | consumed | revoked | expired`, granted_by_user_id nullable, reason text, stripe_ref nullable, starts_at, ends_at nullable, created_at, revoked_at). An `event_id`-null active row is an unused pass the dashboard offers to apply to a new event.
@@ -312,9 +364,30 @@ Transfer flow (owner picks a manager, that person accepts, billing responsibilit
 - Keep `events.plan_key` as a denormalised cache of the resolved plan, refreshed whenever entitlements change, so the hot path is one column read rather than a ledger walk. Recompute it in the nightly reconciliation job (F-4).
 - Every `canX(plan.key)` call site moves to the event-scoped resolver.
 
-### PAY-1b. Admin plan control surface
-**Size:** M. **Depends on:** PAY-1. Pull this forward if you want admin control working before Stripe.
-The admin panel already sets `users.plan_key` through `POST /api/admin/clients/[userId]/plan`. Rework it against the ledger: grant a plan to an account or to one specific event, with a reason, an optional end date, and an explicit revoke. Show the grant source on every event in the admin list so it is obvious at a glance whether an account is paying or comped. This task is independent of Stripe and can ship first.
+### ACT-2. Admin activation surface
+**Size:** M. **Depends on:** ACT-1. Formerly PAY-1b. **This is the v1 revenue mechanism: a human decides.**
+The admin panel already sets `users.plan_key` through `POST /api/admin/clients/[userId]/plan`. Rework it against the ledger: grant a plan to an account or to one specific event, with a reason, an optional end date, and an explicit revoke. Show the grant source on every event in the admin list so it is obvious at a glance whether an account is paying or comped.
+
+### ACT-3. The organizer's side of activation
+**Size:** M. **Depends on:** ACT-1. New 2026-10-01.
+An organizer creates an event and it is **inactive**: no live QR, no guest access, no uploads. They can still name it, set the date, pick colours and design the print sign, so the waiting time is useful rather than dead. The dashboard states plainly what is pending and what unlocks when it is activated.
+
+Three things this has to get right, because they are what turn a waiting screen into a support ticket:
+- **Never a dead end.** A blocked action says what is happening and who is doing it, not "403".
+- **The organizer must know when it flips.** They will not sit refreshing. Email on activation (F-8), which is one more reason Resend sits early in the build order.
+- **The QR must not exist until activation.** A QR generated against an inactive event either 404s or silently starts working later; both are worse than not offering it yet. This interacts with QR-1: a slug is permanent once printed, so it should not be mintable before the event is real.
+
+### ACT-4. Activation requests and queue
+**Size:** S. **Depends on:** ACT-2, ACT-3.
+An organizer asks for activation; the request lands in a queue on the admin dashboard with the event, the requester, and the date it is needed by. Without this the trigger is a WhatsApp message and the failure mode is an event going live an hour late. Notify the admin on request, notify the organizer on decision, record both in the audit log (ADM-4).
+
+---
+
+## Phase PAY: Stripe (deferred out of v1, 2026-10-01)
+
+Everything here still stands and none of it is wasted, because ACT-1's ledger was designed for exactly this: Stripe becomes a second `source` writing rows a human already writes today. Start it when you want to stop activating events by hand.
+
+**One thing to re-read before starting:** architecture note 2 below. Plan limits are enforced both in `lib/plans.ts` and in plpgsql triggers that hard-code `venue -> 5, else 1` and read `users.plan_key` directly. ACT-1 moves plan resolution off that column, so the triggers have to be resolved as part of ACT-1, not left for PAY. They agree today only by coincidence.
 
 ### PAY-2. Stripe data model
 **Size:** M. **Depends on:** PAY-1.
@@ -398,12 +471,23 @@ The current ZIP route streams inline and 413s above 2 GB. Move large exports to 
 
 ### MED-8. Strip EXIF and GPS from stored media
 **Size:** S. **Promoted from NEW-10 on 2026-09-30.** Do this early; it is a live leak, not a feature.
-Phone photos carry GPS coordinates, device serial hints, and capture software in EXIF, and right now all of it survives into R2 and straight out again through the ZIP export. A guest uploading a photo from inside someone's home is publishing that address to everyone the organizer shares the gallery with.
-- Strip on the existing server-side compression pass. `sharp` already re-encodes every photo there, so this costs almost nothing: drop the metadata by default rather than copying it through.
-- **Keep two fields**: orientation (or the image renders sideways) and `DateTimeOriginal`, which AI-1 needs for time clustering. Copy those two onto the `media` row so the pixel data can be stripped clean while the roadmap's grouping features still work.
-- Backfill existing media through a job (F-5), since everything uploaded to date still carries full EXIF.
+**Scope corrected 2026-10-01 after reading the code properly. It is narrower than I first described.** `sharp` drops metadata unless you call `.withMetadata()`, and the pipeline does not, so photos that go through the server compression pass are already stripped and `.rotate()` already bakes in orientation. Client-compressed photos go through a canvas re-encode, which also strips. Most photos are therefore already clean.
+
+Three real gaps remain:
+1. **The compression fallback.** When the pass throws (a HEIC convert failure, a corrupt file, a timeout) the `catch` stores the original **untouched, with full EXIF including GPS**. It is a narrow path, but it is exactly the path an unusual file takes, and it fails open.
+2. **Videos are never touched at all.** QuickTime and MP4 store location in a `©xyz` atom and `sharp` cannot help. This is the bigger leak now, and it needs ffmpeg, which means it rides along with OPS-1's transcode job rather than being fixed alone.
+3. **`DateTimeOriginal` is being thrown away.** AI-1 needs capture time for its moment clustering, and the current pass discards it with everything else. It has to be read and stored on the `media` row *before* stripping, or that feature quietly has nothing to work with.
+**DONE 2026-10-01 for gaps 1 and 3.** Gap 2 (video) stays open and rides with OPS-1.
+
+- `lib/exif.ts` reads `DateTimeOriginal` and nothing else. Hand-written rather than a dependency, because the same code has to run server-side over a Buffer from R2 and in the browser over the original `File`, before the canvas compression pass destroys it.
+- `media.captured_at` is a **zone-less** `timestamp` (migration `0009`). EXIF carries no offset, so storing an instant would mean inventing one. Null means "we do not know" and is deliberately not backfilled from `created_at`: upload time is a different fact the row already records, and copying it across would turn an honest gap into a confident wrong answer that AI-1 would then cluster on.
+- **The fallback is closed, and the rule is now "we store only bytes we produced."** `sanitizePhoto` tries the normal pass, then retries with `failOn: "none"` and without mozjpeg, which measurably rescues a truncated file the strict pass throws on (verified: strict threw, lenient decoded). If both fail, the upload is rejected with a 422 and the object is deleted. A failed HEIC convert and a failed `PutObject` now take the same path, where both previously left the original in place.
+- **This is a behaviour change**: a photo that cannot be decoded is now refused rather than stored intact. That is a worse upload experience and a much better privacy guarantee, and it was the right way round because the bytes a camera produces carry GPS, a device serial and often the owner's name, into a gallery whose whole purpose is a shareable link.
+- **HEIC keeps no capture time.** Its metadata lives in an ISO base media container, not a JPEG APP1 segment, and `heic-convert` does not carry EXIF across. iPhone photos fall back to upload time until OPS-1 puts a real decoder in the pipeline. Documented in `lib/exif.ts` rather than left to be rediscovered.
+
+Still open here:
+- **Videos.** QuickTime and MP4 store location in a `©xyz` atom and `sharp` cannot help. This is now the only remaining leak, and it needs ffmpeg, so it rides with OPS-1.
 - Add an organizer setting "keep full photo metadata", default off, for the professional-photographer case where EXIF is part of the deliverable.
-- Videos carry location too and `sharp` does not touch them. Either strip with ffmpeg in the transcode pass (NEW-8) or document plainly that video metadata is preserved.
 
 ### MED-9. Reactions and comments
 **Size:** M. **Depends on:** ACC-5. **Decided 2026-09-30 (C-5).**
@@ -647,7 +731,7 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 
 **EXPANDED 2026-09-30: this now also carries the caching work, and both are in v1.** They are the same question ("how do bytes reach the viewer") and the same cutover, so doing them separately means migrating delivery twice.
 
-Steps: create `klik-media-us` with a US jurisdiction; copy objects with `rclone` or a short script; attach the custom domain `media.klik.kreativvantage.com` (already present in `next.config.ts`'s `remotePatterns`, so this was always the intent); switch public-gallery delivery from signed **URLs** to signed **cookies** so Cloudflare's edge can actually cache; flip `R2_BUCKET_NAME` and drop the `.eu.` endpoint in `lib/storage.ts`; verify a full upload and playback round trip; delete the old bucket once nothing references it. `blob_pathname` is bucket-relative, so no database change is needed.
+Steps: create `klik-media-us` with a US jurisdiction; create `klik-media-backup` beside it, with the app's token scoped to the primary bucket only and a copy step writing every new object across, because R2 has no object versioning and a second bucket is the only recovery path from a deletion bug; copy existing objects with `rclone` or a short script; attach the custom domain `media.klik.kreativvantage.com` (already present in `next.config.ts`'s `remotePatterns`, so this was always the intent); switch public-gallery delivery from signed **URLs** to signed **cookies** so Cloudflare's edge can actually cache; flip `R2_BUCKET_NAME` and drop the `.eu.` endpoint in `lib/storage.ts`; verify a full upload and playback round trip; delete the old bucket once nothing references it. `blob_pathname` is bucket-relative, so no database change is needed.
 
 **Keep private and password galleries on signed URLs.** Caching is only safe where the content is genuinely public; a cached response for a password-gated gallery is a disclosure. The split has to be explicit in the delivery route, not incidental.
 
@@ -807,7 +891,11 @@ Nothing is blocking. The open items below are judgement calls that can wait unti
 
 ### The v1 line
 
-**v1 is: paid events, no AI.** Phases SEC, F, PAY, MED, QR, ACC, **plus LAW** (added 2026-09-30: you cannot take money from US consumers for user-generated content hosting without terms, a privacy policy, and DMCA registration). The product already works; v1 makes it sellable. Phases AI, GRW, VEN, OPS and TRS come after revenue exists.
+**v1 is: admin-activated events, no payments, no AI.** Phases SEC, F, LAW, ACT, MED, QR, ACC.
+
+**Payments deferred (decided 2026-10-01).** An organizer creates an event; it stays inactive until a **superadmin activates it from the admin dashboard**, which is close to how the business already runs. Stripe (PAY-2 onward) moves out of v1 entirely.
+
+This is a better sequence than it might look. Activation still needs the entitlement model underneath it (ACT-1, formerly PAY-1), because "who is allowed what" has to be answered the same way whether a human or a webhook grants it. Building that against a human grant first means Stripe later becomes a second **source** writing to a ledger that already exists and is already proven, rather than a rewrite of how capability works. It also takes LAW-1 off the critical path for launch, since you are not taking card payments yet, though it stays in v1 because you are still hosting user photos. The product already works; v1 makes it sellable. Phases AI, GRW, VEN, OPS and TRS come after revenue exists.
 
 **One thing I want to flag about that boundary, because I drew it and you picked it.** The option I wrote excluded **Phase ID (global usernames)** and **Phase ORG (multiple organizers per event)**, and both were explicit asks in your original brief. ORG-3 (invite a co-host by username) also depends on ID. I have parked them as **v1.1, immediately after v1**, rather than silently dropping them. If multi-organizer is something you expect to sell on, move it up and say so, because it changes the order below.
 
@@ -828,50 +916,165 @@ This overturns an assumption baked into several places, and one of them is time-
 One person, so nothing below assumes parallel work, and each block ends somewhere you could stop.
 
 **Block 0, this week, cheap and time-sensitive**
-1. ~~Set `APP_URL`~~ done 2026-09-30 (`https://klik.kreativvantage.com`; still needs setting in Vercel)
-2. **MED-8** strip EXIF and GPS (a live privacy leak, and small)
-3. **F-1** rewrite ARCHITECTURE.md, **F-6** Zod env validation
-4. **LAW-2** register the DMCA agent (an afternoon, and safe harbor is not retroactive)
+1. ~~Set `APP_URL`~~ done in code 2026-09-30 (`https://klik.kreativvantage.com`); still needs setting in Vercel, see the runbook below
+2. **MED-8** metadata handling, at its corrected narrower scope
+3. **F-7** test harness. **Moved up from Block 1 on 2026-10-01.** ACT-1 rewrites how every capability check resolves, on top of six migrations that went to production with nothing behind them. Doing that with no tests is how an authorization bug ships quietly.
+4. **F-1** rewrite ARCHITECTURE.md (**F-6** done 2026-09-30)
+5. **LAW-2** register the DMCA agent (an afternoon, and safe harbor is not retroactive)
 
 **Block 0.5, the delivery cutover, before real traffic**
 5. **OPS-4** US bucket **plus** custom domain **plus** signed-cookie caching, as one migration (decided 2026-09-30)
 
-**Block 1, the floor under the money**
-5. **F-7** test harness, before anything touches payments
-6. **F-3** permissions resolver, **F-4** usage accounting
+**Block 1, the floor under activation**
+6. **F-3** permissions resolver, **F-4** usage accounting (**F-7** moved into Block 0)
 
-**Block 2, revenue**
-7. **PAY-1** entitlement ledger, **PAY-1b** admin grants (no Stripe needed; this is also the migration that retires `users.plan_key`, so re-read SEC-1 first)
-8. **PAY-2**, **PAY-3**, **PAY-4** Stripe customers, checkout, webhook
-9. **PAY-5**, **PAY-6**, **PAY-7** billing surface, enforcement, limit warnings
+**Block 2, activation (replaces the old payments block)**
+7. **ACT-1** entitlement ledger. This is the migration that retires `users.plan_key`, so re-read SEC-1 **and** architecture note 2 first: the plpgsql plan-limit triggers read that column directly and must be resolved here, not later.
+8. **ACT-2** admin activation surface, **ACT-3** the organizer's inactive-event experience
+9. **F-5** job runner, **F-8** transactional email, then **ACT-4** the activation request queue
 
-**You could stop here and charge money.**
+**You could stop here and run the business by hand, which is the plan.**
 
-**Block 3, the product people are paying for**
-10. **F-5** job runner, **F-8** transactional email, then **PAY-8** dunning
-11. **ACC-1** through **ACC-5** guest accounts and signup
-12. **MED-1**, **MED-2**, **MED-3** per-photo visibility, share links, access management
-13. **MED-4**, **MED-5** folders and bulk operations
+**Block 3, the product itself**
+10. **ACC-1** through **ACC-5** guest accounts and signup
+11. **MED-1**, **MED-2**, **MED-3** per-photo visibility, share links, access management
+12. **MED-4**, **MED-5** folders and bulk operations
 
 **Block 4, the differentiator**
-14. **QR-1**, **QR-2**, **QR-3** slugs, styling, sharing
-15. **QR-4a** through **QR-4f** the print studio
-16. **F-2** remaining rate limits, **F-9** error tracking
+13. **QR-1**, **QR-2**, **QR-3** slugs, styling, sharing
+14. **QR-4a** through **QR-4f** the print studio
+15. **F-2** remaining rate limits, **F-9** error tracking
+16. **LAW-1** terms and privacy policy, **LAW-4** venue curation
 
 **v1.1:** ID-1 through ID-3, then ORG-1 through ORG-4.
+**Later:** Phase PAY, when activating events by hand stops being worth the time.
 
-### Account setup
+### Credentials and setup
 
-All four are being set up, so nothing is blocked on access. What each needs:
+**Recommendation on sequencing: build first, with two exceptions.** Almost everything in v1 is testable without external services, and code written against a clean interface does not need refactoring when a key arrives. The exceptions are things where the *shape* of the integration is decided by the provider, and those are worth settling now so nothing gets rebuilt: **Resend** (because ACC-2's whole signup flow is email codes, and it is untestable without a key) and the **R2 bucket plus custom domain** (because jurisdiction is fixed at bucket creation and cannot be changed later).
 
-| Service | Env vars | Notes |
-|---|---|---|
-| **Resend** | `AUTH_RESEND_KEY` | Verify the sending domain with SPF and DKIM before any volume, or signup codes land in spam. Highest leverage key on the list. |
-| **Domain** | `APP_URL` (no trailing slash) | Set in Vercel too, not only locally. `lib/env.ts` falls back to the Vercel deployment URL, which silently produces working but wrong QR codes. |
-| **Stripe** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_EVENT`, `STRIPE_PRICE_PREMIUM`, `STRIPE_PRICE_VENUE_MONTHLY`, `STRIPE_PRICE_VENUE_ANNUAL` | Event and Premium are one-time prices, Venue is recurring. Test mode first; `stripe listen` forwards webhooks locally. |
-| **Google OAuth** | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Redirect URI is `<APP_URL>/api/auth/callback/google`, so it needs the real domain first. |
+Stripe is no longer needed at all for v1.
 
-Add every one to `.env.example` as it lands, and to Vercel, not just `.env.local`.
+#### 1. Resend, needed for Block 2 onward
+
+**Get it:** resend.com, add a domain, choose a **subdomain** such as `mail.klik.kreativvantage.com` rather than the root. A deliverability problem on a subdomain never damages the root domain's sending reputation, and you cannot undo that mistake quickly. Add the DKIM, SPF and DMARC records it gives you to Cloudflare DNS, wait for verification, then create an API key scoped to **sending only**.
+
+```
+AUTH_RESEND_KEY=re_...
+AUTH_EMAIL_FROM="Klik <no-reply@mail.klik.kreativvantage.com>"
+```
+
+**Already fixed for you:** the sender was hard-coded to `no-reply@klik.app`, a domain this project does not own. Resend refuses unverified domains, so every sign-in email would have failed the moment a key was added, and it would have looked like a bad key rather than a bad sender. It is now `AUTH_EMAIL_FROM`.
+
+**The gotcha that costs a week:** send nothing from a brand-new domain in volume on day one. Warm it gradually, and set up DMARC in monitoring mode (`p=none`) before anything stricter, or you will be debugging deliverability at the same time as debugging the signup flow.
+
+#### 2. Cloudflare R2, a US bucket plus a custom domain (OPS-4)
+
+**Get it:** in the existing Cloudflare account, create a new bucket with a **US jurisdiction** (or none). Jurisdiction is set at creation and cannot be changed, which is the whole reason this is not deferrable indefinitely. Then attach `media.klik.kreativvantage.com` as a custom domain to it, which requires the zone to be on Cloudflare (it is, since the app domain is there).
+
+```
+R2_BUCKET_NAME=klik-media-us
+```
+
+`next.config.ts` already lists that hostname in `remotePatterns`, so this was always the intent.
+
+**Create a second bucket in the same step: `klik-media-backup`, also US.** An earlier version of this file told you to enable object versioning here. That was wrong, and corrected on 2026-10-01: **R2 has no object versioning.** See the data-loss note for what was checked and why Bucket Lock, the nearest feature, breaks both the rejected-upload cleanup and the erasure path.
+
+The protection is structural instead. The app's R2 token is scoped to the primary bucket only, a copy step writes each new object into the backup bucket, and nothing the app can reach can delete from it. A bug in erasure or purge then cannot destroy the only copy, and a genuine erasure request becomes a deliberate two-step action, which is what it should have been anyway.
+
+#### 3. Sentry, for F-9
+
+**Get it:** sentry.io, free tier is enough, create a **Next.js** project. You need the DSN (safe to expose, it is in client bundles by design) and, for readable stack traces, an auth token for source map upload.
+
+```
+SENTRY_DSN=https://...
+SENTRY_AUTH_TOKEN=...
+```
+
+**Why it matters more than it sounds:** right now nothing tells you when something breaks. A 500 on the upload path at a Saturday wedding surfaces as a support email on Monday, if at all. Alert specifically on the cron route and, later, the Stripe webhook, because both fail silently by nature.
+
+#### 4. Google OAuth, optional
+
+**Get it:** Google Cloud Console, OAuth consent screen (External, no sensitive scopes so no verification review), then credentials.
+
+Authorised redirect URI, exactly: `https://klik.kreativvantage.com/api/auth/callback/google`, plus `http://localhost:3000/api/auth/callback/google` for local work.
+
+```
+AUTH_GOOGLE_ID=...
+AUTH_GOOGLE_SECRET=...
+```
+
+Genuinely optional. Resend alone makes signup work, and this is a conversion improvement rather than a dependency.
+
+#### 5. Vercel, already yours
+
+Set **every** variable in Project Settings, not only `.env.local`, and redeploy. A variable added without a redeploy does not reach the running build. `APP_URL` especially: without it `lib/env.ts` falls back to the ambient deployment URL, which produces QR codes that scan today and 404 once that deployment is superseded.
+
+Also set `CRON_SECRET`, or the purge route is open to anyone who finds it.
+
+#### 6. Not an API, but on the critical path
+
+**DMCA agent registration (LAW-2).** dmca.copyright.gov, a small fee, renewable every three years. Safe harbor is **not retroactive**, so every day unregistered is a day of uncovered exposure for photos guests upload. An afternoon.
+
+**Neon.** Confirm your plan's point-in-time-restore window and then actually test a restore into a branch. An untested backup is a belief, not a backup. Also create a second branch as **staging**: six migrations have now gone straight to the only database that exists, which was fine at 12 rows and stops being fine the day a real customer's event is in there.
+
+### Setup runbook, in order, click by click
+
+Four things need a browser. This order matters: Resend first because DNS has to propagate while other work happens, Vercel second because the purge cron has been failing closed without it, then Neon, then the DMCA filing whenever there is an afternoon.
+
+#### Step 1. Resend, about 20 minutes plus propagation
+
+1. Sign up at resend.com with an account that will own production email long term. Moving a verified domain between Resend accounts means verifying it again.
+2. **Domains, then Add Domain.** Enter `mail.klik.kreativvantage.com` and pick the **US region**, matching the product's jurisdiction. Not the root `klik.kreativvantage.com`: a subdomain keeps a deliverability problem away from the root domain's sending reputation, and that is not a mistake you can undo quickly.
+3. Resend shows three or four DNS records. Open a second tab on **Cloudflare, the `kreativvantage.com` zone, DNS, Records**, and add each one. The shape is:
+   - `MX` on `send.mail.klik`, pointing at a `feedback-smtp.<region>.amazonses.com` host, priority 10
+   - `TXT` on `send.mail.klik`, value `v=spf1 include:amazonses.com ~all`
+   - `TXT` on `resend._domainkey.mail.klik`, value the long `p=MIGf...` public key
+   - `TXT` on `_dmarc.mail.klik`, value `v=DMARC1; p=none;`
+
+   Copy the real values from the Resend page, not from here. The MX host and the DKIM key differ per account and per region.
+4. **The Cloudflare gotcha that wastes an hour.** Cloudflare appends the zone name to whatever goes in the Name field, and Resend displays fully qualified hostnames. Pasting `send.mail.klik.kreativvantage.com` produces `send.mail.klik.kreativvantage.com.kreativvantage.com`. Type only the part before `.kreativvantage.com`, then read the saved record list back and confirm the names are what you intended.
+5. Back in Resend, **Verify DNS Records**. On Cloudflare this is usually minutes. When it stalls, the cause is almost always a doubled name from step 4.
+6. **API Keys, then Create API Key.** Permission **Sending access**, restricted to this domain. Copy the `re_...` value immediately; it is shown once.
+7. Record both values, for `.env.local` now and Vercel in step 2:
+
+```
+AUTH_RESEND_KEY=re_...
+AUTH_EMAIL_FROM="Klik <no-reply@mail.klik.kreativvantage.com>"
+```
+
+8. Leave DMARC at `p=none` until sign-in emails have been landing reliably for a few weeks. Tightening it early means debugging deliverability and the signup flow at the same time, and they look identical from the outside.
+
+#### Step 2. Vercel environment, about 10 minutes
+
+1. Generate a cron secret locally: `openssl rand -base64 32`.
+2. **Vercel, the Klik project, Settings, Environment Variables.** Add for Production and Preview:
+   - `APP_URL` = `https://klik.kreativvantage.com`
+   - `CRON_SECRET` = the value from step 1
+   - `AUTH_RESEND_KEY` and `AUTH_EMAIL_FROM` from the Resend step
+3. Confirm `DATABASE_URL`, `AUTH_SECRET` and the four `R2_*` variables are already present. `lib/env.ts` parses at module load, so a missing one now fails the build rather than a guest's request, which is the entire point of F-6.
+4. **Deployments, the latest one, Redeploy.** A variable added without a redeploy does not reach the running build.
+5. Then open **Settings, Cron Jobs** and look at the last run. `isAuthorized` in `app/api/cron/purge-expired/route.ts` returns false whenever `CRON_SECRET` is unset, so every nightly run to date has returned 401 and nothing has ever been purged. That was the correct failure mode, but it means the purge path has never executed in production. The first run after this redeploy is its first real exercise, so check the response rather than assuming.
+
+#### Step 3. Neon, about 30 minutes
+
+1. **Neon console, the project, Settings, Storage**, and read the actual **history retention** window. The free tier is short. Write the number down: it is the real answer to "how far back can we recover", and until it is written down that answer is a guess.
+2. **Branches, New Branch.** Name it `staging`, from `production` at the current timestamp. Put its connection string into a Preview-scoped `DATABASE_URL` in Vercel, so preview deployments and future migrations stop landing on the only database that exists. Eight migrations have now gone straight to production. That was fine at 12 media rows.
+3. **Test a restore, once, now.** Create a throwaway branch from a timestamp an hour in the past, connect with `psql`, and run `select count(*) from media;`. A plausible count means point-in-time restore is real. Delete the branch afterwards. An untested backup is a belief, not a backup.
+
+#### Step 4. DMCA agent, an afternoon
+
+1. dmca.copyright.gov, create an account for the service provider rather than for yourself personally.
+2. Designate an agent: the provider's legal name plus any alternate names the service is known by (include `Klik`), a physical address, a phone number, and an email address somebody actually reads.
+3. Pay the fee. It is small, and the registration needs renewing every three years or it lapses.
+4. Safe harbor is **not retroactive**, which is why this is not deferrable: every day unregistered is a day of uncovered exposure for photos guests upload. The agent's contact details also have to be published on the site, which is the code half of LAW-2.
+
+#### Deliberately not now
+
+- **Do not create the US bucket yet.** OPS-4 is a single cutover: US bucket, backup bucket, object copy, custom domain, signed-cookie delivery, and removing the `.eu.` endpoint. Doing the bucket half early means running two buckets and migrating delivery twice.
+- **Do not go looking for R2 object versioning.** It does not exist. See the corrected note above.
+- **Stripe: nothing at all.** Deferred out of v1.
+- **Sentry: when F-9 comes up**, not before. The DSN takes two minutes and all of its value is in alert rules that need the code first.
 
 ### The gap that needs nothing from you
 
@@ -898,7 +1101,11 @@ An honest audit of what happens today when something fails, because "we will add
 ### What does not protect us yet, worst first
 
 1. **Nothing tells you when something breaks.** No error tracking, no alerting, no uptime check. A 500 on the upload path at a Saturday wedding surfaces as a support email on Monday, if at all. F-9 is one afternoon of work and it is the highest-value unbuilt item in this table.
-2. **R2 has no versioning, so deletion is absolute.** Soft delete protects against a user mistake. It does not protect against a *bug* in the erasure or purge code, because those call `DeleteObjects` for real. If `eraseUser` ever selects the wrong rows, the objects are gone with no recovery path. Enable R2 object versioning with a 30-day lifecycle rule; it costs little at this scale and it is the only thing standing between a logic bug and permanent loss of someone's wedding.
+2. **Deletion from R2 is absolute, and there is no versioning to undo it.** Soft delete protects against a user mistake. It does not protect against a *bug* in the erasure or purge code, because those call `DeleteObjects` for real. If `eraseUser` ever selects the wrong rows, the objects are gone with no recovery path.
+
+   **Corrected 2026-10-01.** This used to say "enable R2 object versioning", as though it were one toggle. **R2 has no object versioning.** Checked against Cloudflare's own API surface: an R2 bucket exposes CORS, lifecycle, lock, sippy, custom domains and event notifications, and nothing that keeps a version history. The nearest feature is **Bucket Lock**, which blocks deletes and overwrites for an age, until a date, or indefinitely, and it does not fit this codebase as a blanket rule for two concrete reasons. `app/api/e/[slug]/media/route.ts` deletes the object it just uploaded whenever validation rejects it, so an age-based lock would leave every rejected upload as a permanent orphan, silently, because those calls are `.catch(() => {})`. And `lib/erasure.ts` could not honour a deletion request for anything recent, which is the one deletion path that is legally required to work.
+
+   The fix that does fit is structural: a **second bucket the application holds no credentials to delete from**. Folded into OPS-4, since that cutover is already creating buckets.
 3. **No verified database backup.** Neon provides point-in-time restore on paid tiers, but nobody has confirmed the retention window or tested a restore. An untested backup is a belief, not a backup.
 4. **No staging environment.** Migrations have been applied straight to the one database that exists. That was fine at 12 media rows and stops being fine the day a real customer's event is in there.
 5. **The cron is unmonitored.** If `/api/cron/purge-expired` starts failing, or the circuit breaker trips every night, nothing says so. The breaker returns a 500 specifically so a monitor can catch it, once a monitor exists.
@@ -906,7 +1113,7 @@ An honest audit of what happens today when something fails, because "we will add
 
 ### What to do about it, cheapest first
 
-- **Enable R2 object versioning now.** One setting, no code. Insurance against the class of bug that has no other recovery.
+- **Scope the R2 API token to the one bucket**, if it is currently account-wide. Two minutes, no code, and it caps what a leaked key or a wrong bucket name can reach. Real byte-level recovery needs the backup bucket in OPS-4; there is no toggle for it.
 - **Confirm the Neon plan's PITR window, then actually test a restore** into a branch.
 - **F-9 error tracking**, with an alert on the cron route and the Stripe webhook specifically, since both fail silently by nature.
 - **A second Neon branch as staging** before the first paying customer, so migrations stop going straight to production.
@@ -985,7 +1192,7 @@ A scalability read of the current architecture against one realistic worst case:
 |---|---|
 | User mistake | Covered. 30-day soft delete everywhere, restore API built. |
 | Retention misconfiguration | Covered. Pinned `retention_until`, circuit breaker, null means skip. |
-| **Bug in deletion code** | **Not covered.** Erasure and purge call `DeleteObjects` for real. R2 has no versioning enabled, so a logic error is unrecoverable. One browser setting fixes this. |
+| **Bug in deletion code** | **Not covered.** Erasure and purge call `DeleteObjects` for real, and R2 has no object versioning to roll back to. Needs the write-only backup bucket folded into OPS-4. |
 | **Database loss** | **Unverified.** Neon PITR depends on plan, and no restore has ever been tested. An untested backup is a belief. |
 | **Bad migration** | **Not covered.** No staging. Four migrations have gone straight to the only database that exists. |
 

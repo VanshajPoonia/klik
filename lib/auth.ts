@@ -8,13 +8,20 @@ import { db } from "./db";
 import { users, accounts, sessions, verificationTokens, type UserRole } from "./schema";
 import { verifyPassword } from "./credentials";
 import { clientIp, consume } from "./ratelimit";
+import { env } from "./env";
 
 const oauthProviders = [];
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
   oauthProviders.push(Google);
 }
 if (process.env.AUTH_RESEND_KEY) {
-  oauthProviders.push(Resend({ from: "Klik <no-reply@klik.app>" }));
+  // Was hard-coded to no-reply@klik.app, a domain this project does not own.
+  // Resend refuses to send from an unverified domain, so every magic link would
+  // have failed the moment a key was added, and it would have looked like the
+  // key was wrong rather than the sender.
+  oauthProviders.push(
+    Resend({ from: env.AUTH_EMAIL_FROM ?? "Klik <no-reply@klik.kreativvantage.com>" }),
+  );
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

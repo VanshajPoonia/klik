@@ -219,6 +219,17 @@ export const media = pgTable(
     // browser for video "metadata", which on iPhone .mov files means reaching
     // to the end of the file for the moov atom. See lib/video-poster.ts.
     posterPathname: text("poster_pathname"),
+    // When the camera says the photo was taken, as a zone-less wall clock.
+    //
+    // Deliberately NOT `withTimezone`. EXIF carries no zone, so storing an
+    // instant would mean inventing one, and the photos AI-1 groups were taken
+    // by people standing in the same room: their cameras agree with each other
+    // even when none of them agrees with UTC. See lib/exif.ts.
+    //
+    // Null is normal and means "we do not know", not "unknown time". It covers
+    // every video, every HEIC, every screenshot and anything re-encoded before
+    // it reached us. Readers fall back to `created_at`, which is upload time.
+    capturedAt: timestamp("captured_at", { mode: "string" }),
     // Soft delete. A deleted photo is irreplaceable and the storage to keep it
     // for 30 days is not, so every read path filters on this rather than the
     // row being gone. See ROADMAP.md SEC-4.

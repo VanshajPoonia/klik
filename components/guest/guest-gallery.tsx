@@ -11,6 +11,7 @@ import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
 import { compressImageForUpload } from "@/lib/image-compress";
 import { formatDuration, probeVideo } from "@/lib/video-poster";
+import { readCaptureTimeFromFile } from "@/lib/exif";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { CapturedItem } from "@/components/guest/camera-capture";
 import { encodeMediaCursor } from "@/lib/media-cursor";
@@ -214,6 +215,14 @@ export function GuestGallery({
         // server's own compression) if the browser can't decode it, e.g.
         // HEIC outside Safari. Camera captures arrive already prepared.
         const isPhoto = !file.type.startsWith("video/");
+
+        // Read when the photo was taken BEFORE compressing it. The compression
+        // pass draws to a canvas, and a canvas cannot carry metadata across, so
+        // this is the last moment the camera's timestamp exists. Camera
+        // captures arrive already prepared and never had EXIF to begin with.
+        const capturedAt =
+          isPhoto && !prepared ? await readCaptureTimeFromFile(file) : null;
+
         const compressed = isPhoto && !prepared ? await compressImageForUpload(file) : null;
 
         // Pull a still and the duration out of the video here, on the
@@ -277,6 +286,7 @@ export function GuestGallery({
             durationS: probe?.duration ?? undefined,
             posterPathname: uploadedPoster ?? undefined,
             clientCompressed: Boolean(compressed) || Boolean(prepared),
+            capturedAt: capturedAt ?? undefined,
             albumId: uploadAlbumId || null,
           }),
         });
