@@ -187,8 +187,13 @@ What is true is narrower: the **purge cron** does not read it, and per C-8 it sh
 These are not glamorous but four of them are hard blockers. Do F-1 through F-5 before anything in Phase PAY, MED, or AI.
 
 ### F-1. Rewrite ARCHITECTURE.md to match reality
-**Size:** S. **Blocks:** everything, because agents treat it as source of truth and it currently describes a storage layer the code abandoned.
-Rewrite §1 (R2 not Blob), §3 (add albums, co-hosts, venue clients, plan fields, accent colours, access version), §4 (the real route tree), §6 (the real upload path including HEIC conversion and compression), §9 (mark what shipped), §10 (co-hosts shipped, so remove it from open questions). Add a "last verified against commit" line at the top so drift is visible next time.
+**Size:** S. **DONE 2026-10-02.**
+
+Replaced rather than patched. The old file described Vercel Blob, Next.js 15, a domain the project does not own, and a security checklist for features later built differently, which is worse than having no document because an agent reads it as fact.
+
+The new one is organised around what actually causes bugs here rather than around the old section numbering. Section 3, "six constraints that will bite you", is the load-bearing part: no transactions on `neon-http`, JWT sessions meaning logins cannot be revoked, plan limits duplicated between `lib/plans.ts` and the plpgsql triggers, soft-delete filters being load-bearing, R2 signing but not enforcing `Content-Type`, and every image view costing an invocation plus a query. Section 7 separates soft delete, retention purge and erasure, which are three different things that get confused into either data loss or a missed legal obligation.
+
+It carries a "last verified against commit" line, so the next person can see at a glance how far it has drifted.
 
 ### F-2. Rate limiting
 **Size:** M. **Blocks:** PAY (webhook abuse), ACC (OTP abuse), ID (username enumeration), MED (share link password brute force).

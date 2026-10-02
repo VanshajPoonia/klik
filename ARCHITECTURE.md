@@ -1,335 +1,215 @@
-# Klik - Event Photo Sharing: Architecture
+# Klik: how the system actually works
 
-> **Status:** Milestones 1 to 4 (basic) built and deployed; see §11 for the service-side (superadmin + sales-provisioned venues) addition. This document is the source of truth for agents building on it.
-> **Elevator pitch:** Every event gets a unique webpage + QR code. Guests scan, optionally enter a name, and upload photos/videos into one shared, live-updating gallery - no app, no account. Organizers manage everything from a dashboard. Events can be self-serve or provisioned for a venue by an internal sales team (§11).
-
----
-
-## 1. Stack (decided - do not re-litigate)
-
-| Concern | Choice | Notes |
-|---|---|---|
-| Framework | **Next.js 15+ (App Router, TypeScript)** | Single app: marketing, guest gallery, dashboard, API |
-| Deployment | **Vercel** | Serverless/fluid functions, Vercel Cron for cleanup |
-| Database | **Neon Postgres** | Metadata only: events, guests, media records, settings. Use `@neondatabase/serverless` driver |
-| ORM | **Drizzle ORM** | Schema in code, `drizzle-kit` migrations |
-| Media storage | **Vercel Blob** | Actual photo/video bytes. Client-side uploads (bypasses the 4.5 MB serverless body limit). *Neon cannot store media - it is a relational DB.* If storage cost becomes an issue post-MVP, swap to Cloudflare R2 behind the same `lib/storage.ts` interface |
-| Organizer auth | **Auth.js (NextAuth v5)** with Google + email magic link, Drizzle adapter | Guests never authenticate |
-| Guest identity | Anonymous **signed cookie session** (per event) + optional display name | No account, ever |
-| Styling / UI | Tailwind CSS + shadcn/ui | Brand: yellow `#E8F000`-ish K on black (see logo in repo root) |
-| QR codes | `qrcode` npm package | Server-generated SVG/PNG, downloadable |
-| Live gallery updates | **Polling** (SWR, 8s interval, cursor-based) | No websockets on Vercel serverless. Upgrade path: Pusher/Ably. Do NOT build realtime infra in MVP |
-| Zip download | Streaming zip in a route handler (`archiver` or `client-zip`) | See §7.6 |
-| Validation | Zod everywhere (API inputs, env vars) | |
-| Rate limiting | Postgres-based counters in MVP (per guest session + per IP) | Upgrade path: Upstash Ratelimit. Don't add Redis in MVP |
-
-**Environment variables** (define in `.env.example`):
-
-```
-DATABASE_URL=            # Neon pooled connection string
-AUTH_SECRET=             # Auth.js
-AUTH_GOOGLE_ID=
-AUTH_GOOGLE_SECRET=
-AUTH_RESEND_KEY=         # magic-link email (Resend)
-BLOB_READ_WRITE_TOKEN=   # Vercel Blob
-APP_URL=                 # e.g. https://klik.app - used in QR codes
-CRON_SECRET=             # protects cron route
-```
+> **What this file is.** A description of the code as it exists on 2026-10-02, written for whoever picks it up next. It describes **what is**, not what is planned. Plans, task IDs and sequencing live in `ROADMAP.md`, and work is requested from there by ID ("do ACT-1").
+>
+> **Why it was rewritten.** The previous version described Vercel Blob, Next.js 15, a domain the project does not own, and a security checklist for features that were later built differently. It was confidently wrong in ways that would send anyone reading it down the wrong path, which is worse than having no document. If you change the system and do not change this file, you are recreating that problem.
+>
+> **Last verified against commit `0e7fe18` on 2026-10-02.** Every claim here was read out of the code at that
+> commit, not recalled. If this line is far behind `git log`, trust the code and fix this file.
+>
+> **Design rules are elsewhere.** Read `DESIGN.md` before touching any UI, and use the tokens in `app/globals.css` rather than hex values.
 
 ---
 
-## 2. Top-level user flows
+## 1. What the product is
 
-### Guest flow (no account)
-1. Scan QR → lands on `/e/[slug]`.
-2. Access gate: if event is `private` → blocked (organizer-only). If `password` → password form, success sets a signed per-event cookie. If `public` → straight in.
-3. First visit: bottom sheet asks for optional display name + **required consent checkbox** ("Photos you upload may be visible to everyone with access to this gallery"). Stores a signed guest-session cookie scoped to the event.
-4. Upload photos/videos directly from phone (camera or gallery picker, multi-select).
-5. Browse the live gallery (masonry grid, lightbox), download/share individual items if the organizer enabled downloads.
-6. New uploads from other guests appear via polling.
+Every event gets a page and a QR code. Guests scan it, optionally give a display name, agree to a consent statement, and upload photos and videos into one shared gallery. No app, no account. Organizers manage events from a dashboard. A superadmin provisions and activates accounts by hand.
 
-### Organizer flow
-1. Sign up / sign in at `/login` (Google or magic link).
-2. Dashboard: create event (name, date, cover image, settings).
-3. Get QR code + short link; download QR as PNG/SVG for signage.
-4. Manage gallery: approve/reject (if moderation on), delete, toggle settings, download-all zip.
-5. Event expires at `expires_at` → gallery goes read-only/hidden; media purged by cron after a grace period.
+Three kinds of people use it, and they authenticate in three completely different ways. Section 4 is the one to read first, because conflating them is the easiest way to introduce a security bug here.
 
 ---
 
-## 3. Data model (Drizzle → Neon)
+## 2. Stack, as actually deployed
 
-All IDs are `text` primary keys generated with `nanoid`. Timestamps are `timestamptz`.
+| Concern | What it really is |
+|---|---|
+| Framework | Next.js **16.2.10**, App Router, React 19.2, TypeScript |
+| Hosting | Vercel. Production branch is `main` and deploys on push |
+| Database | Neon Postgres via `@neondatabase/serverless` **1.1**, `neon-http` driver |
+| ORM | Drizzle **0.45**. Schema in `lib/schema.ts`, raw SQL migrations in `drizzle/` |
+| Media storage | **Cloudflare R2**, via the AWS S3 SDK. Bucket `klik-media`, **EU jurisdiction** |
+| Organizer auth | Auth.js v5 beta, **JWT session strategy**, credentials plus optional Google and Resend |
+| Guest identity | Per-event JWT in a cookie, signed with `AUTH_SECRET` using `jose`. Never a `users` row |
+| Styling | Tailwind **v4**, tokens in `app/globals.css` |
+| Image processing | `sharp` 0.35 server side, `heic-convert` for iPhone HEIC, canvas in the browser |
+| Validation | Zod 4, on every API input and on the environment at boot |
+| Live gallery | SWR polling. No websockets |
+| Rate limiting | Postgres counters, `lib/ratelimit.ts` |
+| Tests | Vitest, `npm test`. 66 tests, pure logic only |
 
-```sql
--- Auth.js tables (users, accounts, sessions, verification_tokens)
--- come from the standard Drizzle adapter schema. "users" = organizers only.
+---
 
-CREATE TABLE events (
-  id               text PRIMARY KEY,
-  owner_id         text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  slug             text NOT NULL UNIQUE,          -- short, URL-safe, e.g. "anita-wedding-x7k2"
-  name             text NOT NULL,
-  event_date       timestamptz,
-  client_name      text,                          -- Venue-only organizer contact
-  client_email     text,                          -- never included in guest responses
-  client_phone     text,                          -- never included in guest responses
-  cover_media_id   text,                          -- FK to media, nullable, set after upload
-  visibility       text NOT NULL DEFAULT 'public',-- 'public' | 'password' | 'private'
-  password_hash    text,                          -- bcrypt, only when visibility='password'
-  moderation       boolean NOT NULL DEFAULT false,-- true => uploads start as 'pending'
-  downloads_enabled boolean NOT NULL DEFAULT true,
-  uploads_enabled  boolean NOT NULL DEFAULT true, -- organizer can freeze uploads
-  expires_at       timestamptz,                   -- gallery hidden after this; NULL = never
-  purged_at        timestamptz,                   -- set by cron when blobs are deleted
-  created_at       timestamptz NOT NULL DEFAULT now(),
-  updated_at       timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX events_owner_idx ON events(owner_id);
+## 3. Six constraints that will bite you
 
-CREATE TABLE guests (
-  id           text PRIMARY KEY,
-  event_id     text NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  display_name text,                              -- optional, guest-entered
-  consented_at timestamptz NOT NULL,              -- consent is required before first upload
-  created_at   timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX guests_event_idx ON guests(event_id);
+These are not style preferences. Each one has already caused a bug or came within one commit of causing one.
 
-CREATE TABLE media (
-  id           text PRIMARY KEY,
-  event_id     text NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  guest_id     text REFERENCES guests(id) ON DELETE SET NULL, -- NULL if organizer uploaded
-  kind         text NOT NULL,                     -- 'photo' | 'video'
-  status       text NOT NULL DEFAULT 'approved',  -- 'pending' | 'approved' | 'rejected'
-  blob_url     text NOT NULL,                     -- Vercel Blob URL (original)
-  blob_pathname text NOT NULL,                    -- for deletion
-  content_hash text,                              -- sha-256 of file, for duplicate detection
-  mime_type    text NOT NULL,
-  size_bytes   bigint NOT NULL,
-  width        integer,
-  height       integer,
-  duration_s   real,                              -- videos only
-  created_at   timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX media_event_status_created_idx ON media(event_id, status, created_at DESC);
-CREATE INDEX media_event_hash_idx ON media(event_id, content_hash);
+**1. `neon-http` cannot do transactions.** There is no `db.transaction()`. Only `db.batch()`, which sends statements together but gives weaker guarantees than a real transaction. Every multi-step write in this codebase is therefore ordered so that a failure halfway through leaves something recoverable rather than something wrong. When you add one, decide explicitly which half is safe to have happen alone.
+
+**2. Sessions are JWTs, and that is forced.** The Credentials provider does not work with database sessions in Auth.js v5. The consequence is that **a login cannot be revoked**. Changing a password or demoting a user does not invalidate their existing token; it stays valid until it expires. Anything that needs immediate revocation has to check state in the database on each request, which is exactly what `requireEventManagerSession` does.
+
+**3. Plan limits live in two places and they are not derived from each other.** `lib/plans.ts` holds static TypeScript definitions. Migration `0002_plan_capabilities.sql` holds **plpgsql triggers** that enforce limits in the database by reading `users.plan_key` directly. They agree today by coincidence. ACT-1 retires `users.plan_key`, so it has to resolve this, not work around it.
+
+**4. Soft delete is everywhere, and the filters are load-bearing.** Almost nothing hard-deletes. Rows carry `deleted_at` and every read path filters on it. Miss the filter and you show deleted content; miss it on `event_co_hosts` and you grant access to someone who was removed. The soft-delete indexes are **partial** (`WHERE deleted_at IS NULL`) and live in `drizzle/0007_soft_delete_indexes.sql`, deliberately not declared in `lib/schema.ts`, because `drizzle-kit push` would recreate them as full indexes and silently undo that.
+
+**5. R2 signs `Content-Type` but does not enforce it.** Verified against the live bucket: a URL presigned for `image/jpeg` returns 200 for a ZIP body. The signature binds the key, the type and the length, and none of that stops the client sending different bytes. This is why `lib/file-signature.ts` exists and why the upload path does a ranged read of the first 32 bytes before trusting anything.
+
+**6. Every image view costs a function invocation and a database query.** `GET /api/e/[slug]/media/[mediaId]/content` loads the event, loads the media row, resolves the plan, resolves the viewer, then redirects to a short-lived signed R2 URL. That is correct for private galleries and expensive for public ones. OPS-4 moves public delivery to signed cookies so the edge can cache.
+
+---
+
+## 4. Identity: three kinds, never interchangeable
+
+**Superadmin.** `users.role = 'superadmin'`. Full access to every event through `requireSuperadmin` and the `role === "superadmin"` branches in `lib/roles.ts`. Provisions accounts, sets plans, resets passwords, and in the v1 model **activates events**.
+
+**Organizer.** A `users` row. Owns events (`events.owner_id`) or is a co-host (`event_co_hosts`). Authenticated by Auth.js. Co-hosts are capped by plan and are Premium-only.
+
+**Guest.** **No `users` row, ever.** A guest gets a row in `guests` plus a JWT cookie named `klik_g_{eventId}`, signed with `AUTH_SECRET`, valid 30 days, scoped to one event. There is no server-side session record, so **the cookie is the identity**: anyone holding it is that guest, and it cannot be revoked individually. Treat it as a bearer token, because it is one.
+
+A second cookie, `klik_unlock_{eventId}`, proves a password gallery was unlocked. It carries `accessVersion`, so bumping `events.access_version` invalidates every outstanding unlock at once. That is the revocation mechanism for gallery passwords.
+
+### Where authorization is decided
+
+`lib/roles.ts`, and nowhere else:
+
+- `requireSuperadmin()`
+- `requireOwnerSession(eventOwnerId)`: owner or superadmin
+- `requireEventManagerSession(eventId, eventOwnerId)`: owner, superadmin, or an active co-host
+
+The third one contains the entire co-host revocation rule, as one predicate in the one query that grants access:
+
+```ts
+isNull(eventCoHosts.deletedAt),
+eq(users.planKey, "premium"),
 ```
 
-Design notes:
-- **Duplicate detection:** compute SHA-256 client-side before upload; the create-record endpoint flags `content_hash` collisions within the event so the dashboard can show a "possible duplicate" badge. Do not hard-reject.
-- **Thumbnails:** do not build a thumbnail pipeline. Serve grid images through `next/image` pointed at the Blob URL (Vercel Image Optimization resizes/caches). Videos: show a `<video preload="metadata">` poster; cap video size instead.
-- **`status` when moderation is off:** `approved` on insert. When moderation is on: `pending`. Toggling moderation off later auto-approves nothing - organizer bulk-approves explicitly.
+**Nothing else may read `event_co_hosts` to make an authorization decision.** A removed co-host keeps their row for 30 days so the removal is reversible, which means any other query that joins that table without this predicate hands access back.
+
+For guests, `lib/event-viewer.ts` resolves a viewer and `lib/access.ts` decides what they can see. `canViewGallery` is the single source of truth and is used by both pages and API routes.
 
 ---
 
-## 4. Routes & project structure
+## 5. Data model
 
-```
-app/
-  (marketing)/page.tsx            # landing page
-  login/page.tsx                  # organizer auth
-  dashboard/
-    page.tsx                      # event list + create
-    events/[id]/page.tsx          # gallery management (tabs: Photos, Pending, Settings, QR)
-  e/[slug]/
-    page.tsx                      # guest gallery (server component shell)
-    gate.tsx                      # password / private gate
-  api/
-    auth/[...nextauth]/route.ts
-    events/route.ts               # POST create (organizer)
-    events/[id]/route.ts          # PATCH settings, DELETE event (organizer)
-    events/[id]/qr/route.ts       # GET → SVG/PNG QR (organizer)
-    events/[id]/download/route.ts # GET → streaming zip of approved media (organizer)
-    events/[id]/media/[mediaId]/route.ts  # PATCH status, DELETE (organizer)
-    e/[slug]/session/route.ts     # POST guest session (name + consent) / password unlock
-    e/[slug]/media/route.ts       # GET gallery page (cursor) | POST register uploaded blob
-    upload/route.ts               # POST → Vercel Blob client-upload token handshake
-    cron/purge-expired/route.ts   # GET, CRON_SECRET-protected: purge expired storage
-lib/
-  db.ts        # Neon + Drizzle client
-  schema.ts    # Drizzle schema (source of truth for §3)
-  auth.ts      # Auth.js config
-  storage.ts   # Blob put/delete wrapper - the ONLY file that touches Vercel Blob
-  guest.ts     # signed guest-cookie helpers (jose HMAC, cookie name klik_g_<eventId>)
-  access.ts    # event access checks (visibility/password/expiry) - used by pages AND api
-  ratelimit.ts # postgres counter rate limiter
-components/    # gallery grid, lightbox, upload sheet, consent sheet, qr card, ...
-```
+Twelve tables in `lib/schema.ts`.
+
+**Auth:** `users`, `accounts`, `sessions`, `verification_tokens`. The Auth.js shape, plus `role`, `plan_key`, `username`, `password_hash` on `users`. `sessions` exists for the adapter and is effectively unused, because the strategy is JWT.
+
+**Core:** `events`, `guests`, `media`, `albums`.
+
+**Collaboration and sales:** `event_co_hosts` (composite PK on `event_id, user_id`, soft-deleted), `venue_clients`.
+
+**Operational:** `erasure_log`, `rate_limits`.
+
+### The fields that are easy to get wrong
+
+`events.retention_until` is **pinned at creation** and only ever extended, never shortened. This is SEC-1. The purge cron used to resolve retention from the mutable `users.plan_key`, and `getPlan()` falls back to the shortest window for an unknown key, so a plan change or a typo could have set every gallery on the platform to the minimum retention and deleted them on the next run.
+
+`events.access_version` is the password-unlock revocation counter. `events.purged_at` and `events.deleted_at` are separate facts: soft-deleted but not yet purged, versus bytes actually gone.
+
+`media.captured_at` is a **zone-less** `timestamp`, read from EXIF `DateTimeOriginal` before the pipeline strips it. Null means "we do not know" and is deliberately not backfilled from `created_at`, which is upload time and a different fact.
+
+`guests.consent_version` records *which* consent text someone agreed to. A timestamp alone proves when a box was ticked, not what the box said, and the copy can change.
+
+`erasure_log` stores a SHA-256 of the subject identifier, never the raw id. A log of who asked to be erased that contains their identifier defeats its own purpose.
 
 ---
 
-## 5. API contract (summary)
+## 6. The upload path
 
-All bodies validated with Zod. Errors: `{ error: string }` with proper status codes. Organizer routes require Auth.js session **and** event ownership check. Guest routes require a valid guest cookie for writes.
+This is the critical path and the most security-sensitive code in the repo. `POST /api/upload` then `POST /api/e/[slug]/media`.
 
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `POST /api/events` | organizer | Create event `{ name, eventDate?, visibility, password?, moderation, expiresAt? }` → generates unique `slug` |
-| `PATCH /api/events/[id]` | owner | Update any setting; setting `visibility='password'` requires `password`; re-hash |
-| `DELETE /api/events/[id]` | owner | Delete event + all blobs (iterate `blob_pathname`, then cascade delete rows) |
-| `GET /api/events/[id]/qr?format=png\|svg&size=1024` | owner | QR encoding `${APP_URL}/e/${slug}` |
-| `GET /api/events/[id]/download` | owner | Streaming zip of approved originals; filename `klik-<slug>.zip` |
-| `PATCH /api/events/[id]/media/[mediaId]` | owner | `{ status: 'approved' \| 'rejected' }` |
-| `DELETE /api/events/[id]/media/[mediaId]` | owner | Delete row + blob |
-| `POST /api/e/[slug]/session` | none | `{ name?, consent: true, password? }` → creates guest row, sets signed cookie. Password checked here for password-visibility events |
-| `GET /api/e/[slug]/media?cursor=<createdAt_id>&limit=50` | gallery access | Approved media only, newest first, keyset pagination. Guests' own `pending` items are included (flagged `mine: true, pending: true`) so uploaders see their photos immediately |
-| `POST /api/upload` | guest cookie or owner | Vercel Blob `handleUpload` token exchange. Enforces: event exists, uploads enabled, not expired, mime allowlist, size caps, rate limit |
-| `POST /api/e/[slug]/media` | guest cookie or owner | After client upload completes: `{ blobUrl, pathname, hash, mime, size, width?, height?, duration? }` → insert media row with correct initial `status` |
-| `GET /api/cron/purge-expired` | `Authorization: Bearer CRON_SECRET` | Delete media after the account plan's storage window, keep the event row, and set `purged_at` |
+1. **Sign.** `/api/upload` checks the viewer may upload, then presigns an R2 PUT binding the key, the content type **and the content length** (SEC-2: without `ContentLength` a signed URL was an unbounded free-storage grant).
+2. **Client prepares.** The browser reads EXIF capture time off the original, then compresses via canvas, which strips metadata. Videos get a poster frame and a duration extracted on-device (`lib/video-poster.ts`), because asking a browser for `metadata` on an iPhone `.mov` means reaching to the end of the file for the moov atom.
+3. **Client uploads** straight to R2. Bytes never pass through a function.
+4. **Register.** `/api/e/[slug]/media` then does, in order:
+   - `HeadObject` to confirm the object exists and its real size matches the claim.
+   - Size against the plan limit.
+   - **A ranged read of the first 32 bytes**, through `detectMediaSignature`. Unrecognised bytes, or an image claiming to be a video, delete the object and reject. An object with no media row is invisible to the purge cron and would sit in the bucket forever.
+   - Advisory duration check for videos.
+   - For server-compressed photos: read capture time, convert HEIC if needed, then `sanitizePhoto`.
+   - Insert the row.
 
----
+### The rule that governs step 4
 
-## 6. Upload flow (the critical path - build this carefully)
+**We store only bytes we produced.** `sanitizePhoto` tries the normal pass, then retries with `failOn: "none"` and without mozjpeg, which measurably rescues a truncated file the strict pass throws on. If both fail, the upload is **rejected** and the object deleted.
 
-Client-side direct upload to Vercel Blob (`@vercel/blob/client`), because serverless request bodies cap at 4.5 MB and phone videos are far bigger.
+This used to fall through to "store the original untouched", which failed open on exactly the unusual files most likely to carry GPS coordinates, a device serial and the owner's name, into a gallery whose whole point is a shareable link. The current behaviour refuses photos it previously stored. That is deliberate.
 
-```
-Guest browser                      Next.js API                      Vercel Blob
-     │  select files (multi)            │                                │
-     │  per file: downscale photo to    │                                │
-     │  max 2560px via canvas,          │                                │
-     │  compute sha-256                 │                                │
-     │──POST /api/upload (token req)──▶ │ checks: cookie, event open,    │
-     │                                  │ mime, size, rate limit         │
-     │◀─────────upload token────────────│                                │
-     │───────────────upload bytes (direct, resumable)──────────────────▶ │
-     │◀──────────────────────blob url + pathname───────────────────────  │
-     │──POST /api/e/[slug]/media──────▶ │ insert row (status per         │
-     │                                  │ moderation setting)            │
-     │◀──media record───────────────────│                                │
-```
-
-Rules enforced server-side in the token handshake (never trust the client):
-- Mime allowlist: `image/jpeg, image/png, image/webp, image/heic, video/mp4, video/quicktime, video/webm`
-- Size caps: photos **25 MB**, videos **200 MB**
-- Blob pathname convention: `events/<eventId>/<mediaId>.<ext>` - random, unguessable, and groupable for purge
-- Rate limit: **60 uploads / guest session / hour**, **200 / IP / hour**
-- Reject when: event expired, `uploads_enabled=false`, event purged
-
-Client UX requirements: parallel uploads (max 3 concurrent), per-file progress, retry on failure, works on iOS Safari + Android Chrome (this is 90% of traffic - test HEIC from iPhone explicitly).
+Re-encoding is also what strips metadata. `sharp` discards EXIF unless `.withMetadata()` is called, and it is **never** called here. If you add it for orientation reasons, `lib/exif.test.ts` fails, which is the intended outcome.
 
 ---
 
-## 7. Feature specs
+## 7. Deletion, retention and erasure are three different things
 
-### 7.1 Access control (`lib/access.ts` - single source of truth)
-- `public`: anyone with the link/QR can view + upload.
-- `password`: viewing and uploading require the per-event unlock cookie (HMAC-signed `{ eventId, exp }`, 30-day expiry). Password verified with bcrypt.
-- `private`: only the owner (dashboard session) can view; guest page shows "This gallery is private."
-- Expired (`expires_at < now`): gallery shows "This event has ended"; uploads blocked; owner can still view/download until purge.
-- Blob URLs are unguessable but public - acceptable for MVP; note in README that password protection gates the *gallery*, not raw blob URLs.
+Confusing these is how you either lose data or fail a legal obligation.
 
-### 7.2 Moderation
-- Dashboard "Pending" tab with approve/reject (single + bulk). Approved items appear in the guest gallery on the next poll.
-- Uploader always sees their own pending items (marked "Waiting for host approval").
+**Soft delete.** User-facing. Sets `deleted_at`. Reversible for 30 days through the trash and restore routes. Nothing user-facing hard-deletes.
 
-### 7.3 QR code
-- Dashboard QR card: preview + download PNG (1024px) and SVG. Encodes `${APP_URL}/e/${slug}`.
-- Also show the short link as copyable text for invitations.
+**Retention purge.** `app/api/cron/purge-expired/route.ts`, nightly at 03:00 UTC, authorized by `Authorization: Bearer $CRON_SECRET`, which Vercel sends automatically when `CRON_SECRET` is set. It soft-deletes galleries past `retention_until` (a 30-day grace, not an immediate wipe), then permanently removes things already soft-deleted for 30 days.
 
-### 7.4 Live updates
-- SWR polling every 8s with keyset cursor; new items animate in at the top. Pause polling when tab hidden (`visibilitychange`).
+Three safety properties, all deliberate:
+- **A circuit breaker.** Over 25 events **and** over half of all events eligible in one run aborts with a 500. Deleting a few galleries a night is normal; deleting most of the platform means something upstream changed retention for everyone, which is what a bad migration looks like.
+- **A null guard.** No `retention_until` means skip, never "use the default".
+- **Rows before bytes.** If it dies halfway, rows point at objects that are gone, which shows as broken media. The reverse would be orphaned bytes nobody can find or bill for.
 
-### 7.5 Downloads
-- Per-item: if `downloads_enabled`, show download button (fetch blob → `a[download]`) and Web Share API button on mobile.
-- If disabled: hide buttons (understood that screenshots can't be prevented).
-
-### 7.6 Download-all zip (organizer)
-- Route handler streams a zip of approved originals (fetch each blob sequentially, pipe through `archiver` into the response stream). Set `export const maxDuration = 300` (Vercel fluid compute).
-- Guard: if total size > 2 GB, return 413 with a clear message; dashboard then offers "download in batches of 200" (same endpoint with `?cursor=` ranges). This keeps MVP simple - no background jobs, no email links.
-
-### 7.7 Expiration & purge
-- `vercel.json` cron: `0 3 * * *` calls `/api/cron/purge-expired`.
-- Media is deleted after the owning account plan's storage window. Event rows remain with `purged_at` set so the dashboard can explain what happened.
-
-### 7.8 Consent
-- Consent checkbox is required before the guest session is created; `consented_at` stored on the guest row. Copy: *"I understand that photos and videos I upload may be visible to everyone with access to this event gallery, and I have the right to share them."*
-- Footer of guest page links to a simple privacy note page.
+**Erasure.** `lib/erasure.ts`. A legal data-removal request. Hard, immediate, irreversible, and it deliberately runs **bytes before rows**, the opposite order to the purge, so the system never reports data as erased while it is still sitting in the bucket. It includes soft-deleted rows and deletes video posters explicitly.
 
 ---
 
-## 8. Security checklist (agents: verify each before calling a task done)
+## 8. Delivery and access
 
-- [ ] Every organizer API route checks session **and** `event.owner_id === session.user.id` (ownership, not just login).
-- [ ] Guest cookies are HMAC-signed (jose), scoped per event, `httpOnly`, `sameSite=lax`.
-- [ ] All inputs Zod-validated; slugs generated server-side only (`nanoid` suffix, collision-checked).
-- [ ] Password hashes: bcrypt (cost 10). Never return `password_hash` in any API response.
-- [ ] Upload token handshake re-checks every rule (§6) - client-supplied mime/size are advisory only; Blob token itself restricts `allowedContentTypes` and `maximumSizeInBytes`.
-- [ ] Rate limits on: guest session creation (10/IP/hour), password attempts (10/IP/hour), uploads (§6).
-- [ ] Cron route rejects requests without `CRON_SECRET`.
-- [ ] Venue client contact fields never appear in guest-facing event responses.
+`GET /api/e/[slug]/media/[mediaId]/content` resolves event, media, plan and viewer, then redirects to a short-lived signed R2 URL. The bucket is private and has no public access.
 
----
+Visibility rules, in the order they are applied:
+- Soft-deleted media stays visible to event managers only, so the trash screen can show what is about to be restored. Guests get a 404, which from their side is the truth.
+- A guest sees `approved` media, plus their own `pending` uploads when moderation is on.
+- Private and password galleries are gated by `canViewGallery` before any of this.
 
-## 9. Build order (milestones for agents)
-
-Each milestone must end with the app deployable and the listed flows working end-to-end.
-
-1. **Scaffold & foundations** ✅ - Next.js + Tailwind, Drizzle schema + Neon migration, Auth.js login, `.env.example`, `lib/db.ts`, `lib/storage.ts`, `lib/guest.ts`, `lib/access.ts`.
-2. **Events CRUD + QR** ✅ - dashboard create/list/edit/delete, settings form, QR generation/download.
-3. **Guest page + uploads** ✅ - access gate, consent/name sheet, upload flow (§6, now with server-side photo compression - see §11), gallery grid + polling.
-4. **Moderation + media management** ✅ (basic) - pending section, approve/reject/delete. Duplicate-badge UI and per-item guest download/share buttons are not yet built.
-5. **Zip download and expiration cron purge** ✅. Rate limits and the remaining security pass are not yet built.
-6. **Polish** - landing page ✅. Empty/error states, mobile QA, OG images - not yet built.
-
-Out of scope for MVP (do not build): realtime websockets, face recognition, AI moderation, guest likes/comments, payments/plans, email notifications, EXIF-based sorting, background job queues, video transcoding.
+`toPublicEvent` in `lib/events.ts` is an **allowlist** of 15 fields. It used to be a denylist, which meant every new column was published to guests by default, and it had already leaked `retentionUntil`, `deletedAt` and `purgedAt`. `lib/events.test.ts` now reads the column list out of the schema and fails if any column is neither published nor explicitly withheld with a reason, so a new column cannot default to public.
 
 ---
 
-## 10. Open questions (defaults chosen - override only with the user)
+## 9. Rate limiting
 
-- **Multi-organizer events / co-hosts:** not in MVP; `owner_id` is a single user.
-- **Video length cap:** enforced by the 200 MB size cap only.
-- **Storage costs:** Vercel Blob is fine for MVP scale; revisit R2 (via `lib/storage.ts` swap) if events regularly exceed ~50 GB.
+`lib/ratelimit.ts`, backed by the `rate_limits` table. One atomic `INSERT ... ON CONFLICT DO UPDATE` does the whole window: a `CASE` resets the counter when the window has expired and increments it otherwise. There is no read-then-write, so concurrent requests cannot both pass a stale check. Verified: ten parallel requests against a limit of five let exactly five through.
+
+Applied to credential login **before** the bcrypt compare, so an attacker cannot burn server CPU by guessing. Verified live: 12 attempts, exactly 7 throttled.
 
 ---
 
-## 11. Service-side: superadmin + sales-provisioned venues
+## 10. Environment
 
-On top of the self-serve product (Google/email sign-up), Klik also supports a B2B motion: a sales team approaches a venue directly and a superadmin provisions their event for them - generating a QR code and a username/password login - instead of the venue signing up itself. Guests are unaffected either way: they never get accounts, regardless of how the event was created (§2).
+`lib/env.ts` validates with Zod **at module load**, so a missing variable fails the build rather than a guest's request. `AUTH_SECRET` was the worst case before this existed: it threw from `lib/guest.ts` on the first guest session, so a bad deploy looked healthy until somebody scanned a QR code.
 
-### Data model
+Required: `DATABASE_URL`, `AUTH_SECRET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`.
+Optional: `APP_URL`, `CRON_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM`.
 
-No new tables. An admin-provisioned venue is just a `users` row like any other, owning `events` the same way a self-serve organizer would (`events.owner_id`).
+**The gotcha:** a `.env` file sets an unset key to `""`, not `undefined`, and `z.optional()` only accepts `undefined`. Every optional value therefore goes through a preprocessor that maps `""` to `undefined`. Without it, a commented-out provider takes the whole build down.
 
-- `users.role`: `'organizer' | 'superadmin'`, default `'organizer'`.
-- `users.username` / `users.password_hash`: nullable, set only for credential-based accounts (superadmin + sales-provisioned venues). Self-serve OAuth/email users leave these null.
-- `users.email` is nullable (was `NOT NULL`) since admin-provisioned venues don't have one.
+`getAppUrl()` falls back to Vercel's ambient deployment URL when `APP_URL` is unset. That fallback is a convenience, not something to rely on: a QR code generated against a preview URL scans fine today and 404s once that deployment is superseded, which is a cruel failure for something printed and stuck to a wall.
 
-### Auth
+---
 
-`lib/auth.ts` adds a `Credentials` provider (username/password, bcrypt) alongside Google/Resend (which are only registered when their env vars are present). **Session strategy is `"jwt"`, not `"database"` - this is required, not a preference.** Reading Auth.js's own source: a Credentials sign-in always issues a JWT-encoded cookie, but reading the session back branches on the *global* `session.strategy` setting - so `"database"` would make credential logins look logged-out on the very next request. Google/Resend work identically under JWT strategy; `DrizzleAdapter` stays wired for OAuth account-linking and magic-link tokens (the `sessions` table just goes unused).
+## 11. Tests
 
-Credential JWTs carry the user's `credential_version`. Auth checks that version against the database whenever a credential session is accessed. `POST /api/admin/clients/[userId]/reset-password` increments the version, so the old password and previously issued client sessions stop working.
+`npm test`. Vitest, Node environment, no database and no network. `vitest.config.mts` supplies a fake environment because `lib/env.ts` validates at import.
 
-Account-credential passwords are hashed at cost 12 (`lib/credentials.ts`) - higher than the cost-10 convention for event gallery passwords (§8), since account access is higher-stakes than a gallery view-password.
+Coverage was chosen on one rule: **cover what already went wrong once.** `lib/file-signature.test.ts` pins SEC-9, `lib/events.test.ts` pins SEC-10 structurally, `lib/exif.test.ts` pins the metadata behaviour.
 
-### Routes
+**What is not covered is the important part.** The paths that destroy data, meaning the purge circuit breaker, `lib/erasure.ts` and the co-host revocation predicate, need a throwaway Postgres to run against. There is nowhere safe to point them until a Neon staging branch exists. Do not treat the green suite as coverage of those.
 
-- **Superadmin** (`role === 'superadmin'` required): `/admin` (list all provisioned clients/events), `/admin/new` (quick-create form - venue/contact name, event name, date, expiry, moderation, visibility → generates username + password + event + QR in one call, shown once). `POST /api/admin/clients`, `GET /api/admin/clients`, `POST /api/admin/clients/[userId]/reset-password`.
-- **Organizer dashboard** (used by both self-serve and admin-provisioned organizers, plus superadmin can open any event's dashboard): `/dashboard`, `/dashboard/events/[id]` (Gallery / Settings / QR tabs).
-- **Guest page**: unchanged from §2/§4, at `/e/[slug]`.
+---
 
-`lib/roles.ts` is the ownership/role guard (`requireSuperadmin`, `requireOwnerSession` - the latter also passes for a superadmin, which is why no separate admin-only gallery UI was needed).
+## 12. What is not built
 
-Creating a venue's login and their event together is one `db.batch([...])` call, not two sequential inserts - **`neon-http` has no `db.transaction()` support**, only `db.batch()`. `lib/events.ts`'s `prepareEventInsert()` builds (but doesn't execute) the event insert so it can be composed into that batch.
+Stripe and any payment. Self-serve signup. Guest accounts and guest event history. Per-photo visibility, per-photo share links, nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking. Transactional email. A background job runner. Video transcoding, and video metadata stripping with it.
 
-### Photo compression (the "should automatically get compressed" requirement)
+`ROADMAP.md` has all of it with task IDs and an order.
 
-Plugs into the existing upload flow (§6) at the step that already existed there - `POST /api/e/[slug]/media`, called by the client right after the direct-to-Blob upload of the original finishes:
+## 13. Known operational gaps
 
-- Photos: fetch the original blob, resize to fit within 2560×2560 (`fit: "inside"`, no upscaling), re-encode as JPEG quality 80 with `mozjpeg`, re-upload to the *same* pathname (`allowOverwrite: true` - one copy stored, not two), store the compressed size/dimensions in the `media` row.
-- **HEIC/HEIF (iPhone's default photo format) needs an extra step**: the `sharp` binary in this environment can decode AVIF but not HEIC/HEIF input (verified via `sharp.format.heif` - output-only). Since ARCHITECTURE.md §6 already flags HEIC as ~90% of real traffic, those mime types are converted to JPEG via `heic-convert` *before* handing off to `sharp` for the resize/quality step.
-- Wrapped in try/catch: any compression failure falls back to storing the original untouched rather than failing the guest's upload.
-- Videos: unchanged, pass through with the existing size cap only - no transcoding.
-
-### Explicitly deferred from this pass
-
-Payments, rate limiting (including brute-force protection on the `/login` credentials form), Google/Resend live wiring, video transcoding, and multi-admin management UI beyond the one seeded superadmin.
-
-### Deployment notes (for whoever touches infra next)
-
-- `vercel.json` pins `"framework": "nextjs"` explicitly. Without it, this project's Vercel dashboard setting was stuck on "Other" with `public/` as a static output directory, which serves nothing but the literal files in `public/` and 404s every real route - a nasty, silent failure mode where the build succeeds and the deployment shows "Ready" but every route 404s. If routes ever start 404ing on Vercel again, check the Framework Preset first.
-- The Blob store on this project is connected via the newer OIDC-based mechanism (`BLOB_STORE_ID`, no classic token by default). `@vercel/blob@2.6.1`'s `handleUpload()` (used by `/api/upload`) only supports the classic `BLOB_READ_WRITE_TOKEN` env var - no OIDC fallback in this SDK version - so that token has to be pulled from the Vercel dashboard (Storage → the store → the ".env.local"/Quickstart tab) and set manually. It is not derivable via the `vercel` CLI.
-- `scripts/seed-superadmin.ts` (`npm run seed:superadmin`) upserts a superadmin by username, keyed off `SUPERADMIN_USERNAME`/`SUPERADMIN_PASSWORD`/`SUPERADMIN_NAME` env vars passed at invocation time - never hardcode credentials into the script.
+- `AUTH_SECRET` is absent from Vercel's **Preview** scope, so preview deployments fail to boot at module load.
+- Preview `DATABASE_URL` and the `R2_*` variables point at **production**.
+- The bucket is EU-jurisdiction for a US-only product, and jurisdiction cannot be changed after creation. OPS-4 is the migration.
+- R2 has **no object versioning**. There is no undo for a deletion bug. The planned mitigation is a second bucket the application holds no credentials to delete from, in OPS-4.
+- No staging database. Nine migrations have gone straight to the only database that exists.
