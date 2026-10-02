@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db": "vitest run --config vitest.db.config.mts",
-    "test:db:setup": "./scripts/test-db.sh"
+    "test:db:setup": "./scripts/test-db.sh",
+    "db:migrate": "./scripts/apply-migration.sh"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
