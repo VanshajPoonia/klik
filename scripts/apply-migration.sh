@@ -25,8 +25,15 @@ esac
 TARGET="drizzle/$FILE"
 [ -f "$TARGET" ] || { echo "No such migration: $TARGET" >&2; exit 1; }
 
-DB=$(grep '^DATABASE_URL=' .env.local | cut -d= -f2- | tr -d '"')
-[ -n "$DB" ] || { echo "DATABASE_URL is not set in .env.local" >&2; exit 1; }
+# An explicit DATABASE_URL in the environment wins, so the same runner can be
+# pointed at the local test cluster or, later, a staging branch. Without that
+# override there would be no way to rehearse a migration before it is real.
+DB="${DATABASE_URL:-$(grep '^DATABASE_URL=' .env.local 2>/dev/null | cut -d= -f2- | tr -d '"')}"
+[ -n "$DB" ] || { echo "DATABASE_URL is not set, and .env.local has none" >&2; exit 1; }
+
+# Say which database out loud, with the credentials stripped, because "applied
+# successfully" to the wrong database is the failure worth preventing here.
+echo "Target: $(printf '%s' "$DB" | sed -E 's#://[^@]*@#://#; s#\?.*##')"
 
 # Echo the statements before running them, so the transcript shows exactly what
 # was applied rather than just a filename.
