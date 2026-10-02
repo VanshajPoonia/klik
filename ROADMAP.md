@@ -240,9 +240,19 @@ Coverage was chosen on one rule: **cover what already went wrong once.**
 
 **Found a real bug while writing these.** `slugifyEventName` deleted accented characters instead of folding them, so "Café Münch" became `caf-mnch` and "Renée's Party" became `rene-s-party`. The slug is the organizer-facing gallery URL and it goes on a printed QR sign, which is the worst place for it to look broken. Fixed with NFD normalisation, plus a trailing-dash fix where the 40-character truncation landed on a separator. Names in non-Latin scripts still fall back to `event` plus the random suffix, which is now tested rather than incidental.
 
-**Still blocked, and this is the part that matters most.** The paths that actually destroy data (the purge cron's circuit breaker, `lib/erasure.ts`, and the co-host revocation predicate in `lib/roles.ts`) need a throwaway Postgres to run against. There is nowhere safe to point them until the Neon staging branch exists, and pointing them at production is how you find out what the circuit breaker does. These are the reason F-7 was moved ahead of ACT-1, so F-7 is **not** finished.
+**UNBLOCKED AND DONE 2026-10-02.** This did not need Neon after all. PostgreSQL 16 was already installed locally, so `scripts/test-db.sh` brings up a throwaway cluster under `/tmp` on a non-default port, pushes the schema, and `npm run test:db` runs 30 tests against it. Production uses `neon-http`, which cannot talk to a local server, so these use `node-postgres` against the same schema; the SQL is identical and that is what is under test. The one divergence is that `node-postgres` supports transactions, so **nothing in these tests may use `db.transaction()`**, or it passes here and fails in production.
 
-Still to do: the database-backed suite above, rate limiter concurrency, and Playwright for four flows (guest joins and uploads, organizer moderates and downloads, activation applies, share link expires). Run all of it in CI.
+`test/harness.ts` refuses to run unless the database is literally named `klik_test` and is not on Neon, because the suite truncates every table.
+
+What the 30 cover:
+- **The circuit breaker**, three ways: it fires when 40 of 50 events are suddenly eligible **and deletes nothing on the way to aborting**; it does not fire on 30 of 200, because both the count and the ratio condition are required; it does not fire on 5 of 5, which is what stops a new install tripping it on day one.
+- **SEC-1 itself:** a null `retention_until` is skipped, not defaulted. Reaching a deadline soft-deletes rather than destroys, and the bytes survive the usual 30 days.
+- **Erasure:** includes media already in the trash, which is the whole point, since by the time someone demands erasure some of their uploads are already soft-deleted. Video posters named explicitly. **A failed object delete leaves the rows and writes no log entry**, so the log never claims an erasure that did not happen. `eraseUser` collects objects across every owned event before the cascade removes the rows, because R2 knows nothing about foreign keys.
+- **The co-host revocation predicate**, which is the highest-consequence query in the codebase: a soft-deleted membership is refused, a non-Premium owner's co-host is refused, a co-host of a different event is refused, and a removed co-host can be restored through the composite-key conflict path.
+
+The type checker caught a mistake while writing these: there is no `"free"` plan key, only `event`, `premium` and `venue`.
+
+Still to do: rate limiter concurrency under real contention, and Playwright for four flows (guest joins and uploads, organizer moderates and downloads, activation applies, share link expires). Run all of it in CI.
 
 ### F-8. Transactional email
 **Size:** S. **Depends on:** F-5.

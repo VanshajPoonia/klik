@@ -12,7 +12,9 @@
     "db:studio": "drizzle-kit studio",
     "seed:superadmin": "tsx scripts/seed-superadmin.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:db": "vitest run --config vitest.db.config.mts",
+    "test:db:setup": "./scripts/test-db.sh"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
@@ -42,12 +44,14 @@
     "@tailwindcss/postcss": "^4",
     "@types/archiver": "^8.0.0",
     "@types/node": "^24.19.0",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "pg": "^8.23.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5",
