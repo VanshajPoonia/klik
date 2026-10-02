@@ -5,6 +5,7 @@ import { albums, events, guests, media, venueClients } from "@/lib/schema";
 import { deleteBlobs } from "@/lib/storage";
 import { pruneRateLimits } from "@/lib/ratelimit";
 import { log, reportError } from "@/lib/observability";
+import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -189,6 +190,21 @@ export async function GET(request: Request) {
   // A successful run leaves a line too. A monitor that only ever sees failures
   // cannot tell "nothing went wrong" apart from "the cron stopped firing",
   // which is the failure mode a nightly job is most likely to have.
+  // Tell the heartbeat monitor the run finished. This is the only way to catch
+  // the failure a nightly job is most likely to have, which is not failing but
+  // silently never running at all: a cron that stops firing produces no logs,
+  // no errors and no alert, and looks exactly like a quiet night.
+  //
+  // Deliberately after the work and deliberately swallowed. A monitor being
+  // unreachable must not turn a successful purge into a failed request, and
+  // pinging before the work would report health the run has not earned.
+  if (env.CRON_HEARTBEAT_URL) {
+    await fetch(env.CRON_HEARTBEAT_URL, {
+      method: "GET",
+      signal: AbortSignal.timeout(5000),
+    }).catch((error) => log.warn("purge.heartbeat_failed", { error }));
+  }
+
   log.info("purge.completed", {
     eventsPurged: batch.length - failures.length,
     mediaDeleted,
