@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { albums, events, guests, media, venueClients } from "@/lib/schema";
 import { deleteBlobs } from "@/lib/storage";
 import { pruneRateLimits } from "@/lib/ratelimit";
+import { log, reportError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -123,9 +124,16 @@ export async function GET(request: Request) {
     expired.length > MAX_PURGES_PER_RUN &&
     expired.length / candidates.length > RUNAWAY_RATIO
   ) {
-    console.error(
-      `Purge aborted: ${expired.length} of ${candidates.length} events are eligible, ` +
-        "which looks like a retention misconfiguration rather than a backlog.",
+    // The single most important alert in the system. The breaker tripping means
+    // something made most of the platform eligible for deletion at once, and a
+    // 500 is only useful if somebody is told about it.
+    reportError(
+      "purge.circuit_breaker_tripped",
+      new Error(
+        `Purge aborted: ${expired.length} of ${candidates.length} events are eligible, ` +
+          "which looks like a retention misconfiguration rather than a backlog.",
+      ),
+      { eligible: expired.length, total: candidates.length },
     );
     return NextResponse.json(
       {
@@ -172,11 +180,22 @@ export async function GET(request: Request) {
       mediaDeleted += softDeleted.length;
     } catch (error) {
       failures.push(event.id);
-      console.error("Could not purge expired event", event.id, error);
+      reportError("purge.event_failed", error, { eventId: event.id });
     }
   }
 
   await pruneRateLimits();
+
+  // A successful run leaves a line too. A monitor that only ever sees failures
+  // cannot tell "nothing went wrong" apart from "the cron stopped firing",
+  // which is the failure mode a nightly job is most likely to have.
+  log.info("purge.completed", {
+    eventsPurged: batch.length - failures.length,
+    mediaDeleted,
+    trashedMediaRemoved: expiredTrash.length,
+    trashedEventsRemoved: expiredDeletedEvents.length,
+    failures: failures.length,
+  });
 
   return NextResponse.json({
     eventsPurged: batch.length - failures.length,
