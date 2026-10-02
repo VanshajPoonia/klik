@@ -259,8 +259,17 @@ Still to do: rate limiter concurrency under real contention, and Playwright for 
 Resend is already a dependency for magic links. Add `lib/email/` with typed templates: co-host invite, quota warning at 75 and 90 percent, payment receipt, payment failed, gallery expiring in 7 days, media purged, guest recap. Send through the job runner so a slow SMTP call never blocks a request.
 
 ### F-9. Error tracking and structured logging
-**Size:** S.
-Sentry for client and server, with the event ID and user ID as tags but never guest display names or emails in breadcrumbs.
+**Size:** S. **Vendor-free half DONE 2026-10-02. Sentry pending a DSN.**
+
+Done without waiting for a vendor, because the useful part never needed one. Vercel captures stdout, so one JSON object per line is queryable there today.
+
+- `lib/observability.ts` emits structured lines and holds `reportError`, the single seam Sentry plugs into later. Doing it this way round means adding Sentry is a few lines in one file rather than an import threaded through forty call sites. A registered reporter that throws is swallowed: Sentry being down is not a reason for an upload to fail.
+- **Redaction is the load-bearing part**, and it is where the tests are. A secret in a log leaks without anything breaking, no test failing and nobody noticing, then sits in an aggregator for the whole retention window. Values are redacted by key name (`secret`, `password`, `token`, `authorization`, `cookie`, `dsn`, and more) *and* by shape, so a connection string under an innocent-looking key is still caught. Nested objects and arrays included.
+- Every `console.error` on the critical paths is now a named, greppable event: `purge.circuit_breaker_tripped`, `purge.event_failed`, `upload.store_failed`, `upload.heic_convert_failed`, and the rest. Alerts get built on these names, so they are deliberately stable rather than sentences.
+- The cron logs `purge.completed` on success too. A monitor that only ever sees failures cannot tell "nothing went wrong" from "the cron stopped firing", which is the failure a nightly job is most likely to have.
+- **`GET /api/health`** checks the database and R2 and returns 503 when either is gone. Monitoring the homepage proves Vercel is up, not that Klik works, because the marketing page is static and returns 200 with the database on fire. Public, since an uptime monitor cannot authenticate, so the body carries statuses and durations and nothing else; failure detail goes to the log. Cached 30 seconds so a burst of pollers cannot turn into a burst of R2 calls. Verified live: database up in 1797ms cold, storage in 764ms, second call served from cache in 18ms.
+
+**Still to do, and it needs you.** A Sentry DSN, then `registerErrorReporter` gets its one caller, with event ID and user ID as tags but never guest display names or emails in breadcrumbs. Separately, point an uptime monitor at `/api/health`: free tiers at UptimeRobot or Better Stack are enough, and until something polls it the endpoint only helps whoever thinks to look.
 
 ---
 

@@ -27,6 +27,7 @@ import {
 } from "@/lib/file-signature";
 import { encodeMediaCursor } from "@/lib/media-cursor";
 import { isPlausibleCaptureTime, readCaptureTime } from "@/lib/exif";
+import { log, reportError } from "@/lib/observability";
 import { mediaContentPath, toPublicMedia } from "@/lib/media-delivery";
 import { canUseAlbums } from "@/lib/plans";
 
@@ -85,7 +86,7 @@ async function sanitizePhoto(
       .jpeg({ quality: COMPRESS_QUALITY, mozjpeg: true })
       .toBuffer({ resolveWithObject: true });
   } catch (error) {
-    console.error("Photo compression failed, retrying leniently:", error);
+    log.warn("upload.compression_retry", { error });
   }
 
   try {
@@ -95,7 +96,7 @@ async function sanitizePhoto(
       .jpeg({ quality: COMPRESS_QUALITY })
       .toBuffer({ resolveWithObject: true });
   } catch (error) {
-    console.error("Photo could not be decoded at all:", error);
+    reportError("upload.photo_undecodable", error);
     return null;
   }
 }
@@ -220,14 +221,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   if (!actualSizeBytes || actualSizeBytes !== input.sizeBytes) {
     await deleteBlobs([input.pathname]).catch((error) => {
-      console.error("Failed to remove invalid upload:", error);
+      reportError("upload.orphan_cleanup_failed", error, { reason: "size_mismatch" });
     });
     return NextResponse.json({ error: "Uploaded file size did not match" }, { status: 400 });
   }
 
   if (actualSizeBytes > maxBytes) {
     await deleteBlobs([input.pathname]).catch((error) => {
-      console.error("Failed to remove oversized upload:", error);
+      reportError("upload.orphan_cleanup_failed", error, { reason: "too_large" });
     });
     return NextResponse.json(
       { error: `File is too large for the ${plan.name} plan`, maxBytes },
@@ -311,7 +312,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       if (!storedObject.Body) throw new Error("Uploaded photo did not return a readable body");
       original = Buffer.from(await storedObject.Body.transformToByteArray());
     } catch (error) {
-      console.error("Could not read back the uploaded photo:", error);
+      reportError("upload.readback_failed", error);
       await deleteBlobs([input.pathname]).catch(() => {});
       return NextResponse.json({ error: "Uploaded file could not be verified" }, { status: 400 });
     }
@@ -328,7 +329,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       try {
         decoded = await heicConvert({ buffer: original, format: "JPEG", quality: 1 });
       } catch (error) {
-        console.error("HEIC conversion failed:", error);
+        reportError("upload.heic_convert_failed", error);
         await deleteBlobs([input.pathname]).catch(() => {});
         return NextResponse.json(
           { error: "That photo could not be processed. Try saving it as a JPEG first." },
@@ -367,7 +368,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       // The original is still sitting at this key, so there is no version of
       // this that ends with a usable row. Remove it rather than record a
       // pointer to bytes we decided not to keep.
-      console.error("Could not store the processed photo:", error);
+      reportError("upload.store_failed", error);
       await deleteBlobs([input.pathname]).catch(() => {});
       return NextResponse.json({ error: "Upload could not be completed" }, { status: 500 });
     }
