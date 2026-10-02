@@ -7,6 +7,7 @@ import { events, media } from "@/lib/schema";
 import { getAccountPlan } from "@/lib/account-plans";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { r2 } from "@/lib/storage";
+import { canViewMedia } from "@/lib/media-access";
 
 export async function GET(
   request: Request,
@@ -39,10 +40,13 @@ export async function GET(
     if (!viewer.guestId) {
       return NextResponse.json({ error: "Join the gallery to view media" }, { status: 401 });
     }
-    const visible =
-      item.status === "approved" ||
-      (item.status === "pending" && item.guestId === viewer.guestId);
-    if (!visible) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    // Same rule the grid query uses, from the same module, because a photo the
+    // grid hides must not be served by its direct URL. 404 rather than 403: a
+    // 403 confirms the photo exists, which for a hidden photo is already a
+    // disclosure.
+    if (!canViewMedia(item, { isManager: false, guestId: viewer.guestId }, event)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
   }
 
   // ?poster=1 serves the still extracted at upload time instead of the video

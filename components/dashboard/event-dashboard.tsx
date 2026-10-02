@@ -15,7 +15,7 @@ import { CoHostManager } from "@/components/dashboard/co-host-manager";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { OrganizerEvent } from "@/lib/events";
 import type { Album, Media, VenueClient } from "@/lib/schema";
-import type { MediaStatus } from "@/lib/schema";
+import type { MediaStatus, MediaVisibility } from "@/lib/schema";
 import { formatFileSize } from "@/lib/plans";
 import { buildDownloadBatches } from "@/lib/download-batches";
 
@@ -109,6 +109,46 @@ export function EventDashboard({
       else next.delete(mediaId);
       return next;
     });
+  }
+
+  /**
+   * Visibility is changed the same optimistic way as status, and separately,
+   * because the two are orthogonal: hiding a photo must not send it back to the
+   * moderation queue, and approving one must not un-hide it.
+   */
+  async function setVisibility(mediaId: string, visibility: MediaVisibility) {
+    const previous = mediaItems.find((item) => item.id === mediaId)?.visibility;
+    if (!previous || previous === visibility) return;
+
+    setMediaError(null);
+    setBusy(mediaId, true);
+    setMediaItems((items) =>
+      items.map((item) => (item.id === mediaId ? { ...item, visibility } : item)),
+    );
+
+    try {
+      const response = await fetch(`/api/events/${event.id}/media/${mediaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visibility }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? "Could not change who can see this.");
+      }
+    } catch (error) {
+      // Roll back rather than leave the grid claiming a photo is hidden when
+      // the server still has it in the gallery. Getting this wrong is worse
+      // than a failed request: the organizer believes it is private.
+      setMediaItems((items) =>
+        items.map((item) => (item.id === mediaId ? { ...item, visibility: previous } : item)),
+      );
+      setMediaError(
+        error instanceof Error ? error.message : "Could not change who can see this.",
+      );
+    } finally {
+      setBusy(mediaId, false);
+    }
   }
 
   async function setStatus(mediaId: string, status: MediaStatus) {
@@ -310,6 +350,7 @@ export function EventDashboard({
                   busyIds={busyIds}
                   albums={canManageAlbums ? albums : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
+                  onVisibilityChange={setVisibility}
                 />
               </section>
             )}
@@ -371,6 +412,7 @@ export function EventDashboard({
                   busyIds={busyIds}
                   albums={canManageAlbums ? albums : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
+                  onVisibilityChange={setVisibility}
                 />
               )}
             </section>
@@ -388,6 +430,7 @@ export function EventDashboard({
                   busyIds={busyIds}
                   albums={canManageAlbums ? albums : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
+                  onVisibilityChange={setVisibility}
                 />
               </section>
             )}

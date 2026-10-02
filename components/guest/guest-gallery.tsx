@@ -36,6 +36,7 @@ interface MediaItem {
   durationS?: number | null;
   kind: "photo" | "video";
   status: "pending" | "approved" | "rejected";
+  visibility: "gallery" | "private" | "link";
   blobUrl: string;
   albumId: string | null;
   mine: boolean;
@@ -632,6 +633,15 @@ export function GuestGallery({
                 {item.status === "pending" && item.mine && (
                   <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-paper">
                     Awaiting approval
+                  </span>
+                )}
+                {/* Only ever reaches a guest for their own upload, since that
+                    is the only non-gallery media the access rule lets through.
+                    Without it their photo is simply there, with no hint the
+                    host took it out of the gallery. */}
+                {item.visibility === "private" && item.mine && (
+                  <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-paper">
+                    Only you can see this
                   </span>
                 )}
               </button>

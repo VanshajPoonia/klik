@@ -72,6 +72,17 @@ export type MediaKind = (typeof MEDIA_KINDS)[number];
 export const MEDIA_STATUSES = ["pending", "approved", "rejected"] as const;
 export type MediaStatus = (typeof MEDIA_STATUSES)[number];
 
+/**
+ * Who a photo is for. Orthogonal to `status`, which answers whether a moderator
+ * approved it. A photo can be approved and private, and conflating the two
+ * would mean hiding a photo put it back in the moderation queue.
+ */
+export const MEDIA_VISIBILITIES = ["gallery", "private", "link"] as const;
+export type MediaVisibility = (typeof MEDIA_VISIBILITIES)[number];
+
+export const SHARE_SCOPES = ["media", "album", "event"] as const;
+export type ShareScope = (typeof SHARE_SCOPES)[number];
+
 export const QR_TEMPLATES = ["classic", "minimal", "bold"] as const;
 export type QrTemplate = (typeof QR_TEMPLATES)[number];
 
@@ -116,6 +127,11 @@ export const events = pgTable(
     venueFeatured: boolean("venue_featured").notNull().default(false),
     visibility: text("visibility").$type<EventVisibility>().notNull().default("public"),
     passwordHash: text("password_hash"),
+    // Whether a guest keeps seeing their own upload after it is made private.
+    // Default true because the alternative is cruel: someone uploads a photo,
+    // the host hides it, and from the guest's side their photo silently
+    // vanished with no explanation.
+    uploaderSeesOwnPrivate: boolean("uploader_sees_own_private").notNull().default(true),
     accessVersion: integer("access_version").notNull().default(0),
     moderation: boolean("moderation").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
@@ -212,6 +228,10 @@ export const media = pgTable(
     albumId: text("album_id").references(() => albums.id, { onDelete: "set null" }),
     kind: text("kind").$type<MediaKind>().notNull(),
     status: text("status").$type<MediaStatus>().notNull().default("approved"),
+    // See MEDIA_VISIBILITIES. Enforced in exactly two places that must agree:
+    // the query builder in lib/media.ts and the content delivery route. Both
+    // go through lib/media-access.ts so there is one rule, not two.
+    visibility: text("visibility").$type<MediaVisibility>().notNull().default("gallery"),
     blobUrl: text("blob_url").notNull(),
     blobPathname: text("blob_pathname").notNull(),
     contentHash: text("content_hash"),
@@ -285,6 +305,50 @@ export const rateLimits = pgTable("rate_limits", {
   count: integer("count").notNull().default(0),
 });
 
+/**
+ * A share link. One row per link, never per view.
+ *
+ * `mediaId`, `albumId` and `scope` are separate rather than one polymorphic
+ * target column, so the foreign keys still do their job: deleting a photo takes
+ * its links with it, which is the behaviour you want and the behaviour a
+ * polymorphic column cannot give you.
+ */
+export const mediaShares = pgTable(
+  "media_shares",
+  {
+    id: text("id").primaryKey(),
+    // Looked up by token alone, so it must reveal nothing about its target: no
+    // event slug, no media id, nothing enumerable.
+    token: text("token").notNull().unique(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    mediaId: text("media_id").references(() => media.id, { onDelete: "cascade" }),
+    albumId: text("album_id").references(() => albums.id, { onDelete: "cascade" }),
+    scope: text("scope").$type<ShareScope>().notNull(),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdByGuestId: text("created_by_guest_id").references(() => guests.id, {
+      onDelete: "set null",
+    }),
+    allowDownload: boolean("allow_download").notNull().default(false),
+    passwordHash: text("password_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    maxViews: integer("max_views"),
+    viewCount: integer("view_count").notNull().default(0),
+    // Revocation is instant and permanent, and deliberately NOT a soft delete.
+    // A revoked link is kept precisely so the record of it having existed, and
+    // of having been withdrawn, survives.
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("media_shares_event_idx").on(table.eventId, table.createdAt),
+    index("media_shares_media_idx").on(table.mediaId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Event = typeof events.$inferSelect;
@@ -295,3 +359,5 @@ export type NewMedia = typeof media.$inferInsert;
 export type Album = typeof albums.$inferSelect;
 export type EventCoHost = typeof eventCoHosts.$inferSelect;
 export type VenueClient = typeof venueClients.$inferSelect;
+export type MediaShare = typeof mediaShares.$inferSelect;
+export type NewMediaShare = typeof mediaShares.$inferInsert;

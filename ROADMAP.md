@@ -456,15 +456,32 @@ Venue subscription past due: 7-day grace with galleries still readable, then rea
 ## Phase MED: Per-photo control, share links, folders
 
 ### MED-1. Per-media visibility
-**Size:** M. **Depends on:** F-3. This is your "make certain pictures private and public".
+**DONE 2026-10-02.** **Size:** M. This is your "make certain pictures private and public".
 Add `media.visibility` with `gallery | private | link`:
 - `gallery` (default): everyone with gallery access sees it.
 - `private`: only event managers, plus the guest who uploaded it if `events.uploader_sees_own_private` is on.
 - `link`: hidden from the grid, reachable only through an active share link (MED-2).
 Enforce in exactly one place, the media query builder in `lib/media.ts`, and in the content route. Add a single-item toggle in the lightbox and dashboard grid, and a bulk action (MED-5). Note this is orthogonal to `status`; a photo can be approved and private.
 
+**Shipped.** The spec said two enforcement points. There were **three**: the gallery query, the content route, and the download route, which had its own quietly diverging copy of the rule. All three now go through `lib/media-access.ts`.
+
+That module holds the rule twice on purpose, as SQL for the grid (filtering in JavaScript would mean fetching private rows and trusting the client not to look) and as a boolean for the single-row routes. Two expressions of one rule is precisely how a disclosure bug happens, so `test/media-access.dbtest.ts` asserts they agree across **every** combination of visibility, status and ownership against a real database, rather than testing each against what its author believed.
+
+Decisions worth knowing:
+- **`events.uploader_sees_own_private` defaults to true.** The alternative is cruel: a guest uploads a photo, the host hides it, and from the guest's side it silently vanished. Hosts who need a real back room can turn it off.
+- **Link-only media is hidden from its uploader too.** Marking something link-only is how a host takes it out of the room, so an exception for the uploader would defeat the point.
+- **An unknown visibility is refused, not guessed.** If a later migration adds one and this module is not updated, the two available guesses are "show it" and "hide it", and only one of those is recoverable. Managers still see it, so nothing becomes unreachable.
+- **A 404, never a 403**, for media a viewer may not see. A 403 confirms the photo exists, which for a hidden photo is already the disclosure.
+- Guests receive `visibility` in their payload. Safe, because the access rule means the only non-gallery media reaching a guest is their own, and without it their hidden photo is simply there with no hint the host moved it.
+
+The dashboard grid has a per-photo control and a badge on the tile, because an organizer scanning two hundred photos should see which are hidden without opening each dropdown. The guest side shows "Only you can see this" on their own hidden uploads.
+
 ### MED-2. Share links
-**Size:** L. **Depends on:** MED-1, F-2. This is "each picture should get its own sharable link".
+**Size:** L. **Schema landed 2026-10-02, routes next.** **Depends on:** MED-1, F-2. This is "each picture should get its own sharable link".
+
+The `media_shares` table ships in migration `0011` alongside MED-1, so there is one SQL paste rather than two. `mediaId`, `albumId` and `scope` are separate columns rather than one polymorphic target, so the foreign keys still work and deleting a photo takes its links with it. A CHECK constraint enforces that a scope points at the thing it claims to. Revocation is deliberately **not** a soft delete: a revoked link is kept precisely so the record of it having existed, and of having been withdrawn, survives.
+
+Still to build: `/s/[token]`, the create and revoke routes, OG tags, and the share sheet.
 Table `media_shares` (id, token unique, event_id, media_id nullable, album_id nullable, scope `media | album | event`, created_by_user_id nullable, created_by_guest_id nullable, allow_download, password_hash nullable, expires_at nullable, max_views nullable, view_count, revoked_at, created_at).
 - Public route `/s/[token]`: server-rendered, checks revoked, expiry, view cap, password. Serves media through a fresh short-lived signed R2 URL, never the bucket URL. Shows a minimal Klik-branded frame with an optional "See the full gallery" call to action if the event is public.
 - The token must not leak the event slug or media ID, so use a 22-character nanoid and look up by token only.

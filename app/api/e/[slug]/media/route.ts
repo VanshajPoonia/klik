@@ -125,6 +125,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const rows = await fetchGalleryMedia(event.id, {
     isOwner: Boolean(viewer.ownerSession),
     guestId: viewer.guestId,
+    event,
     cursor,
     since,
     limit,

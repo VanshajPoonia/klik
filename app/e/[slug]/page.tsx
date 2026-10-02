@@ -93,6 +93,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     await fetchGalleryMedia(event.id, {
       isOwner,
       guestId: guestSession?.guestId,
+      event,
       limit: 60,
     })
   ).map((item) => toPublicMedia(item, event.slug));

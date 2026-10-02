@@ -2,10 +2,18 @@ import { and, asc, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { db } from "./db";
 import { media } from "./schema";
 import { decodeMediaCursor } from "./media-cursor";
+import { mediaVisibilityFilter, type MediaAccessEvent } from "./media-access";
 
 export interface FetchGalleryOptions {
   isOwner: boolean;
   guestId?: string | null;
+  /**
+   * The event's own access settings. Required rather than optional on purpose:
+   * defaulting it would mean a caller who forgot it silently gets whichever
+   * behaviour the default happened to be, and one of those answers leaks
+   * private photos.
+   */
+  event: MediaAccessEvent;
   cursor?: string | null;
   /**
    * Mutually exclusive with cursor: returns every row newer than this
@@ -26,7 +34,7 @@ const SINCE_SAFETY_CAP = 300;
 /** Single source of truth for "which media rows can this viewer see," shared
  * by the guest gallery API route and the guest page's initial server render. */
 export async function fetchGalleryMedia(eventId: string, options: FetchGalleryOptions) {
-  const { isOwner, guestId, cursor, since, limit = 50 } = options;
+  const { isOwner, guestId, event, cursor, since, limit = 50 } = options;
   // Soft-deleted rows are excluded for everyone, owners included. They exist
   // only so the 30-day recovery window in the purge cron has something to
   // restore from, and a deleted photo reappearing in a gallery would defeat
@@ -54,11 +62,10 @@ export async function fetchGalleryMedia(eventId: string, options: FetchGalleryOp
     );
   }
 
-  const visibilityFilter = isOwner
-    ? undefined // owner sees every status (for moderation/preview)
-    : guestId
-      ? or(eq(media.status, "approved"), eq(media.guestId, guestId))
-      : eq(media.status, "approved");
+  // Status and visibility are decided together in lib/media-access.ts, which
+  // also expresses the same rule as a boolean for the content route. Keeping
+  // both there is what stops the grid and the direct URL disagreeing.
+  const visibilityFilter = mediaVisibilityFilter({ isManager: isOwner, guestId: guestId ?? null }, event);
 
   const rows = await db
     .select()

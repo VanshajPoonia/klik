@@ -22,6 +22,7 @@ export function toPublicMedia(
     id: string;
     kind: "photo" | "video";
     status: "pending" | "approved" | "rejected";
+    visibility: "gallery" | "private" | "link";
     albumId: string | null;
     createdAt: Date;
     mine?: boolean;
@@ -34,6 +35,11 @@ export function toPublicMedia(
     id: item.id,
     kind: item.kind,
     status: item.status,
+    // Safe to publish: the access rule means a guest only ever receives media
+    // they may see, and the only non-gallery media that reaches a guest is
+    // their own. Without it they get a photo back with no hint that the host
+    // took it out of the gallery, which looks like nothing happened.
+    visibility: item.visibility,
     albumId: item.albumId,
     createdAt: item.createdAt,
     mine: Boolean(item.mine),

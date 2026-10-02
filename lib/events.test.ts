@@ -28,6 +28,7 @@ const row: Event = {
   passwordHash: "$2b$10$notarealhash",
   accessVersion: 3,
   moderation: true,
+  uploaderSeesOwnPrivate: true,
   isActive: true,
   downloadsEnabled: true,
   uploadsEnabled: true,
@@ -78,6 +79,10 @@ const WITHHELD: Record<string, string> = {
   purgedAt: "internal deletion bookkeeping",
   deletedAt: "internal soft-delete state",
   updatedAt: "reveals organizer activity to guests",
+  // Host configuration. The server already filters private media out of a
+  // guest's gallery, so the flag buys a guest nothing and telling them about a
+  // back room they cannot see is worse than silence.
+  uploaderSeesOwnPrivate: "host configuration, enforced server side",
 };
 
 describe("toPublicEvent", () => {

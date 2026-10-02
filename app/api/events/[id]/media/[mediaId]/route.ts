@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { albums, events, media, MEDIA_STATUSES } from "@/lib/schema";
+import { albums, events, media, MEDIA_STATUSES, MEDIA_VISIBILITIES } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
 import type { EventCapability } from "@/lib/permissions";
 import { getAccountPlan } from "@/lib/account-plans";
@@ -11,11 +11,18 @@ import { canUseAlbums } from "@/lib/plans";
 const patchSchema = z
   .object({
     status: z.enum(MEDIA_STATUSES).optional(),
+    // Orthogonal to status on purpose. Hiding a photo must not send it back to
+    // the moderation queue, and approving one must not un-hide it.
+    visibility: z.enum(MEDIA_VISIBILITIES).optional(),
     albumId: z.string().min(10).max(64).nullable().optional(),
   })
-  .refine((input) => input.status !== undefined || input.albumId !== undefined, {
-    message: "No changes provided",
-  });
+  .refine(
+    (input) =>
+      input.status !== undefined ||
+      input.visibility !== undefined ||
+      input.albumId !== undefined,
+    { message: "No changes provided" },
+  );
 
 async function getOwnedEventMedia(eventId: string, mediaId: string, capability: EventCapability) {
   const [event] = await db.select().from(events).where(and(eq(events.id, eventId), isNull(events.deletedAt))).limit(1);

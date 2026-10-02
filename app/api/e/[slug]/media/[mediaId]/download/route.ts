@@ -7,6 +7,7 @@ import { events, media } from "@/lib/schema";
 import { getAccountPlan } from "@/lib/account-plans";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { extensionForMime, r2 } from "@/lib/storage";
+import { canViewMedia } from "@/lib/media-access";
 
 function downloadFilename(slug: string, mimeType: string, mediaId: string) {
   const extension = extensionForMime(mimeType);
@@ -47,10 +48,9 @@ export async function GET(
       return NextResponse.json({ error: "Join the gallery before downloading" }, { status: 401 });
     }
 
-    const canDownloadItem =
-      item.status === "approved" ||
-      (item.status === "pending" && item.guestId === viewer.guestId);
-    if (!canDownloadItem) {
+    // The third place this rule is enforced, and the one most likely to be
+    // forgotten. Downloading is viewing with a file attached.
+    if (!canViewMedia(item, { isManager: false, guestId: viewer.guestId }, event)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
   }

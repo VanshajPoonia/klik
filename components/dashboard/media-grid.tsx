@@ -1,6 +1,18 @@
 import Image from "next/image";
-import { Check, Download, Play, Trash2, X } from "lucide-react";
-import type { Media } from "@/lib/schema";
+import { Check, Download, EyeOff, Link2, Play, Trash2, X } from "lucide-react";
+import type { Media, MediaVisibility } from "@/lib/schema";
+import { VISIBILITY_OPTIONS } from "@/lib/media-access";
+
+/** Shown on the tile itself, because an organizer scanning a grid of two
+ *  hundred photos should see which ones are hidden without opening each
+ *  dropdown to find out. Gallery is the default and gets no badge: marking the
+ *  normal case is noise. */
+const VISIBILITY_BADGE: Partial<
+  Record<MediaVisibility, { label: string; Icon: typeof EyeOff }>
+> = {
+  private: { label: "Hidden", Icon: EyeOff },
+  link: { label: "Link only", Icon: Link2 },
+};
 
 export function MediaGrid({
   items,
@@ -15,6 +27,7 @@ export function MediaGrid({
   busyIds,
   albums,
   onAlbumChange,
+  onVisibilityChange,
 }: {
   items: Media[];
   onApprove?: (id: string) => void;
@@ -28,6 +41,7 @@ export function MediaGrid({
   busyIds?: Set<string>;
   albums?: Array<{ id: string; name: string }>;
   onAlbumChange?: (id: string, albumId: string | null) => void;
+  onVisibilityChange?: (id: string, visibility: MediaVisibility) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -35,6 +49,7 @@ export function MediaGrid({
         const busy = busyIds?.has(item.id) ?? false;
         const selected = selectedIds?.has(item.id) ?? false;
         const selectionLabel = `${selected ? "Deselect" : "Select"} this ${item.kind}`;
+        const badge = VISIBILITY_BADGE[item.visibility];
 
         return (
           <article
@@ -79,6 +94,12 @@ export function MediaGrid({
                   className="object-cover"
                 />
               )}
+              {badge && !selectionMode && (
+                <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-paper backdrop-blur">
+                  <badge.Icon className="h-3 w-3" aria-hidden="true" />
+                  {badge.label}
+                </span>
+              )}
               {selectionMode && (
                 <>
                   <span
@@ -113,6 +134,25 @@ export function MediaGrid({
                   {albums.map((album) => (
                     <option key={album.id} value={album.id}>
                       {album.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {!selectionMode && onVisibilityChange && (
+              <label className="block border-t border-canvas-line bg-canvas-raised px-2 py-2">
+                <span className="sr-only">Who can see this {item.kind}</span>
+                <select
+                  value={item.visibility}
+                  onChange={(event) =>
+                    onVisibilityChange(item.id, event.target.value as MediaVisibility)
+                  }
+                  disabled={busy}
+                  className="w-full rounded-lg border border-canvas-line bg-canvas px-2 py-1.5 text-xs text-paper"
+                >
+                  {VISIBILITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
