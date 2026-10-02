@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Download, Pause, Play, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Pause, Play, Sparkles, X } from "lucide-react";
+import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
 
 export interface LightboxItem {
   id: string;
@@ -22,6 +23,9 @@ export function Lightbox({
   downloadBaseUrl,
   canDownload = false,
   canSlideshow = false,
+  slug,
+  enhanced = false,
+  onEnhancedChange,
 }: {
   items: LightboxItem[];
   index: number;
@@ -30,11 +34,46 @@ export function Lightbox({
   downloadBaseUrl?: string;
   canDownload?: boolean;
   canSlideshow?: boolean;
+  slug?: string;
+  enhanced?: boolean;
+  onEnhancedChange?: (next: boolean) => void;
 }) {
   const touchStartX = useRef<number | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [slideshowPlaying, setSlideshowPlaying] = useState(false);
+  // Keyed by media id rather than reset on change, so nothing has to call
+  // setState from an effect body just to clear a stale result.
+  const [enhancedFor, setEnhancedFor] = useState<{ id: string; url: string } | null>(null);
+  const enhancedBlob = useRef<Blob | null>(null);
   const item = items[index];
+  const enhancedUrl = item && enhancedFor?.id === item.id ? enhancedFor.url : null;
+
+  /**
+   * Auto-levels the photo on this device. The original is shown immediately and
+   * the enhanced version swapped in when it is ready, so the viewer never waits
+   * on a blank frame. Aborting on change matters more than it looks: swiping
+   * quickly through a gallery starts one of these per photo, and without the
+   * abort they all finish and fight over the same state.
+   */
+  useEffect(() => {
+    if (!enhanced || !item || item.kind !== "photo") return;
+
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+
+    enhancePhoto(item.blobUrl, controller.signal).then((blob) => {
+      if (controller.signal.aborted || !blob) return;
+      enhancedBlob.current = blob;
+      objectUrl = URL.createObjectURL(blob);
+      setEnhancedFor({ id: item.id, url: objectUrl });
+    });
+
+    return () => {
+      controller.abort();
+      enhancedBlob.current = null;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [enhanced, item]);
 
   const go = useCallback(
     (delta: number) => {
@@ -121,10 +160,34 @@ export function Lightbox({
               )}
             </button>
           )}
+          {onEnhancedChange && (
+            <button
+              type="button"
+              onClick={() => onEnhancedChange(!enhanced)}
+              aria-label={enhanced ? "Show the original photo" : "Enhance photos"}
+              aria-pressed={enhanced}
+              title={enhanced ? "Enhanced. Tap to see the original" : "Enhance"}
+              className={`flex h-11 w-11 items-center justify-center rounded-full transition-transform active:scale-90 ${
+                enhanced ? "bg-volt text-on-volt" : "bg-white/10 text-paper"
+              }`}
+            >
+              <Sparkles className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
           {canDownload && downloadBaseUrl && (
+            // When an enhanced version exists, save those bytes rather than
+            // following the link, so what you download is what you were
+            // looking at. Falls back to the server route for videos, for
+            // originals, and whenever enhancement did not produce anything.
             <a
               href={`${downloadBaseUrl}/${item.id}/download`}
               aria-label={`Download ${item.kind}`}
+              onClick={(event) => {
+                const blob = enhancedBlob.current;
+                if (!blob || !slug) return;
+                event.preventDefault();
+                saveBlob(blob, downloadFilename(slug, item.id));
+              }}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
             >
               <Download className="h-5 w-5" aria-hidden="true" />
@@ -155,7 +218,7 @@ export function Lightbox({
         ) : (
           <Image
             key={item.id}
-            src={item.blobUrl}
+            src={enhancedUrl ?? item.blobUrl}
             alt={`Photo ${index + 1} of ${items.length}`}
             fill
             unoptimized
