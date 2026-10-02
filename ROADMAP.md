@@ -327,16 +327,24 @@ When a signed-in person uploads, attribute the media to their account as well as
 `event_co_hosts` exists but is a flat membership list with a hard-coded cap of 5, no roles, and no way to invite someone who does not yet have an account.
 
 ### ORG-1. Roles on membership
-**Size:** M. **Depends on:** F-3.
+**DONE 2026-10-02.** **Size:** M.
 Add `event_co_hosts.role` with `manager | moderator | contributor`, default `manager`. The owner is not stored here, they are `events.owner_id`.
 - `manager`: everything except billing, deleting the event, and transferring ownership.
 - `moderator`: approve, reject, delete media, manage folders. No settings, no QR rotation, no co-host changes.
 - `contributor`: upload on behalf of the event and see private media. Nothing else. This is the role for a hired photographer.
 Encode the matrix once in `lib/permissions.ts` (F-3) and test it exhaustively (F-7).
 
+**Shipped.** `lib/permissions.ts` holds the matrix, written out per role rather than composed by spreading a narrower role into a wider one: spreading reads nicely and hides the thing worth seeing, which is that adding a capability should force a decision on every row instead of silently granting it to whoever inherits. `resolveEventActor` in `lib/roles.ts` returns the actor and their role; `requireEventCapability` is what routes now call. `requireEventManagerSession` survives as the coarse "are you on the team at all" check, because ten call sites use it and most of them only need that.
+
+Capabilities are bound to real routes, which is the part that makes roles mean anything: settings and QR rotation need `event.settings` and `event.qr`, media moderation and deletion are separate capabilities, albums, trash and the export ZIP each have their own. A contributor can upload and view and nothing else, which is the hired-photographer case the role exists for.
+
+Migration `0010` adds the column with a `CHECK` constraint, defaulting to `manager`, which is exactly what every existing row already was in practice, so the backfill records reality rather than changing it. Deliberately not a Postgres enum: adding a value to one needs a migration and a lock, and this set is expected to grow.
+
+Tested both ways. `lib/permissions.test.ts` spells the matrix out a second time, independently, because a test that imports the table it is checking proves only that an array equals itself; it also asserts the ladder property, that each role holds strictly less than the one above it, and that nobody below manager can change the team. `test/roles.dbtest.ts` covers the same rules through a real database.
+
 ### ORG-2. Move the co-host cap into plan config
-**Size:** S. **Depends on:** F-4.
-Replace the literal `>= 5` in the co-hosts route with `plan.maxCoHosts`. The current route also gates on the owner's plan being exactly `premium`, which will break the moment Venue accounts want co-hosts; gate on a capability, not a plan key.
+**DONE 2026-10-02.** **Size:** S.
+`maxCoHosts` is now part of the plan definition: Event 0, Premium 5, Venue 10. The literal `>= 5` is gone, and `canUseCoHosts` is derived from `maxCoHosts > 0` rather than compared against `"premium"`. That second part was a latent bug rather than a tidy-up: Venue accounts would have been refused co-hosts despite paying for a plan built entirely around running events for other people.
 
 ### ORG-3. Invite by username, with a real invite flow
 **Size:** M. **Depends on:** ID-3, F-8.

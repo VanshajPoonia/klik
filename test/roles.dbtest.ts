@@ -6,9 +6,8 @@ let session: Session | null = null;
 vi.mock("@/lib/db", async () => ({ db: (await import("./harness")).testDb }));
 vi.mock("@/lib/auth", () => ({ auth: async () => session }));
 
-const { requireEventManagerSession, requireOwnerSession, requireSuperadmin } = await import(
-  "@/lib/roles"
-);
+const { requireEventCapability, requireEventManagerSession, requireOwnerSession, requireSuperadmin, resolveEventActor } =
+  await import("@/lib/roles");
 const { eventCoHosts } = await import("@/lib/schema");
 const { closeDatabase, daysFromNow, makeEvent, makeUser, resetDatabase, testDb } = await import(
   "./harness"
@@ -175,5 +174,115 @@ describe("requireSuperadmin", () => {
 
     session = null;
     expect(await requireSuperadmin()).toBeNull();
+  });
+});
+
+
+/**
+ * ORG-1. Before roles existed, every co-host had the owner's powers short of
+ * owning the row, so adding a photographer so they could upload also let them
+ * rotate the QR code and remove the other co-hosts. These assert the stored
+ * role is what actually gates the action, not just what gets displayed.
+ */
+describe("resolveEventActor", () => {
+  it("reports the owner and a superadmin as owner, with no stored row", async () => {
+    const owner = await makeUser({ planKey: "premium" });
+    const admin = await makeUser({ role: "superadmin" });
+    const event = await makeEvent(owner);
+
+    signedInAs(owner);
+    expect((await resolveEventActor(event, owner))?.role).toBe("owner");
+
+    signedInAs(admin, "superadmin");
+    expect((await resolveEventActor(event, owner))?.role).toBe("owner");
+  });
+
+  it.each(["manager", "moderator", "contributor"] as const)(
+    "reports a co-host's stored role: %s",
+    async (role) => {
+      const owner = await makeUser({ planKey: "premium" });
+      const coHost = await makeUser();
+      const event = await makeEvent(owner);
+      await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost, role });
+
+      signedInAs(coHost);
+      expect((await resolveEventActor(event, owner))?.role).toBe(role);
+    },
+  );
+
+  it("defaults an existing row with no explicit role to manager", async () => {
+    const owner = await makeUser({ planKey: "premium" });
+    const coHost = await makeUser();
+    const event = await makeEvent(owner);
+    await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost });
+
+    signedInAs(coHost);
+    expect((await resolveEventActor(event, owner))?.role).toBe("manager");
+  });
+});
+
+describe("requireEventCapability", () => {
+  const asCoHost = async (role: "manager" | "moderator" | "contributor") => {
+    const owner = await makeUser({ planKey: "premium" });
+    const coHost = await makeUser();
+    const event = await makeEvent(owner);
+    await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost, role });
+    signedInAs(coHost);
+    return { owner, event };
+  };
+
+  it("lets a manager change settings and the team", async () => {
+    const { owner, event } = await asCoHost("manager");
+    expect(await requireEventCapability(event, owner, "event.settings")).not.toBeNull();
+    expect(await requireEventCapability(event, owner, "cohosts.manage")).not.toBeNull();
+  });
+
+  it("stops a manager deleting or transferring the event", async () => {
+    const { owner, event } = await asCoHost("manager");
+    expect(await requireEventCapability(event, owner, "event.delete")).toBeNull();
+    expect(await requireEventCapability(event, owner, "event.transfer")).toBeNull();
+  });
+
+  it("lets a moderator run the gallery but not configure it or promote themselves", async () => {
+    const { owner, event } = await asCoHost("moderator");
+    expect(await requireEventCapability(event, owner, "media.moderate")).not.toBeNull();
+    expect(await requireEventCapability(event, owner, "media.delete")).not.toBeNull();
+    expect(await requireEventCapability(event, owner, "event.settings")).toBeNull();
+    expect(await requireEventCapability(event, owner, "event.qr")).toBeNull();
+    expect(await requireEventCapability(event, owner, "cohosts.manage")).toBeNull();
+  });
+
+  it("lets a contributor upload and view, and nothing else", async () => {
+    const { owner, event } = await asCoHost("contributor");
+    expect(await requireEventCapability(event, owner, "media.upload")).not.toBeNull();
+    expect(await requireEventCapability(event, owner, "media.viewPrivate")).not.toBeNull();
+    // The point of the role: the photographer cannot remove a guest's photo.
+    expect(await requireEventCapability(event, owner, "media.delete")).toBeNull();
+    expect(await requireEventCapability(event, owner, "media.moderate")).toBeNull();
+    expect(await requireEventCapability(event, owner, "media.exportAll")).toBeNull();
+    expect(await requireEventCapability(event, owner, "event.settings")).toBeNull();
+  });
+
+  it("refuses every capability once the membership is soft-deleted", async () => {
+    const owner = await makeUser({ planKey: "premium" });
+    const coHost = await makeUser();
+    const event = await makeEvent(owner);
+    await testDb
+      .insert(eventCoHosts)
+      .values({ eventId: event, userId: coHost, role: "manager", deletedAt: new Date() });
+
+    signedInAs(coHost);
+    for (const capability of ["media.upload", "media.viewPrivate", "event.settings"] as const) {
+      expect(await requireEventCapability(event, owner, capability), capability).toBeNull();
+    }
+  });
+
+  it("gives the owner everything", async () => {
+    const owner = await makeUser();
+    const event = await makeEvent(owner);
+    signedInAs(owner);
+    for (const capability of ["event.delete", "event.transfer", "cohosts.manage"] as const) {
+      expect(await requireEventCapability(event, owner, capability), capability).not.toBeNull();
+    }
   });
 });

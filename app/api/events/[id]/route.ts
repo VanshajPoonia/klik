@@ -11,7 +11,8 @@ import {
 } from "@/lib/schema";
 import { toOrganizerEvent, hashGalleryPassword } from "@/lib/events";
 import { eraseEvent } from "@/lib/erasure";
-import { requireEventManagerSession, requireOwnerSession } from "@/lib/roles";
+import { requireEventCapability, requireEventManagerSession, requireOwnerSession } from "@/lib/roles";
+import type { EventCapability } from "@/lib/permissions";
 import { getAccountPlan } from "@/lib/account-plans";
 import {
   canCustomizeGallery,
@@ -45,10 +46,18 @@ const patchSchema = z.object({
   expiresAt: z.coerce.date().nullable().optional(),
 });
 
-async function getOwnedEvent(id: string) {
+/**
+ * `capability` narrows who gets through. Reading the event is open to anyone on
+ * the team; changing its settings is not, which is the difference between a
+ * moderator and a manager. Omitting it keeps the old coarse "are you on the
+ * team at all" behaviour, which is what GET wants.
+ */
+async function getOwnedEvent(id: string, capability?: EventCapability) {
   const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) return { event: null, session: null };
-  const session = await requireEventManagerSession(event.id, event.ownerId);
+  const session = capability
+    ? (await requireEventCapability(event.id, event.ownerId, capability))?.session ?? null
+    : await requireEventManagerSession(event.id, event.ownerId);
   return { event, session };
 }
 
@@ -62,7 +71,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { event, session } = await getOwnedEvent(id);
+  const { event, session } = await getOwnedEvent(id, "event.settings");
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

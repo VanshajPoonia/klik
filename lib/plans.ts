@@ -24,6 +24,12 @@ export type PlanDefinition = {
    * real transcoding, this is what keeps video sane.
    */
   maxVideoSeconds: number;
+  /**
+   * How many co-hosts an event may have. Zero means the feature is off, which
+   * is what `canUseCoHosts` now reads, so adding a plan with co-hosts is a
+   * number here rather than another plan key in a chain of comparisons.
+   */
+  maxCoHosts: number;
   features: readonly string[];
   featured?: boolean;
 };
@@ -42,6 +48,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxPhotoBytes: 25 * MB,
     maxVideoBytes: 200 * MB,
     maxVideoSeconds: 60,
+    maxCoHosts: 0,
     features: [
       "Unlimited guests",
       "Photos and videos",
@@ -70,6 +77,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxPhotoBytes: 25 * MB,
     maxVideoBytes: 500 * MB,
     maxVideoSeconds: 180,
+    maxCoHosts: 5,
     features: [
       "Everything in Klik Event",
       "12-month upload window",
@@ -98,6 +106,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxPhotoBytes: 25 * MB,
     maxVideoBytes: 500 * MB,
     maxVideoSeconds: 180,
+    maxCoHosts: 10,
     features: [
       "Up to 5 active events per month",
       "Central venue dashboard",
@@ -121,8 +130,14 @@ export function canUseAlbums(planKey: PlanKey): boolean {
   return planKey === "premium";
 }
 
-export function canUseCoHosts(planKey: PlanKey): boolean {
-  return planKey === "premium";
+/**
+ * Derived from the cap rather than compared against a plan key. The literal
+ * `planKey === "premium"` was a latent bug: Venue accounts would have been
+ * refused co-hosts despite paying for a plan built around running events for
+ * other people. See ROADMAP.md ORG-2.
+ */
+export function canUseCoHosts(planKey: PlanKey | null | undefined): boolean {
+  return getPlan(planKey).maxCoHosts > 0;
 }
 
 export function canCustomizeGallery(planKey: PlanKey): boolean {

@@ -51,6 +51,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         name: users.name,
         email: users.email,
         username: users.username,
+        role: eventCoHosts.role,
       })
       .from(eventCoHosts)
       .innerJoin(users, eq(users.id, eventCoHosts.userId))

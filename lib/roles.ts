@@ -3,6 +3,8 @@ import type { Session } from "next-auth";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { eventCoHosts, users } from "./schema";
+import { can, type EventCapability, type EventRole } from "./permissions";
+import { canUseCoHosts } from "./plans";
 
 /** Superadmin-only routes/pages. Returns the session, or null if not a superadmin. */
 export async function requireSuperadmin(): Promise<Session | null> {
@@ -20,19 +22,38 @@ export async function requireOwnerSession(eventOwnerId: string): Promise<Session
   return session;
 }
 
-/** Event owner, assigned co-host, or superadmin. */
-export async function requireEventManagerSession(
+export interface EventActor {
+  session: Session;
+  role: EventRole;
+}
+
+/**
+ * Works out who the signed-in person is *on this event*, and with what role.
+ *
+ * This is the one query in the codebase allowed to read `event_co_hosts` for an
+ * authorization decision. The revocation rule is the two predicates below, and
+ * it lives inside the query that grants access on purpose: a removed co-host
+ * keeps their row for 30 days so the removal is reversible, so any other query
+ * that joins this table without `isNull(deletedAt)` hands the access back.
+ *
+ * Covered by `test/roles.dbtest.ts`, which cannot be written without a real
+ * database because the predicates are the behaviour.
+ */
+export async function resolveEventActor(
   eventId: string,
   eventOwnerId: string,
-): Promise<Session | null> {
+): Promise<EventActor | null> {
   const session = await auth();
   if (!session?.user) return null;
+
+  // A superadmin acts with owner powers, which is what makes admin support
+  // possible at all. It is deliberately indistinguishable from the owner here.
   if (session.user.role === "superadmin" || session.user.id === eventOwnerId) {
-    return session;
+    return { session, role: "owner" };
   }
 
   const [membership] = await db
-    .select({ eventId: eventCoHosts.eventId })
+    .select({ role: eventCoHosts.role, ownerPlan: users.planKey })
     .from(eventCoHosts)
     .innerJoin(users, eq(users.id, eventOwnerId))
     .where(
@@ -40,14 +61,48 @@ export async function requireEventManagerSession(
         eq(eventCoHosts.eventId, eventId),
         eq(eventCoHosts.userId, session.user.id),
         // Removed co-hosts keep a row for 30 days so the removal is reversible.
-        // This predicate is the entire revocation: it is deliberately in the one
-        // query that grants access, and nothing else may read this table to
-        // decide authorization.
+        // This predicate is the entire revocation.
         isNull(eventCoHosts.deletedAt),
-        eq(users.planKey, "premium"),
       ),
     )
     .limit(1);
 
-  return membership ? session : null;
+  if (!membership) return null;
+
+  // Gated on the capability rather than on `planKey === "premium"`, so a Venue
+  // account does not silently lose every co-host the day it is introduced.
+  if (!canUseCoHosts(membership.ownerPlan)) return null;
+
+  return { session, role: membership.role };
+}
+
+/**
+ * Event owner, assigned co-host, or superadmin.
+ *
+ * Kept as the coarse "may this person reach the management surfaces at all"
+ * check that most routes still use. It answers *whether* somebody is on the
+ * team, not *what they may do*, so any route performing a specific action
+ * should use `requireEventCapability` instead.
+ */
+export async function requireEventManagerSession(
+  eventId: string,
+  eventOwnerId: string,
+): Promise<Session | null> {
+  const actor = await resolveEventActor(eventId, eventOwnerId);
+  return actor?.session ?? null;
+}
+
+/**
+ * The check a route performing a specific action should use. Returns the actor
+ * when they hold the capability, and null otherwise, so the caller can answer
+ * 401 or 403 without needing to know the role matrix.
+ */
+export async function requireEventCapability(
+  eventId: string,
+  eventOwnerId: string,
+  capability: EventCapability,
+): Promise<EventActor | null> {
+  const actor = await resolveEventActor(eventId, eventOwnerId);
+  if (!actor || !can(actor.role, capability)) return null;
+  return actor;
 }

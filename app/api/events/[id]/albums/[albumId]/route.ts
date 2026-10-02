@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events } from "@/lib/schema";
-import { requireEventManagerSession } from "@/lib/roles";
+import { requireEventCapability } from "@/lib/roles";
 import { getAccountPlan } from "@/lib/account-plans";
 import { canUseAlbums } from "@/lib/plans";
 
@@ -14,7 +14,7 @@ const patchAlbumSchema = z.object({
 async function getManagedAlbum(eventId: string, albumId: string) {
   const [event] = await db.select().from(events).where(and(eq(events.id, eventId), isNull(events.deletedAt))).limit(1);
   if (!event) return { album: null, session: null, event: null };
-  const session = await requireEventManagerSession(event.id, event.ownerId);
+  const session = (await requireEventCapability(event.id, event.ownerId, "albums.manage"))?.session ?? null;
   const [album] = await db
     .select()
     .from(albums)
