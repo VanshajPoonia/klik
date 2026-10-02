@@ -51,6 +51,12 @@ const schema = z.object({
   // verified in your account, so this must match a domain you have actually set
   // up there, not the product's marketing domain.
   AUTH_EMAIL_FROM: optionalString(z.string().min(3)),
+
+  // A URL the purge cron pings after a successful run, for a heartbeat monitor
+  // (UptimeRobot, Better Stack, Healthchecks.io). Optional: without it the cron
+  // behaves exactly as before. Its absence is the normal state locally, which
+  // is why it must not be required.
+  CRON_HEARTBEAT_URL: optionalString(z.string().url()),
 });
 
 function parseEnv() {

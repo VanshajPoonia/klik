@@ -1096,6 +1096,63 @@ AUTH_EMAIL_FROM="Klik <no-reply@mail.klik.kreativvantage.com>"
 3. Pay the fee. It is small, and the registration needs renewing every three years or it lapses.
 4. Safe harbor is **not retroactive**, which is why this is not deferrable: every day unregistered is a day of uncovered exposure for photos guests upload. The agent's contact details also have to be published on the site, which is the code half of LAW-2.
 
+#### Step 5. Uptime and heartbeat monitors, about 15 minutes
+
+**Why this one is first among what is left.** Every other gap on the list is something that might go wrong. This one is the reason you would not find out. The marketing page is static, so it returns 200 with the database on fire; monitoring it proves Vercel is up, not that Klik works.
+
+Two monitors, and they catch different failures.
+
+**5a. The health monitor, catches "it is broken".**
+
+1. Sign up at uptimerobot.com. The free tier covers 50 monitors at a 5-minute interval, which is more than enough. Better Stack is the nicer product if you would rather pay later; the setup below is the same shape.
+2. **New monitor**, type **HTTPS**.
+3. URL: `https://klik.kreativvantage.com/api/health`
+4. Interval: **5 minutes**. Do not go below 1 minute: the endpoint caches for 30 seconds, so faster polling returns the same answer while still costing you a function invocation.
+5. Alert contacts: an email you actually read, and a phone number if the service allows it on your tier. An alert nobody sees is the same as no alert.
+6. Nothing else needs configuring. The endpoint returns **503** when the database or R2 is unreachable, so a plain status check already catches it.
+7. Optional, as insurance against a future code change: make it a **Keyword** monitor instead, with keyword `"ok":true` and "alert when keyword not present". That still fires if someone later makes the route return 200 unconditionally.
+
+**5b. The heartbeat monitor, catches "it silently stopped".**
+
+This is the one people skip, and it covers the failure a nightly job is most likely to have. A cron that stops firing produces no logs, no errors and no alert. It looks exactly like a quiet night, for weeks.
+
+1. In UptimeRobot, **New monitor**, type **Heartbeat** (Better Stack calls these **Heartbeats**; Healthchecks.io does only this and is free).
+2. Name it "Klik nightly purge".
+3. Expected period: **1 day**. Grace: **2 hours**. The cron runs at 03:00 UTC, so this alerts if a run is ever missed rather than the moment it is a minute late.
+4. Copy the URL it gives you.
+5. In **Vercel, Settings, Environment Variables**, add `CRON_HEARTBEAT_URL` with that URL, Production only, then redeploy.
+6. The cron pings it **after** a successful run, never before, so a heartbeat means the work actually happened rather than that the function started. A monitor being unreachable is logged and ignored rather than failing the purge.
+
+#### Step 6. Sentry, about 20 minutes, whenever you are ready
+
+Not urgent now that structured logging and `/api/health` exist. What Sentry adds on top is stack traces with the request context attached, and grouping, so twenty occurrences of one bug read as one problem.
+
+1. sentry.io, sign up, **Create project**, platform **Next.js**. Name it `klik`.
+2. It shows a **DSN** immediately, of the shape `https://<key>@o<org>.ingest.sentry.io/<project>`. That value is safe to expose, it ships in client bundles by design.
+3. For readable stack traces you also want source map upload, which needs three more values: **Settings, Auth Tokens, Create New Token** with the `project:releases` scope, plus your org slug and project slug.
+4. Put all of it in `.env.local` and in Vercel:
+
+```
+SENTRY_DSN=https://...
+SENTRY_AUTH_TOKEN=sntrys_...
+SENTRY_ORG=your-org-slug
+SENTRY_PROJECT=klik
+```
+
+5. Tell me they are there. `registerErrorReporter` in `lib/observability.ts` is the one seam it plugs into, so wiring it is a few lines rather than an import threaded through every route.
+6. **Set up alert rules, or it is just a nicer log viewer.** At minimum, alert on any event named `purge.circuit_breaker_tripped`, and on the first occurrence of any new issue in the upload path. Both fail silently by nature.
+
+#### Step 7. The Neon staging branch, about 20 minutes, and it unblocks me
+
+This is the one that stops you being the bottleneck on every schema change.
+
+1. **Neon console**, your project, **Branches**, **New branch**. Parent `production`, from the current timestamp, named `staging`.
+2. Copy its pooled connection string.
+3. In **Vercel, Settings, Environment Variables**, edit `DATABASE_URL` so the **Preview** scope uses the staging string. Production keeps pointing at production. Today Preview points at production, which means every preview deployment reads and writes live data.
+4. While you are there, add `AUTH_SECRET` to the **Preview** scope with a **newly generated** value (`openssl rand -base64 32`), not a copy of production's. Preview deployments currently fail to boot at module load because it is missing, and a separate secret means a preview can never mint a token that production accepts.
+5. **Test a restore once**, which is the only way an untested backup becomes a backup. Create a throwaway branch from a timestamp an hour in the past, connect with `psql`, run `select count(*) from media;`. A plausible count means point-in-time restore is real. Delete the branch.
+6. Optionally create a **Neon API key** (Account settings, API keys) and put it in `.env.local` as `NEON_API_KEY`. With it I can create and drop branches myself, which means migrations get tested on a real copy before they reach you.
+
 #### Deliberately not now
 
 - **Do not create the US bucket yet.** OPS-4 is a single cutover: US bucket, backup bucket, object copy, custom domain, signed-cookie delivery, and removing the `.eu.` endpoint. Doing the bucket half early means running two buckets and migrating delivery twice.
