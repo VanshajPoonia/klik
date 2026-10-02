@@ -1,3 +1,4 @@
+import type { AssignableRole } from "./permissions";
 import {
   pgTable,
   text,
@@ -146,6 +147,11 @@ export const eventCoHosts = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // What this person may actually do. Before this column a co-host was a
+    // boolean, so someone added only to upload could also rotate the QR code
+    // and remove the other co-hosts. The matrix lives in lib/permissions.ts;
+    // a CHECK constraint in migration 0010 rejects values with no meaning.
+    role: text("role").$type<AssignableRole>().notNull().default("manager"),
     // Soft delete, like everything else. Note this row grants ACCESS, so unlike
     // other soft-deleted records a missed filter here does not show stale data,
     // it leaves a removed co-host still able to manage the gallery. That is why

@@ -3,6 +3,10 @@ import type { ReactNode } from "react";
 export const inputClass =
   "w-full rounded-xl border border-canvas-line bg-canvas px-3.5 py-2.5 text-sm text-paper placeholder:text-muted focus:border-volt/60 focus:outline-none focus:ring-1 focus:ring-volt/60";
 
+/** Same shell as `inputClass`, plus room for the native disclosure arrow. */
+export const selectClass =
+  "w-full appearance-none rounded-xl border border-canvas-line bg-canvas px-3.5 py-2.5 pr-9 text-sm text-paper focus:border-volt/60 focus:outline-none focus:ring-1 focus:ring-volt/60";
+
 export function Field({
   label,
   hint,

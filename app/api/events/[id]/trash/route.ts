@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events, media } from "@/lib/schema";
-import { requireEventManagerSession } from "@/lib/roles";
+import { requireEventCapability } from "@/lib/roles";
 import { mediaContentPath, mediaPosterPath } from "@/lib/media-delivery";
 
 /**
@@ -24,7 +24,7 @@ async function requireManager(eventId: string) {
     .where(and(eq(events.id, eventId), isNull(events.deletedAt)))
     .limit(1);
   if (!event) return { event: null, session: null };
-  const session = await requireEventManagerSession(event.id, event.ownerId);
+  const session = (await requireEventCapability(event.id, event.ownerId, "trash.manage"))?.session ?? null;
   return { event, session };
 }
 

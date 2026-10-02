@@ -3,7 +3,8 @@ import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events, media, MEDIA_STATUSES } from "@/lib/schema";
-import { requireEventManagerSession } from "@/lib/roles";
+import { requireEventCapability } from "@/lib/roles";
+import type { EventCapability } from "@/lib/permissions";
 import { getAccountPlan } from "@/lib/account-plans";
 import { canUseAlbums } from "@/lib/plans";
 
@@ -16,10 +17,12 @@ const patchSchema = z
     message: "No changes provided",
   });
 
-async function getOwnedEventMedia(eventId: string, mediaId: string) {
+async function getOwnedEventMedia(eventId: string, mediaId: string, capability: EventCapability) {
   const [event] = await db.select().from(events).where(and(eq(events.id, eventId), isNull(events.deletedAt))).limit(1);
   if (!event) return { item: null, session: null, event: null };
-  const session = await requireEventManagerSession(event.id, event.ownerId);
+  // A contributor holds neither of these capabilities. The photographer you
+  // hired should not be able to remove a guest's photo of the event.
+  const session = (await requireEventCapability(event.id, event.ownerId, capability))?.session ?? null;
   const [item] = await db
     .select()
     .from(media)
@@ -33,7 +36,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; mediaId: string }> },
 ) {
   const { id, mediaId } = await params;
-  const { item, session, event } = await getOwnedEventMedia(id, mediaId);
+  const { item, session, event } = await getOwnedEventMedia(id, mediaId, "media.moderate");
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -72,7 +75,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; mediaId: string }> },
 ) {
   const { id, mediaId } = await params;
-  const { item, session } = await getOwnedEventMedia(id, mediaId);
+  const { item, session } = await getOwnedEventMedia(id, mediaId, "media.delete");
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

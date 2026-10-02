@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import sharp from "sharp";
 import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
-import { requireEventManagerSession } from "@/lib/roles";
+import { requireEventCapability } from "@/lib/roles";
 import { getAppUrl } from "@/lib/env";
 import { getAccountPlan } from "@/lib/account-plans";
 import { canCustomizeQr, canDownloadQrSign } from "@/lib/plans";
@@ -29,7 +29,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const session = await requireEventManagerSession(event.id, event.ownerId);
+  // Rotating the slug invalidates every printed sign, so it belongs with settings rather than with moderation.
+  const session = (await requireEventCapability(event.id, event.ownerId, "event.qr"))?.session ?? null;
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(request.url);

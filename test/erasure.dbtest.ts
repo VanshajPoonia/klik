@@ -2,7 +2,9 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 
-const deleteBlobs = vi.fn(async (_pathnames: string[]) => {});
+const deleteBlobs = vi.fn(async (pathnames: string[]) => {
+  void pathnames;
+});
 
 vi.mock("@/lib/db", async () => ({ db: (await import("./harness")).testDb }));
 vi.mock("@/lib/storage", async (importOriginal) => ({

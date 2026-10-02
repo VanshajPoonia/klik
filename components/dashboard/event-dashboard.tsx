@@ -1,5 +1,7 @@
 "use client";
 
+import type { AssignableRole } from "@/lib/permissions";
+
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Download, X } from "lucide-react";
@@ -56,6 +58,7 @@ export function EventDashboard({
     name: string | null;
     email: string | null;
     username: string | null;
+    role: AssignableRole;
   }>;
   clients?: VenueClient[];
 }) {

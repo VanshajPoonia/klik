@@ -1,7 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 
-const deleteBlobs = vi.fn(async (_pathnames: string[]) => {});
+const deleteBlobs = vi.fn(async (pathnames: string[]) => {
+  void pathnames;
+});
 
 // The route imports `db` and `deleteBlobs` directly, so both are replaced at
 // the module boundary: the database with a real local Postgres, and R2 with a

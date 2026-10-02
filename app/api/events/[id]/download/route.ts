@@ -6,7 +6,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
-import { requireEventManagerSession } from "@/lib/roles";
+import { requireEventCapability } from "@/lib/roles";
 import { extensionForMime, r2 } from "@/lib/storage";
 import { buildDownloadBatches } from "@/lib/download-batches";
 
@@ -42,7 +42,8 @@ async function createDownload(
   const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const session = await requireEventManagerSession(event.id, event.ownerId);
+  // A contributor may add to the gallery but may not walk off with all of it.
+  const session = (await requireEventCapability(event.id, event.ownerId, "media.exportAll"))?.session ?? null;
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const approvedItems = await db
