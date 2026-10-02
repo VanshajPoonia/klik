@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
-import sharp from "sharp";
 import heicConvert from "heic-convert";
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
@@ -72,6 +71,27 @@ const registerSchema = z.object({
 async function sanitizePhoto(
   buffer: Buffer<ArrayBufferLike>,
 ): Promise<{ data: Buffer; info: { width: number; height: number } } | null> {
+  // Imported here rather than at module scope, deliberately.
+  //
+  // sharp is a native module, and when its binary fails to load the import
+  // throws. At module scope that throw took down **every** handler in this
+  // file, including the GET that lists a gallery and never touches an image
+  // library. That is exactly what happened in production: a missing libvips
+  // meant guests could neither poll for new photos nor upload, when only the
+  // server-side compression path had any business failing.
+  //
+  // Most photos never reach here anyway, because the browser compresses them
+  // first. Keeping the dependency inside the one function that needs it means a
+  // broken install degrades to "this photo could not be processed" instead of
+  // taking the gallery down with it.
+  let sharp: typeof import("sharp").default;
+  try {
+    sharp = (await import("sharp")).default;
+  } catch (error) {
+    reportError("upload.sharp_unavailable", error);
+    return null;
+  }
+
   const resize = {
     width: COMPRESS_MAX_DIMENSION,
     height: COMPRESS_MAX_DIMENSION,
