@@ -64,6 +64,23 @@ async function run(): Promise<Snapshot> {
     timed("storage", () =>
       r2.send(new ListObjectsV2Command({ Bucket: env.R2_BUCKET_NAME, MaxKeys: 1 })),
     ),
+    // Added after an outage this endpoint could not see.
+    //
+    // sharp is a native module whose linux binary was missing in production for
+    // hours. Uploads were dead and this route happily returned 200, because it
+    // checked the database and R2 and nothing about whether the server could
+    // actually process an image. A dependency that only fails at runtime, on one
+    // platform, is exactly what a health check is for.
+    //
+    // It encodes rather than just importing, because the import can succeed and
+    // the dlopen still fail on first use. One 8x8 pixel is enough, and the
+    // module stays loaded afterwards so this costs nothing on later calls.
+    timed("imaging", async () => {
+      const sharp = (await import("sharp")).default;
+      await sharp({ create: { width: 8, height: 8, channels: 3, background: "#000" } })
+        .jpeg()
+        .toBuffer();
+    }),
   ]);
 
   const checks = Object.fromEntries(results);
