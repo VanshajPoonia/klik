@@ -59,9 +59,34 @@
 | What breaks first | Scalability read against a 200-guest wedding |
 | Architecture decisions | Six things worth reviewing rather than inheriting |
 | v1 scope and build order | The single-threaded order to actually work through |
+| **PARKED** | **Operational work deferred 2026-10-02, each with the trigger that un-parks it** |
 | Credentials and setup | Which accounts to create, how, and the gotchas, plus a click-by-click runbook |
 
 Work is requested by task ID: "do MED-8", or "do F-1 through F-5".
+
+---
+
+## PARKED: operational work, not blocking the product
+
+**Decided 2026-10-02.** The focus is the product. Everything below is real and none of it is cancelled, but it is insurance and plumbing rather than something a customer can see, and it was starting to crowd out the build.
+
+Each item lists the **trigger** that un-parks it, so this is a queue with conditions rather than a list of good intentions. When a trigger fires, that item stops being optional.
+
+| Parked | Trigger that un-parks it | Cost when it does |
+|---|---|---|
+| **Uptime monitor** on `/api/health` | The first real customer event, or the first paying organizer | 10 minutes. The endpoint already exists and works |
+| **Heartbeat monitor** for the purge cron | Same, or the first time retention actually matters | 5 minutes. `CRON_HEARTBEAT_URL` is already wired and optional |
+| **Sentry** (`registerErrorReporter` has one empty seam waiting) | A bug you cannot reproduce from the logs, or the first customer event | 20 minutes of mine, once a DSN exists |
+| **Neon staging branch** | The first migration that is not purely additive, or the first customer data in production | 20 minutes of yours. Until then every schema change needs a SQL paste |
+| **`AUTH_SECRET` in Vercel Preview** | The first time you want to review a preview deployment | 2 minutes. Preview deploys currently fail to boot |
+| **OPS-4**, US bucket plus custom domain plus signed cookies | Before real traffic, or when transatlantic latency on 4K video becomes visible | Grows with the object count. 12 objects today |
+| **MED-8 video metadata** (GPS in the `©xyz` atom) | Rides with OPS-1 transcoding, which needs ffmpeg | Not separable |
+| **LAW-1, LAW-2** terms, privacy policy, DMCA agent | Before you take money, or before a stranger can upload | DMCA is an afternoon, and safe harbor is not retroactive |
+| **Resend** | **Not fully parked.** ACC-2's whole signup flow is email codes, so this blocks guest accounts | 20 minutes plus DNS propagation |
+
+**What is already done and needs nothing.** Structured logging, redaction, named failure events, `/api/health`, and the cron heartbeat ping are all built and shipped. The parked part is only the external services that would *watch* them. The code does not change when they arrive.
+
+**The honest risk of parking this.** Nothing tells you when something breaks, so a failure at a real event surfaces as a support message rather than an alert. That is an acceptable trade with no customers and a bad one with any, which is why the first row's trigger is the first real event.
 
 ---
 
