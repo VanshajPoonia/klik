@@ -39,7 +39,7 @@ Three kinds of people use it, and they authenticate in three completely differen
 
 ---
 
-## 3. Six constraints that will bite you
+## 3. Seven constraints that will bite you
 
 These are not style preferences. Each one has already caused a bug or came within one commit of causing one.
 
@@ -53,7 +53,11 @@ These are not style preferences. Each one has already caused a bug or came withi
 
 **5. R2 signs `Content-Type` but does not enforce it.** Verified against the live bucket: a URL presigned for `image/jpeg` returns 200 for a ZIP body. The signature binds the key, the type and the length, and none of that stops the client sending different bytes. This is why `lib/file-signature.ts` exists and why the upload path does a ranged read of the first 32 bytes before trusting anything.
 
-**6. Every image view costs a function invocation and a database query.** `GET /api/e/[slug]/media/[mediaId]/content` loads the event, loads the media row, resolves the plan, resolves the viewer, then redirects to a short-lived signed R2 URL. That is correct for private galleries and expensive for public ones. OPS-4 moves public delivery to signed cookies so the edge can cache.
+**6. `sharp` is a native module and its shared library is invisible to file tracing.** This caused a real outage on 2026-10-02 in which guest uploads were dead for hours. Three things combined: the lockfile had `sharp` at one version and its `@img/*` binaries at another, because npm hoisted Next's own nested sharp binaries to the top level; Next traces a function's files by following imports, and `libvips-cpp.so` is opened by the OS, so no JavaScript tracer can see it; and `sharp` was imported at module scope, so the failed import took down **every** handler in the file, including the `GET` that lists a gallery and never touches an image library.
+
+The fix is all three: the linux binaries are explicit `optionalDependencies`, `next.config.ts` names `./node_modules/@img/**` in `outputFileTracingIncludes` **for every route that touches sharp**, and the import is lazy, inside `sanitizePhoto`. Any new route that uses sharp needs its own tracing entry; forgetting one fails only at runtime, only on Linux. `/api/health` encodes an 8x8 JPEG specifically to catch that, and `lib/native-deps.test.ts` guards the lockfile half.
+
+**7. Every image view costs a function invocation and a database query.** `GET /api/e/[slug]/media/[mediaId]/content` loads the event, loads the media row, resolves the plan, resolves the viewer, then redirects to a short-lived signed R2 URL. That is correct for private galleries and expensive for public ones. OPS-4 moves public delivery to signed cookies so the edge can cache.
 
 ---
 
@@ -195,6 +199,8 @@ Optional: `APP_URL`, `CRON_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUT
 `npm test`. Vitest, Node environment, no database and no network. `vitest.config.mts` supplies a fake environment because `lib/env.ts` validates at import.
 
 Coverage was chosen on one rule: **cover what already went wrong once.** `lib/file-signature.test.ts` pins SEC-9, `lib/events.test.ts` pins SEC-10 structurally, `lib/exif.test.ts` pins the metadata behaviour.
+
+`/api/health` checks the database, R2 **and** that the server can encode an image, because a native dependency failing only at runtime on one platform is exactly what a health check is for. It returned 200 throughout the outage above while uploads were dead, which is why the third check exists.
 
 `npm run test:db` is the second suite, 30 tests against a real Postgres, covering the three paths that destroy data: the purge circuit breaker, `lib/erasure.ts` and the co-host revocation predicate. These cannot be written any other way, because the predicates *are* the behaviour and a test that mocks the query away tests nothing.
 
