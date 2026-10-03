@@ -62,3 +62,59 @@ export async function verifyEventUnlock(
     return false;
   }
 }
+
+/**
+ * Per-share viewer state: whether this browser has entered the link's password,
+ * and whether it has already been counted against the view cap.
+ *
+ * One cookie holds both because they belong to the same viewer and the same
+ * link, and because two cookies per share would double an already unbounded
+ * count: someone who opens twenty share links collects twenty of these. That is
+ * also why the lifetime is 7 days rather than the 30 used for a gallery session.
+ * A share link is a one-off; a gallery is somewhere you come back to.
+ *
+ * Keyed by share id rather than by token, so the token itself never lands in the
+ * cookie jar.
+ */
+export interface ShareViewerState {
+  shareId: string;
+  unlocked: boolean;
+  counted: boolean;
+}
+
+export const SHARE_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
+
+export function shareCookieName(shareId: string) {
+  return `klik_s_${shareId}`;
+}
+
+export async function signShareViewer(state: ShareViewerState): Promise<string> {
+  return new SignJWT({ ...state })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(secret());
+}
+
+/**
+ * Returns the state for this share, or null. The `shareId` comparison is the
+ * point: without it a cookie minted for one share would be accepted for
+ * another, and since the cookie carries the unlocked flag that would turn one
+ * known password into access to every password-protected link on the site.
+ */
+export async function verifyShareViewer(
+  token: string,
+  shareId: string,
+): Promise<ShareViewerState | null> {
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    if (payload.shareId !== shareId) return null;
+    return {
+      shareId,
+      unlocked: payload.unlocked === true,
+      counted: payload.counted === true,
+    };
+  } catch {
+    return null;
+  }
+}

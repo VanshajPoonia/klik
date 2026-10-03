@@ -21,6 +21,7 @@ const ALL_CAPABILITIES: EventCapability[] = [
   "event.delete",
   "event.transfer",
   "cohosts.manage",
+  "shares.manage",
   "media.moderate",
   "media.delete",
   "media.upload",
@@ -45,6 +46,7 @@ const EXPECTED: Record<EventRole, Record<EventCapability, boolean>> = {
     "event.delete": true,
     "event.transfer": true,
     "cohosts.manage": true,
+    "shares.manage": true,
     "media.moderate": true,
     "media.delete": true,
     "media.upload": true,
@@ -60,6 +62,7 @@ const EXPECTED: Record<EventRole, Record<EventCapability, boolean>> = {
     "event.delete": false,
     "event.transfer": false,
     "cohosts.manage": true,
+    "shares.manage": true,
     "media.moderate": true,
     "media.delete": true,
     "media.upload": true,
@@ -76,6 +79,9 @@ const EXPECTED: Record<EventRole, Record<EventCapability, boolean>> = {
     "event.delete": false,
     "event.transfer": false,
     "cohosts.manage": false,
+    // A moderator cannot promote themselves, so they also cannot hand the photo
+    // straight out to a stranger, which would be the same grant by another door.
+    "shares.manage": false,
     "media.moderate": true,
     "media.delete": true,
     "media.upload": true,
@@ -91,6 +97,7 @@ const EXPECTED: Record<EventRole, Record<EventCapability, boolean>> = {
     "event.delete": false,
     "event.transfer": false,
     "cohosts.manage": false,
+    "shares.manage": false,
     "media.moderate": false,
     // Cannot delete: the person shooting the event is not the person who
     // should be able to remove a guest's photo of it.

@@ -38,6 +38,13 @@ export type EventCapability =
   | "event.transfer"
   /** Add, remove, or change the role of a co-host. */
   | "cohosts.manage"
+  /**
+   * Create, edit and revoke share links. Grouped with the access-granting
+   * capabilities rather than the media ones on purpose: a share link is not a
+   * way of organising photos, it is a way of handing one to someone outside the
+   * event entirely, and it outlives the moment it was created.
+   */
+  | "shares.manage"
   /** Approve and reject in the moderation queue. */
   | "media.moderate"
   /** Remove a guest's upload. */
@@ -66,6 +73,7 @@ const MATRIX: Record<EventRole, readonly EventCapability[]> = {
     "event.delete",
     "event.transfer",
     "cohosts.manage",
+    "shares.manage",
     "media.moderate",
     "media.delete",
     "media.upload",
@@ -80,6 +88,7 @@ const MATRIX: Record<EventRole, readonly EventCapability[]> = {
     "event.settings",
     "event.qr",
     "cohosts.manage",
+    "shares.manage",
     "media.moderate",
     "media.delete",
     "media.upload",
@@ -89,7 +98,10 @@ const MATRIX: Record<EventRole, readonly EventCapability[]> = {
     "trash.manage",
   ],
   // Runs the gallery, does not configure it. No settings, no QR rotation, no
-  // co-host changes, so a moderator cannot widen their own access.
+  // co-host changes, so a moderator cannot widen their own access. No share
+  // links either, for the same reason: a link is access granted to a stranger,
+  // and a role that cannot add a co-host should not be able to route around that
+  // by sending the photo out directly.
   moderator: [
     "media.moderate",
     "media.delete",

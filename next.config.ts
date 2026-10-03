@@ -36,6 +36,10 @@ const nextConfig: NextConfig = {
     // thing tracing misses is specifically the libvips `.so`, which is opened
     // by the OS and is invisible to any JavaScript tracer.
     "/api/health": ["./node_modules/@img/**"],
+    // Resizes a photo down to a chat-preview thumbnail. Every route added here
+    // is a route that would otherwise fail only in production, only on Linux,
+    // and only once somebody pasted a link into WhatsApp.
+    "/api/s/[token]/og": ["./node_modules/@img/**"],
   },
 };
 

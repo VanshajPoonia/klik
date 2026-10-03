@@ -45,6 +45,8 @@ export const testDb = drizzle(pool, { schema });
 const TABLES = [
   "erasure_log",
   "rate_limits",
+  // Before `media`, `albums`, `guests` and `events`, all of which it references.
+  "media_shares",
   "media",
   "event_co_hosts",
   "albums",
@@ -136,6 +138,21 @@ export async function makeGuest(
     // route, never defaulted, so a guest row without it should not exist.
     consentedAt: new Date(),
     consentVersion: CURRENT_CONSENT.id,
+    ...overrides,
+  });
+  return id;
+}
+
+export async function makeShare(
+  eventId: string,
+  overrides: Partial<typeof schema.mediaShares.$inferInsert> = {},
+): Promise<string> {
+  const id = overrides.id ?? nextId("shr");
+  await testDb.insert(schema.mediaShares).values({
+    id,
+    token: `tok_${id}`,
+    eventId,
+    scope: "media",
     ...overrides,
   });
   return id;
