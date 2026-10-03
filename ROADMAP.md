@@ -477,20 +477,38 @@ Decisions worth knowing:
 The dashboard grid has a per-photo control and a badge on the tile, because an organizer scanning two hundred photos should see which are hidden without opening each dropdown. The guest side shows "Only you can see this" on their own hidden uploads.
 
 ### MED-2. Share links
-**Size:** L. **Schema landed 2026-10-02, routes next.** **Depends on:** MED-1, F-2. This is "each picture should get its own sharable link".
+**DONE 2026-10-03.** **Size:** L. This is "each picture should get its own sharable link".
 
-The `media_shares` table ships in migration `0011` alongside MED-1, so there is one SQL paste rather than two. `mediaId`, `albumId` and `scope` are separate columns rather than one polymorphic target, so the foreign keys still work and deleting a photo takes its links with it. A CHECK constraint enforces that a scope points at the thing it claims to. Revocation is deliberately **not** a soft delete: a revoked link is kept precisely so the record of it having existed, and of having been withdrawn, survives.
+Per-photo links at `/s/[token]`, with expiry, an open limit, an optional password and a downloads switch. The token is 22 characters of nanoid and the lookup is by token alone, so the URL carries no event slug and no media id.
 
-Still to build: `/s/[token]`, the create and revoke routes, OG tags, and the share sheet.
-Table `media_shares` (id, token unique, event_id, media_id nullable, album_id nullable, scope `media | album | event`, created_by_user_id nullable, created_by_guest_id nullable, allow_download, password_hash nullable, expires_at nullable, max_views nullable, view_count, revoked_at, created_at).
-- Public route `/s/[token]`: server-rendered, checks revoked, expiry, view cap, password. Serves media through a fresh short-lived signed R2 URL, never the bucket URL. Shows a minimal Klik-branded frame with an optional "See the full gallery" call to action if the event is public.
-- The token must not leak the event slug or media ID, so use a 22-character nanoid and look up by token only.
-- OG tags so the link previews properly in WhatsApp and iMessage, which is how these links will actually travel. Generate an OG image per share.
-- `view_count` increments on page view, not on asset fetch, so a re-render does not burn the cap.
+**Shipped.** The rule for whether a link opens lives in `lib/share-access.ts`, split from the queries in `lib/shares.ts` the same way `media-access.ts` is split from `media.ts`, and for an additional reason: the pure half is imported by client components, so it must not drag the database into a browser bundle. Four surfaces go through one gate (the page, the OG image, the content redirect, the download), because the way they stop agreeing is one of them growing its own copy, which is precisely what had happened to `media.visibility` before MED-1.
+
+Decisions worth knowing:
+- **The view cap is enforced inside a conditional `UPDATE ... RETURNING`.** Reading `view_count` and writing it back would let two concurrent opens of a one-view link both observe zero and both pass, and `neon-http` has no transactions, so this is not the tidy option but the only correct one. `test/shares.dbtest.ts` fires five simultaneous opens at a one-view link and asserts exactly one gets through. The read-then-write version was written deliberately and run against that test: it let two through.
+- **The view is counted by a request from the loaded page, not while rendering it.** WhatsApp and iMessage fetch the page to build a preview, in a group chat potentially once per member. Counting at render time would spend a one-view link on a preview card before the recipient ever tapped it. Crawlers do not run JavaScript, so this is what separates a person looking from a chat app drawing a thumbnail. Two consequences accepted knowingly: a viewer with JavaScript off is never counted, and two simultaneous opens of the last view can both get in. **`max_views` is therefore a courtesy limit on how far a link travels, not a security boundary.** Revocation is the hard control, checked on every request with no caching anywhere.
+- **The cap counts browsers, not page loads.** A viewer who spent a view keeps access, because the alternative is someone opening a one-view link, rotating their phone, and being locked out by their own reload. Carried in a signed per-share cookie that also holds the unlocked flag, keyed by share id so a cookie minted for one link is not accepted for another.
+- **The gate deliberately does not consult `media.visibility`.** A host who creates a link for a hidden photo has said by that act that this token may see it. The link *is* the grant, which is what `link` visibility means.
+- **The OG image is a resized copy, not the original.** Every client refuses a preview image above a size limit, and a phone photo off the camera is several megabytes, so pointing the tag at the original produced no preview at all. `/api/s/[token]/og` cover-crops to 1200x630 with sharp, and therefore needed its own `outputFileTracingIncludes` entry. See ARCHITECTURE.md constraint 7.
+- **A password-protected link previews as nothing.** Crawlers carry no cookies, so the gate refuses and the OG route 404s. Putting the photo in a group chat thumbnail would defeat the password entirely.
+- **Downloads default to off**, and are a separate permission from viewing. Sharing a photo to be looked at is not agreeing to it being saved, reposted and outliving the link.
+- **Album and event scope are not built.** The columns and the CHECK constraint exist from migration `0011`, and the create route only mints `media` scope. Album links want folders (MED-4) and a selection link wants bulk operations (MED-5), so building them now would mean guessing at both.
 
 ### MED-3. Access management UI
-**Size:** M. **Depends on:** MED-2. This is "ability to modify access".
-A share sheet per photo listing every active link with its settings, a revoke button, expiry editing, and a copy button. An event-level "Links" tab listing every share link across the event, since an organizer will lose track. Revoking is instant and the `/s/[token]` page must check `revoked_at` on every request, not from a cache.
+**DONE 2026-10-03.** **Size:** M. This is "ability to modify access".
+
+A share sheet per photo, reachable from the dashboard tile and from the lightbox, listing every link on that photo with its settings, state, open count, a revoke button and a settings editor. An event-level **Links** tab lists every link across the event with the photo it points at, filtered to live ones by default.
+
+**Shipped.** Both surfaces share `useShareLinks` and `ShareLinkRow`, so the two cannot describe the same link differently, which for a screen whose job is answering "did I turn that off?" would be the whole failure.
+
+Decisions worth knowing:
+- **Nothing here is optimistic**, which is a deliberate exception to how the rest of this dashboard works. Elsewhere a failed optimistic update is a wrong label for a second; here a link shown as turned off while the server still has it live is a photo the host believes is unreachable and is not.
+- **The share button uses `navigator.share` before the clipboard.** On a phone that opens the real OS sheet, which is how one of these links actually reaches WhatsApp: the host is standing at the event, not sitting at a desk pasting URLs. A blocked clipboard says so rather than failing silently, with the link left selectable beside it.
+- **The settings editor shows "leave as is" rather than the current value.** Raising an open limit resets the spent count on the server, so a form pre-filled with the current limit would hand the views back whenever somebody only meant to toggle downloads.
+- **Revoking is final and cannot be edited back to life.** A host who wants it working again creates a new link, which leaves the revocation on the record, where it is the thing `revoked_at` exists to show.
+- **`shares.manage` is a new capability, owner and manager only.** A moderator cannot add a co-host, so they must not be able to grant the same access by sending the photo out directly. The dashboard page now resolves the actor rather than a bare session, because the old coarse check counted a moderator as a manager.
+- **The sheet says plainly that revoking does not unsend a preview** already drawn into a chat thread. It is the one thing about these links a host cannot undo, and finding out afterwards is worse.
+
+Links are revoked, never deleted, so one organizer cannot quietly erase the evidence that a photo was shared.
 
 ### MED-4. Folders
 **Size:** L. **Depends on:** F-3. This is "make folders".
@@ -981,7 +999,7 @@ One person, so nothing below assumes parallel work, and each block ends somewher
 
 **Block 3, the product itself**
 10. **ACC-1** through **ACC-5** guest accounts and signup
-11. **MED-1**, **MED-2**, **MED-3** per-photo visibility, share links, access management
+11. ~~**MED-1**, **MED-2**, **MED-3** per-photo visibility, share links, access management~~ **DONE 2026-10-03**
 12. **MED-4**, **MED-5** folders and bulk operations
 
 **Block 4, the differentiator**
