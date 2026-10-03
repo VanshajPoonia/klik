@@ -69,13 +69,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
       headers: {
         "Content-Type": "image/jpeg",
         /**
-         * Short and public. Public because a crawler is anonymous by nature, and
-         * short because this is the one share surface that cannot be fully
-         * recalled: a preview a chat app has already drawn into a thread stays
-         * in that thread after the link is revoked. The share sheet says so,
-         * because a host deserves to know that before they send it.
+         * Never cached, for the same reason the content route is not: a cached
+         * response is a copy of the grant that outlives revocation.
+         *
+         * This shipped as `public, max-age=600` first, on the reasoning that a
+         * crawler is anonymous and a preview cannot be recalled anyway. Checking
+         * it in production showed what that actually bought: `x-vercel-cache:
+         * HIT`, `age: 42`, the CDN still handing out the photo 42 seconds after
+         * the host revoked the link, and willing to for ten minutes.
+         *
+         * Two different things had been run together. A preview a chat app
+         * already drew into a thread genuinely cannot be recalled, and the share
+         * sheet says so. Our own edge continuing to serve the pixels afterwards
+         * is avoidable, so it is avoided. The cost is that sharp runs per
+         * preview fetch, which is a bounded and measurable cost, where a leak
+         * after revocation is neither.
          */
-        "Cache-Control": "public, max-age=600, s-maxage=600",
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error) {
