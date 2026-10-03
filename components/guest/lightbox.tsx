@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Download, Pause, Play, Sparkles, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Pause,
+  Play,
+  Share2,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
 
 export interface LightboxItem {
@@ -26,6 +35,7 @@ export function Lightbox({
   slug,
   enhanced = false,
   onEnhancedChange,
+  onShare,
 }: {
   items: LightboxItem[];
   index: number;
@@ -37,6 +47,9 @@ export function Lightbox({
   slug?: string;
   enhanced?: boolean;
   onEnhancedChange?: (next: boolean) => void;
+  /** Organizer-only: opens the share sheet for the photo on screen. Absent on
+   *  the guest side, where nobody may create links. */
+  onShare?: (id: string) => void;
 }) {
   const touchStartX = useRef<number | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -172,6 +185,16 @@ export function Lightbox({
               }`}
             >
               <Sparkles className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
+          {onShare && (
+            <button
+              type="button"
+              onClick={() => onShare(item.id)}
+              aria-label={`Share this ${item.kind}`}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+            >
+              <Share2 className="h-5 w-5" aria-hidden="true" />
             </button>
           )}
           {canDownload && downloadBaseUrl && (

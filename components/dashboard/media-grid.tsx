@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Check, Download, EyeOff, Link2, Play, Trash2, X } from "lucide-react";
+import { Check, Download, EyeOff, Link2, Play, Share2, Trash2, X } from "lucide-react";
 import type { Media, MediaVisibility } from "@/lib/schema";
 import { VISIBILITY_OPTIONS } from "@/lib/media-access";
 
@@ -28,6 +28,7 @@ export function MediaGrid({
   albums,
   onAlbumChange,
   onVisibilityChange,
+  onShare,
 }: {
   items: Media[];
   onApprove?: (id: string) => void;
@@ -42,6 +43,7 @@ export function MediaGrid({
   albums?: Array<{ id: string; name: string }>;
   onAlbumChange?: (id: string, albumId: string | null) => void;
   onVisibilityChange?: (id: string, visibility: MediaVisibility) => void;
+  onShare?: (id: string) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -157,6 +159,20 @@ export function MediaGrid({
                   ))}
                 </select>
               </label>
+            )}
+            {!selectionMode && onShare && (
+              // Full width rather than another cell in the two-column grid, so
+              // the actions below always come out even however many of them this
+              // tile happens to have.
+              <button
+                type="button"
+                onClick={() => onShare(item.id)}
+                disabled={busy}
+                className="flex min-h-11 w-full items-center justify-center gap-1.5 border-t border-canvas-line bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas disabled:opacity-50"
+              >
+                <Share2 className="h-3.5 w-3.5 text-volt" aria-hidden="true" />
+                Share link
+              </button>
             )}
             {!selectionMode && (
               <div className="grid grid-cols-2 gap-px bg-canvas-line">

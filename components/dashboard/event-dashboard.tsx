@@ -12,6 +12,8 @@ import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
 import { AlbumManager } from "@/components/dashboard/album-manager";
 import { CoHostManager } from "@/components/dashboard/co-host-manager";
+import { ShareSheet } from "@/components/dashboard/share-sheet";
+import { ShareLinksPanel } from "@/components/dashboard/share-links-panel";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { OrganizerEvent } from "@/lib/events";
 import type { Album, Media, VenueClient } from "@/lib/schema";
@@ -19,7 +21,7 @@ import type { MediaStatus, MediaVisibility } from "@/lib/schema";
 import { formatFileSize } from "@/lib/plans";
 import { buildDownloadBatches } from "@/lib/download-batches";
 
-type Tab = "gallery" | "settings" | "qr";
+type Tab = "gallery" | "links" | "settings" | "qr";
 
 export function EventDashboard({
   event,
@@ -30,6 +32,7 @@ export function EventDashboard({
   canSlideshow = false,
   canManageAlbums = false,
   canManageCoHosts = false,
+  canManageShares = false,
   canCustomizeGallery = false,
   canCustomizeQr = false,
   canDownloadQrSign = false,
@@ -47,6 +50,7 @@ export function EventDashboard({
   canSlideshow?: boolean;
   canManageAlbums?: boolean;
   canManageCoHosts?: boolean;
+  canManageShares?: boolean;
   canCustomizeGallery?: boolean;
   canCustomizeQr?: boolean;
   canDownloadQrSign?: boolean;
@@ -69,6 +73,9 @@ export function EventDashboard({
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  // The photo whose share sheet is open. Held as an id rather than the row so it
+  // cannot go stale when the list behind it changes.
+  const [shareMediaId, setShareMediaId] = useState<string | null>(null);
 
   const pending = mediaItems.filter((item) => item.status === "pending");
   const approved = mediaItems.filter((item) => item.status === "approved");
@@ -290,7 +297,11 @@ export function EventDashboard({
         </header>
 
         <nav className="mb-8 flex gap-1 border-b border-canvas-line" aria-label="Event sections">
-          {(["gallery", "settings", "qr"] as Tab[]).map((t) => (
+          {(
+            canManageShares
+              ? (["gallery", "links", "settings", "qr"] as Tab[])
+              : (["gallery", "settings", "qr"] as Tab[])
+          ).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -351,6 +362,7 @@ export function EventDashboard({
                   albums={canManageAlbums ? albums : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
+                  onShare={canManageShares ? setShareMediaId : undefined}
                 />
               </section>
             )}
@@ -413,6 +425,7 @@ export function EventDashboard({
                   albums={canManageAlbums ? albums : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
+                  onShare={canManageShares ? setShareMediaId : undefined}
                 />
               )}
             </section>
@@ -431,10 +444,15 @@ export function EventDashboard({
                   albums={canManageAlbums ? albums : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
+                  onShare={canManageShares ? setShareMediaId : undefined}
                 />
               </section>
             )}
           </div>
+        )}
+
+        {tab === "links" && canManageShares && (
+          <ShareLinksPanel eventId={event.id} slug={event.slug} />
         )}
 
         {tab === "settings" && (
@@ -538,6 +556,18 @@ export function EventDashboard({
           canDownload
           canSlideshow={canSlideshow}
           downloadBaseUrl={downloadBaseUrl}
+          onShare={canManageShares ? setShareMediaId : undefined}
+        />
+      )}
+
+      {shareMediaId && (
+        <ShareSheet
+          eventId={event.id}
+          mediaId={shareMediaId}
+          mediaKind={
+            mediaItems.find((item) => item.id === shareMediaId)?.kind ?? "photo"
+          }
+          onClose={() => setShareMediaId(null)}
         />
       )}
     </div>

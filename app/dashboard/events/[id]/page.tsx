@@ -19,7 +19,8 @@ import {
 } from "@/lib/plans";
 import { withProtectedMediaUrl } from "@/lib/media-delivery";
 import { EventDashboard } from "@/components/dashboard/event-dashboard";
-import { requireEventManagerSession } from "@/lib/roles";
+import { resolveEventActor } from "@/lib/roles";
+import { can } from "@/lib/permissions";
 
 export const metadata: Metadata = {
   title: "Manage event",
@@ -33,8 +34,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
 
   const [event] = await db.select().from(events).where(and(eq(events.id, id), isNull(events.deletedAt))).limit(1);
   if (!event) notFound();
-  const managerSession = await requireEventManagerSession(event.id, event.ownerId);
-  if (!managerSession) notFound();
+  // Resolved once, as the actor rather than as a bare session, so the page can
+  // ask what this person may actually do instead of only whether they are on the
+  // team. The coarse check was already wrong for the Links tab: a moderator is a
+  // manager by that measure and must not be able to mint share links.
+  const actor = await resolveEventActor(event.id, event.ownerId);
+  if (!actor) notFound();
 
   const [mediaRows, plan, albumRows, coHostRows, clientRows] = await Promise.all([
     db
@@ -76,6 +81,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       canSlideshow={canUseSlideshow(plan.key)}
       canManageAlbums={canUseAlbums(plan.key)}
       canManageCoHosts={canUseCoHosts(plan.key) && session.user.id === event.ownerId}
+      canManageShares={can(actor.role, "shares.manage")}
       canCustomizeGallery={canCustomizeGallery(plan.key)}
       canCustomizeQr={canCustomizeQr(plan.key)}
       canDownloadQrSign={canDownloadQrSign(plan.key)}

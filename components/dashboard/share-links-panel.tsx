@@ -1,0 +1,120 @@
+"use client";
+
+import { useState } from "react";
+import Image from "next/image";
+import { Card } from "@/components/ui/card";
+import { ShareLinkRow } from "@/components/dashboard/share-link-row";
+import { ShareSettingsEditor } from "@/components/dashboard/share-settings-editor";
+import { useShareLinks } from "@/components/dashboard/use-share-links";
+import { mediaContentPath, mediaPosterPath } from "@/lib/media-delivery";
+import { shareState } from "@/lib/share-access";
+
+/**
+ * Every share link on the event, in one place.
+ *
+ * The reason this screen exists is that links outlive the moment they were
+ * created. A host makes a dozen over a weekend from a dozen different photos and
+ * has no memory of which ones are still open, so the per-photo sheet alone
+ * cannot answer "what have I got out there". This can.
+ *
+ * Each row carries the photo it points at, because a token is not recognisable
+ * and the question an organizer arrives with is about a picture, not a URL.
+ */
+export function ShareLinksPanel({ eventId, slug }: { eventId: string; slug: string }) {
+  const { shares, loading, error, busyIds, revoke, update } = useShareLinks(eventId);
+  const [showAll, setShowAll] = useState(false);
+
+  const live = shares.filter((share) => shareState(share) === "live");
+  const closed = shares.length - live.length;
+  const visible = showAll ? shares : live;
+
+  return (
+    <div className="max-w-xl space-y-4">
+      <div>
+        <h2 className="font-display text-xl text-paper">Share links</h2>
+        <p className="mt-1.5 text-sm text-muted">
+          Every link you have made from a photo in this gallery. Anyone holding a
+          live link can open that photo without joining the gallery.
+        </p>
+      </div>
+
+      {error && (
+        <p
+          className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+          role="alert"
+        >
+          {error}
+        </p>
+      )}
+
+      {closed > 0 && (
+        <div className="flex gap-1" role="group" aria-label="Which links to show">
+          {[
+            { key: false, label: `Live (${live.length})` },
+            { key: true, label: `All (${shares.length})` },
+          ].map((option) => (
+            <button
+              key={String(option.key)}
+              type="button"
+              onClick={() => setShowAll(option.key)}
+              aria-pressed={showAll === option.key}
+              className={`min-h-11 rounded-full border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
+                showAll === option.key
+                  ? "border-volt text-volt"
+                  : "border-canvas-line text-muted hover:text-paper"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-muted">Loading links</p>
+      ) : visible.length === 0 ? (
+        <Card className="text-sm text-muted">
+          {shares.length === 0
+            ? "No share links yet. Open a photo in the gallery and use Share to make one."
+            : "No live links. Switch to All to see the ones you turned off."}
+        </Card>
+      ) : (
+        <div className="space-y-2.5">
+          {visible.map((share) => (
+            <div key={share.id} className="flex gap-3">
+              {share.mediaId && (
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-canvas-line bg-canvas">
+                  <Image
+                    src={
+                      share.mediaKind === "video"
+                        ? mediaPosterPath(slug, share.mediaId)
+                        : mediaContentPath(slug, share.mediaId)
+                    }
+                    alt=""
+                    fill
+                    unoptimized
+                    sizes="64px"
+                    className="object-cover"
+                  />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <ShareLinkRow
+                  share={share}
+                  busy={busyIds.has(share.id)}
+                  onRevoke={(id) => void revoke(id)}
+                >
+                  <ShareSettingsEditor
+                    share={share}
+                    busy={busyIds.has(share.id)}
+                    onSave={(changes) => void update(share.id, changes)}
+                  />
+                </ShareLinkRow>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
