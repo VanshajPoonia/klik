@@ -19,7 +19,7 @@
 - Plans exist as static definitions in `lib/plans.ts` with capability helpers, and are enforced on event creation and on feature gates.
 
 **Not built at all**
-- Stripe, or any payment. `users.plan_key` is set by hand by a superadmin.
+- Granting a plan automatically. Stripe Checkout and the webhook now take and record money (see BILLING in `STRIPE_INTEGRATION_TODO.md`), but `users.plan_key` is still set by hand by a superadmin, because capability needs ACT-1's ledger before a webhook may touch it.
 - Any usage measurement. Nothing counts storage, media, or guests, so nothing can warn about limits.
 - Self-serve signup. There is a `/login` page and no `/signup`. Usernames exist only on admin-provisioned credential accounts.
 - Guest accounts, guest event history, guest to organizer upgrade.
@@ -1193,7 +1193,7 @@ This is the one that stops you being the bottleneck on every schema change.
 
 - **Do not create the US bucket yet.** OPS-4 is a single cutover: US bucket, backup bucket, object copy, custom domain, signed-cookie delivery, and removing the `.eu.` endpoint. Doing the bucket half early means running two buckets and migrating delivery twice.
 - **Do not go looking for R2 object versioning.** It does not exist. See the corrected note above.
-- **Stripe: nothing at all.** Deferred out of v1.
+- **Stripe: takes money, grants nothing.** Embedded Checkout, a signed idempotent webhook and the PAY-2 tables shipped 2026-10-06, ahead of the deferral decision below. What is still deferred is automatic granting, which waits on ACT-1. A superadmin activates from `/admin` as before.
 - **Sentry: when F-9 comes up**, not before. The DSN takes two minutes and all of its value is in alert rules that need the code first.
 
 ### The gap that needs nothing from you

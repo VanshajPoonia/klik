@@ -212,7 +212,7 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 ## 12. What is not built
 
-Stripe and any payment. Self-serve signup. Guest accounts and guest event history. Per-photo visibility, per-photo share links, nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking. Transactional email. A background job runner. Video transcoding, and video metadata stripping with it.
+Self-serve signup. Guest accounts and guest event history. Per-photo visibility, per-photo share links, nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking. Transactional email. A background job runner. Video transcoding, and video metadata stripping with it.
 
 `ROADMAP.md` has all of it with task IDs and an order.
 
