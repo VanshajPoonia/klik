@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
 import { PlanAssignmentControl } from "@/components/admin/plan-assignment-control";
+import { PendingActivations } from "@/components/admin/pending-activations";
+import { getPendingActivations } from "@/lib/billing-admin";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -21,6 +23,8 @@ export default async function AdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role !== "superadmin") redirect("/dashboard");
+
+  const pending = await getPendingActivations();
 
   const rows = await db
     .select({
@@ -109,6 +113,8 @@ export default async function AdminPage() {
             <button className="text-sm text-muted hover:text-paper">Sign out</button>
           </form>
         </header>
+
+        <PendingActivations pending={pending} />
 
         <div className="mb-8 flex items-center justify-between">
           <h1 className="font-display text-2xl text-paper">Provisioned clients</h1>
