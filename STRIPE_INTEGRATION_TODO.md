@@ -1,41 +1,67 @@
 # Stripe integration: remaining steps
 
-This file is the single source of truth for everything left to do on the Stripe
-Checkout integration. The code compiles, lints and builds, but it will not take a
-real payment until the blockers below are cleared.
+This file is the single source of truth for what is left on the Stripe Checkout
+integration.
+
+Local development works end to end against a sandbox, and the webhook now
+records every payment, refund and subscription change. One step is outstanding
+and it is not code: the migration has not been applied to the database.
 
 Scenario B applied: no Checkout Session call existed anywhere in the repo, so a
 new endpoint and a new page were added rather than existing parameters edited.
 
 ## Values to Replace
 
-No placeholders remain in code. What is left is three environment values.
+Nothing is left to fill in for local development. `.env.local` holds a working
+sandbox secret key, publishable key and all three Price IDs.
 
-**Files containing placeholders:**
-- [.env.example](.env.example)
+Production is a different set of values and is still empty. Set these in Vercel
+Project Settings and redeploy, since a variable added without a redeploy never
+reaches the running build.
 
-| Field | Current Value | What to Set |
-|---|---|---|
-| `STRIPE_PRICE_EVENT` | empty | The Price ID behind Klik Event, $39 one-time. |
-| `STRIPE_PRICE_PREMIUM` | empty | The Price ID behind Klik Premium, $89 one-time. |
-| `STRIPE_PRICE_VENUE_MONTHLY` | empty | The Price ID behind Klik Venue, $69 per month. |
+| Variable | What to set in Vercel |
+|---|---|
+| `STRIPE_SECRET_KEY` | The live secret key. Never the sandbox one. |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | The live publishable key, `pk_live_51THQ9k...`. |
+| `STRIPE_PRICE_EVENT` | `price_1UNGPeBaW05Ewcp3KnQo6a5b` |
+| `STRIPE_PRICE_PREMIUM` | `price_1UNGQmBaW05Ewcp35QI0P63S` |
+| `STRIPE_PRICE_VENUE_MONTHLY` | `price_1UNGQPBaW05Ewcp3cfrkX1WN` |
 
-A Price ID starts `price_`. Find them in the Dashboard under Product catalogue,
-open the product, and read the Pricing section, or run `stripe prices list`. Test
-mode and live mode have different IDs for the same product, so these have to
-change whenever the API keys change.
+The live Price IDs above are from account `acct_1THQ9kBaW05Ewcp3`, Kreativ
+Vantage, and are also recorded as comments at the bottom of `.env.local`.
 
-The Payment Link URLs are not Price IDs and cannot be used here. They are
+Payment Link URLs are not Price IDs and cannot be used here. The links are
 recorded under Payment Links below.
 
-`mode` is no longer a placeholder. [lib/stripe.ts](lib/stripe.ts) resolves it per
-plan: `payment` for Event and Premium, `subscription` for Venue.
+## The sandbox
+
+Local development runs against a standalone sandbox, `acct_1UNHUaDaaergD8Nq`,
+created with `stripe sandbox create --from-git`. Two things about it matter.
+
+**It expires on 2026-10-12 unless claimed.** Run `stripe sandbox claim` before
+then, or the keys in `.env.local` stop working and the three test products go
+with them.
+
+**It is a separate account, not a sandbox inside Kreativ Vantage.** It was
+provisioned against the git email `vanshajtheunique@gmail.com`, which is not the
+account the live products live in. Nothing created there is visible from the
+Kreativ Vantage Dashboard. If you want a sandbox under the real account instead,
+use `stripe switch` from a browser session signed in as Kreativ Vantage and
+recreate the three prices there.
+
+The three test prices were created to mirror live, same names and amounts:
+
+| Plan | Test Price ID | Live Price ID |
+|---|---|---|
+| Klik Event, $39 one-time | `price_1UNHcIDaaergD8NqqBmiYvI8` | `price_1UNGPeBaW05Ewcp3KnQo6a5b` |
+| Klik Premium, $89 one-time | `price_1UNHcKDaaergD8Nq9aRjGvde` | `price_1UNGQmBaW05Ewcp35QI0P63S` |
+| Klik Venue, $69 per month | `price_1UNHcLDaaergD8NqEuHxwTD5` | `price_1UNGQPBaW05Ewcp3cfrkX1WN` |
 
 ## Configured Parameters
 
-These parameters came from Checkout Studio and are already set correctly. Do not
-edit them here: change them in Studio and re-run the integration, or the two
-drift apart with nothing to detect it.
+These came from Checkout Studio and are set correctly. Do not edit them here:
+change them in Studio and re-run the integration, or the two drift apart with
+nothing to detect it.
 
 **Files containing these parameters:**
 - [app/api/billing/checkout/route.ts](app/api/billing/checkout/route.ts) (session parameters)
@@ -47,18 +73,21 @@ drift apart with nothing to detect it.
 | `billing_address_collection` | `auto` |
 | `phone_number_collection` | `{ enabled: false }` |
 | `automatic_tax` | `{ enabled: false }` |
-| `payment_method_collection` | `always`, sent only when `mode` is `subscription`, so only for Venue |
+| `payment_method_collection` | `always`, sent only in subscription mode, so only for Venue |
 | `submit_type` | `auto` |
 | `name_collection` | `{ individual: { enabled: true, optional: true } }` |
 | `saved_payment_method_options` | `{ payment_method_save: "enabled" }` |
 | `integration_identifier` | `custom_embedded_web_0001` |
 
-`ui_mode` is `form` because the installed SDK is stripe 23.0.0, which is at or
-above 21.0.0. Below 21.0.0 the value would have to be `custom`.
+One parameter is **not** from Studio. `customer_creation: "always"` is sent in
+payment mode only. See resolved blocker 1.
+
+`ui_mode` is `form` because the installed SDK is stripe 23.0.0, at or above the
+21.0.0 threshold. Below that the value would have to be `custom`.
 
 ## Payment Links
 
-Three Payment Links already exist for the same products. They are a separate,
+Three Payment Links exist for the same products. They are a separate,
 self-contained integration path: a hosted page at buy.stripe.com that bypasses
 [app/api/billing/checkout/route.ts](app/api/billing/checkout/route.ts) entirely.
 Nothing in this repo references them. They are recorded so the two paths are not
@@ -70,123 +99,130 @@ confused for each other.
 | Klik Premium | $89.00 USD one-time | https://buy.stripe.com/dRmaEW2NR9dT6AW7uC2cg01 |
 | Klik Venue | $69.00 USD per month | https://buy.stripe.com/cNifZg603bm1aRc6qy2cg02 |
 
-Both paths still need the webhook in blocker 3. A Payment Link grants nothing on
-its own either.
+A Payment Link grants nothing on its own either. Both paths need the webhook.
 
 All three products carry the SaaS product tax code with tax not included in the
 price, while `automatic_tax` is `{ enabled: false }` in the session. That is
 consistent only while you have no tax registrations. Revisit it before selling
 into a jurisdiction where you do.
 
-## Blockers
+## Outstanding
 
-Three things will stop this working, in descending order of how soon you hit them.
+### 1. The migration has not been applied
 
-### 1. `saved_payment_method_options` needs a Customer
+[drizzle/0012_stripe_billing.sql](drizzle/0012_stripe_billing.sql) creates the
+four tables everything below depends on. It is written, committed and reviewed,
+but running it was blocked by the Claude Code auto mode classifier, which
+flagged it as a production deploy. Nothing Stripe-related works until it runs,
+and the code must not be pushed before it does: a deploy that references tables
+the database does not have fails on the first webhook, in production, silently.
 
-`payment_method_save` only applies when the session has a Customer attached. This
-splits by plan:
+Apply it with:
 
-- **Venue** is `subscription` mode, where Stripe creates the Customer itself. It
-  is fine.
-- **Event and Premium** are `payment` mode with no `customer` and no
-  `customer_creation`, so Stripe rejects the create call and the first request to
-  `/api/billing/checkout` returns an error instead of a client secret.
+```
+npm run db:migrate -- 0012_stripe_billing.sql
+```
 
-This was left exactly as Checkout Studio configured it, because Studio values are
-authoritative and inventing an extra parameter here would hide the mismatch. Fix
-it in one of two ways:
+It is additive only. Four `CREATE TABLE IF NOT EXISTS`, two check constraints and
+four indexes. No existing table is altered and no data is touched, so it is safe
+to run against production and safe to run twice.
 
-- Add `customer_creation: "always"` to the session parameters, or
-- Look up or create the Stripe customer for the signed-in user and pass
-  `customer`. This is what ROADMAP PAY-2's `stripe_customers` table exists for,
-  and is the right answer once that table lands.
+### 2. A payment still does not grant a plan, by design
 
-If you do not want saved payment methods at all, turn the setting off in Checkout
-Studio instead of deleting the line here.
+The webhook records money. It does not touch `users.planKey`. A superadmin sees
+the payment in the admin panel under "Paid, awaiting activation" and grants the
+plan with the control that was already there.
 
-### 2. Two different API versions were specified
+That is deliberate and it is your stated v1 model: ROADMAP ACT-2 says "This is
+the v1 revenue mechanism: a human decides". Automating it means ACT-1, the
+entitlement ledger, which retires `users.plan_key`, resolves the plpgsql
+triggers that read it directly, and moves every `canX(plan.key)` call site.
+ROADMAP sequences that behind the F-7 test harness for good reason.
 
-The integration brief says to pin `2026-03-25.dahlia; custom_checkout_payment_form_preview=v1`.
-The Stripe docs page shown alongside it uses `2026-08-26.dahlia; custom_checkout_payment_form_preview=v1`.
-The installed SDK pins `2026-09-30.endive` by default, newer than both.
+Nothing here has to be unpicked when ACT-1 lands. The ledger reads from these
+tables rather than replacing them, and `source = 'stripe'` rows will be written
+from the same handlers.
 
-[lib/stripe.ts](lib/stripe.ts) uses the brief's value, `2026-03-25.dahlia`, since
-that was the explicit instruction. Confirm which is correct in the Dashboard under
-Developers, API versions, and change `STRIPE_API_VERSION` if it is the other one.
-Getting this wrong fails at the `checkout.sessions.create` call, not at build
-time, so it will not surface until someone opens the checkout page.
+## Resolved blockers
 
-### 3. Nothing grants a plan after a successful payment
+Kept as a record, because both were real and both were verified against the API
+rather than reasoned about.
 
-There is no webhook handler. A customer can complete payment and receive nothing,
-because entitlements in Klik are granted by a ledger write, and only the admin
-panel writes to it today.
+### 1. `saved_payment_method_options` needed a Customer. Fixed.
 
-This was out of scope for the integration brief, which covers the Checkout Session
-and the form only. It is fully designed in ROADMAP PAY-4: `POST /api/webhooks/stripe`
-with `runtime = "nodejs"`, reading the raw body via `await request.text()` for
-signature verification, inserting into a `stripe_webhook_events` idempotency table
-before processing, and handling `checkout.session.completed`,
-`customer.subscription.created|updated|deleted`, `invoice.paid`,
-`invoice.payment_failed` and `charge.refunded`.
+Studio enables saved payment methods, which Stripe permits only when the session
+has a Customer. Subscription mode creates one by itself, so Venue always worked.
+Payment mode does not, and rejected the create call outright, so Event and
+Premium failed with `saved_payment_method_options requires a customer`.
 
-Two constraints from that design matter and are easy to get wrong:
+[app/api/billing/checkout/route.ts](app/api/billing/checkout/route.ts) now sends
+`customer_creation: "always"` in payment mode. Confirmed working against the API.
 
-- Every handler filters on `source = 'stripe'`. Admin grants outrank Stripe and a
-  webhook must never overwrite one, or a comped venue silently loses access when
-  a subscription lapses.
-- The grant happens in the webhook, never on the success page. The success page is
-  not a trustworthy signal.
+This is interim. Once PAY-2 lands `stripe_customers`, look the customer up and
+pass `customer` instead, so a returning organizer does not get a fresh Customer
+record on every purchase.
 
-`STRIPE_WEBHOOK_SECRET` was deliberately not added to [.env.example](.env.example),
-since nothing reads it yet. Add it with the handler.
+### 2. Two API versions were specified. Settled.
+
+The brief said `2026-03-25.dahlia; custom_checkout_payment_form_preview=v1`, the
+docs page beside it said `2026-08-26.dahlia; ...`, and the SDK pins
+`2026-09-30.endive`. The brief's value was used, and the API accepts it: sessions
+create successfully with `ui_mode: form` and return a client secret. No change
+needed.
 
 ## Setup
 
 ### Environment variables
 
-Add to `.env.local`, and to Vercel Project Settings followed by a redeploy, since
-a variable added without a redeploy never reaches the running build.
-
 ```
-STRIPE_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_SECRET_KEY=rkcs_test_... or sk_...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_... or pk_live_...
 STRIPE_PRICE_EVENT=price_...
 STRIPE_PRICE_PREMIUM=price_...
 STRIPE_PRICE_VENUE_MONTHLY=price_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
-All five are optional in [lib/env.ts](lib/env.ts), matching how Google and Resend
+All six are optional in [lib/env.ts](lib/env.ts), matching how Google and Resend
 are treated: without `STRIPE_SECRET_KEY` the checkout route answers 503 and
 nothing else in Klik changes, and a plan with no Price ID answers 503 on its own
-without taking the other two down. Every one is shape-checked when present, so a
-truncated paste, a swap of the publishable and secret keys, or a Payment Link URL
-pasted where a Price ID belongs all fail at startup rather than at the form.
+without taking the other two down. Each is shape-checked when present, so a
+truncated paste, the publishable and secret keys swapped into each other's slot,
+or a Payment Link URL pasted where a Price ID belongs all fail at startup rather
+than at the payment form.
 
-The `NEXT_PUBLIC_` prefix on the publishable key is load-bearing. Next inlines only
-prefixed variables into the client bundle, so an unprefixed name is simply
+`STRIPE_SECRET_KEY` accepts `sk_` and also `rk_` and `rkcs_`, the restricted keys
+the CLI hands out for a sandbox. Those are real secret keys with a narrower
+scope, and rejecting them would mean the documented way to get a test environment
+fails validation at boot.
+
+The `NEXT_PUBLIC_` prefix on the publishable key is load-bearing. Next inlines
+only prefixed variables into the client bundle, so an unprefixed name is simply
 `undefined` in the browser with no build error to explain why.
-
-Get the keys from https://dashboard.stripe.com/test/apikeys. Use test keys until
-the blockers are cleared. The buy button snippet in the Dashboard shows a
-`pk_live_` key, which is live mode and will take real money.
 
 ### Dependencies
 
-`stripe@^23.0.0` was added to [package.json](package.json). Nothing else was
-installed: Stripe.js is loaded from the CDN, not bundled.
+`stripe@^23.0.0` in [package.json](package.json). Nothing else: Stripe.js is
+loaded from the CDN, not bundled. The Stripe CLI is installed locally via
+Homebrew and is not a project dependency.
 
-### New files
+### Files
 
 ```
 lib/stripe.ts                                   Stripe client, pinned API version, plan to price map
+lib/billing.ts                                  Customer lookup, and the record handlers the webhook calls
+lib/billing-admin.ts                            The "who has paid and is still waiting" query
+lib/billing.test.ts                             Charge mode per plan, and invoice shape parsing
+drizzle/0012_stripe_billing.sql                 The four tables
 app/api/billing/checkout/route.ts               POST { planKey }, returns { client_secret }
+app/api/webhooks/stripe/route.ts                Signature check, idempotency claim, dispatch
 app/checkout/page.tsx                           Signed-in page at /checkout?plan=event
 components/billing/embedded-checkout-form.tsx   Client component, mounts the form
+components/admin/pending-activations.tsx        Paid, awaiting activation panel
 ```
 
-Changed: [lib/env.ts](lib/env.ts), [.env.example](.env.example),
+Changed: [lib/env.ts](lib/env.ts), [lib/schema.ts](lib/schema.ts),
+[app/admin/page.tsx](app/admin/page.tsx), [.env.example](.env.example),
 [package.json](package.json).
 
 ### How it works
@@ -210,11 +246,22 @@ Changed: [lib/env.ts](lib/env.ts), [.env.example](.env.example),
 6. `initCheckoutFormSdk` receives the client secret and the Studio appearance,
    `createForm({ layout: "expanded" })` renders into `#checkout-form`, and
    `loadActions()` supplies the confirm action wired to the form's `confirm` event.
+   Card details go from that iframe straight to Stripe and never touch Klik.
+7. Separately, Stripe POSTs the event to `/api/webhooks/stripe`. That request is
+   the only trustworthy signal that money moved: what the browser reports is a
+   claim from a client we do not control, so nothing is recorded from it.
+8. The webhook verifies the signature over the raw bytes, claims the event id in
+   `stripe_webhook_events` so a redelivery is a no-op, records the purchase or
+   subscription, and stamps `processed_at`. On failure it stores the error,
+   releases the claim and answers 500 so Stripe retries.
+9. A superadmin sees the payment in the admin panel and grants the plan.
 
 ### Testing
 
-Use test mode keys and these card numbers, with any future expiry, any CVC and any
-postal code:
+`npm run dev`, sign in, then open `/checkout?plan=event`. All three plans create a
+session successfully now.
+
+Test cards, with any future expiry, any CVC and any postal code:
 
 | Card | Result |
 |---|---|
@@ -224,29 +271,48 @@ postal code:
 
 Full list: https://docs.stripe.com/testing
 
-Venue can be tested as soon as the Price IDs are set. Event and Premium cannot,
-until blocker 1 is cleared.
+A successful payment is recorded and then waits for a superadmin to grant the
+plan. The organizer's access does not change by itself. That is the design, not
+a regression. See Outstanding, item 2.
+
+### Webhook setup
+
+Locally:
+
+```
+stripe listen --forward-to localhost:3000/api/webhooks/stripe
+```
+
+That prints a `whsec_...` secret for `.env.local`. It is a different value from
+the production one.
+
+For the deployed app, add an endpoint in the Dashboard under Developers,
+Webhooks, pointing at `https://<your domain>/api/webhooks/stripe`, subscribed to
+`checkout.session.completed`, `customer.subscription.created`,
+`customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
+`invoice.payment_failed` and `charge.refunded`. Put its signing secret in Vercel
+and redeploy.
 
 ### Next steps
 
-1. Fill in the three Price IDs.
-2. Clear blocker 1 so Event and Premium can create a session at all.
-3. Confirm the API version in blocker 2.
-4. Build PAY-2's tables and PAY-4's webhook so a payment actually grants something.
-5. Pass `client_reference_id` (the user ID) and the intended `eventId` in metadata.
-   These were left out because they are not Checkout Studio parameters, but the
-   webhook needs them to know who paid for what.
-6. Link to `/checkout?plan=...` from the pricing page and from the upgrade prompts
-   described in PAY-5. Nothing in the app points at the checkout page yet.
-7. Add `STRIPE_PRICE_VENUE_ANNUAL` and an annual Venue price if you want the annual
-   option PAY-3 describes. No annual product exists in Stripe today.
-8. Decide whether the Studio appearance should match Klik. It currently specifies
+1. Apply the migration. Everything is blocked on this.
+2. Claim the sandbox before 2026-10-12, or move to one under the Kreativ Vantage
+   account.
+3. Add the webhook endpoint and secret, locally and in the Dashboard.
+4. Alert on the webhook route. ROADMAP F-9 names it alongside the cron as a route
+   that fails silently by nature, and a webhook that stops processing looks
+   exactly like a quiet week.
+6. Link to `/checkout?plan=...` from the pricing page and the upgrade prompts in
+   PAY-5. Nothing in the app points at the checkout page yet.
+7. Add `STRIPE_PRICE_VENUE_ANNUAL` and an annual Venue price if you want the
+   annual option PAY-3 describes. No annual product exists in Stripe today.
+8. Decide whether the Studio appearance should match Klik. It specifies
    `Source Sans Pro` at `#0570de` on white, which is Stripe's default look, not
    Klik's volt-on-near-black. The form sits in a Stripe-hosted iframe that cannot
-   read Klik's CSS variables, so this can only be changed in Checkout Studio.
+   read Klik's CSS variables, so this can only change in Checkout Studio.
 9. Reconcile with ROADMAP. Payments were deferred out of v1 on 2026-10-01 and
    ROADMAP still reads "Stripe: nothing at all". Either update that decision or
-   keep this integration behind a flag until it is revisited.
+   keep this behind a flag until it is revisited.
 
 ### Resources
 
