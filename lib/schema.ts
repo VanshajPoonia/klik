@@ -349,6 +349,84 @@ export const mediaShares = pgTable(
   ],
 );
 
+/**
+ * Stripe bookkeeping. See ROADMAP.md PAY-2.
+ *
+ * These tables record money. They do not grant capability: that stays with the
+ * superadmin and `users.planKey` until ACT-1's entitlement ledger lands. A
+ * webhook writing capability directly is what silently downgrades a comped
+ * venue when a subscription lapses.
+ */
+
+export const stripeCustomers = pgTable("stripe_customers", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: text("stripe_customer_id").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const PURCHASE_STATUSES = ["paid", "refunded"] as const;
+export type PurchaseStatus = (typeof PURCHASE_STATUSES)[number];
+
+export const purchases = pgTable(
+  "purchases",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Null until the pass is applied. A pass is bought before the event exists,
+    // so this cannot be required at purchase time.
+    eventId: text("event_id").references(() => events.id, { onDelete: "set null" }),
+    // Unique, and that is what makes fulfilment idempotent under Stripe's
+    // at-least-once delivery.
+    stripeCheckoutSessionId: text("stripe_checkout_session_id").notNull().unique(),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    planKey: text("plan_key").$type<PlanKey>().notNull(),
+    // Minor units as an integer. Money is never a float.
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull(),
+    status: text("status").$type<PurchaseStatus>().notNull().default("paid"),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("purchases_unconsumed_idx").on(table.userId, table.createdAt)],
+);
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    stripeSubscriptionId: text("stripe_subscription_id").notNull().unique(),
+    planKey: text("plan_key").$type<PlanKey>().notNull(),
+    // Stripe's vocabulary, stored as given. An unrecognised status must land in
+    // the table, not bounce the webhook into an endless retry.
+    status: text("status").notNull(),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("subscriptions_user_idx").on(table.userId, table.status)],
+);
+
+/**
+ * The idempotency ledger. Every webhook claims its event here before doing any
+ * work, so a redelivery is a no-op rather than a second purchase.
+ */
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  stripeEventId: text("stripe_event_id").primaryKey(),
+  type: text("type").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  error: text("error"),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Event = typeof events.$inferSelect;
@@ -361,3 +439,7 @@ export type EventCoHost = typeof eventCoHosts.$inferSelect;
 export type VenueClient = typeof venueClients.$inferSelect;
 export type MediaShare = typeof mediaShares.$inferSelect;
 export type NewMediaShare = typeof mediaShares.$inferInsert;
+export type Purchase = typeof purchases.$inferSelect;
+export type NewPurchase = typeof purchases.$inferInsert;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type NewSubscription = typeof subscriptions.$inferInsert;
