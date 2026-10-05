@@ -9,7 +9,8 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { PLANS, type PlanDefinition } from "@/lib/plans";
+import { isPlanPurchasable } from "@/lib/billing-plans";
+import { PLANS, PLAN_KEYS, type PlanDefinition } from "@/lib/plans";
 import { Container } from "./container";
 import { CtaLink } from "./cta-link";
 
@@ -51,6 +52,12 @@ function PlanCard({
   cta: string;
 }) {
   const isFeatured = Boolean(plan.featured);
+
+  // Only send someone to checkout when there is a checkout to send them to.
+  // Where Stripe is not configured, which is every environment until the keys
+  // are in Vercel, this stays the sign-in link it has always been rather than
+  // a button that leads to "payments are not configured".
+  const href = isPlanPurchasable(plan.key) ? `/checkout?plan=${plan.key}` : "/login";
 
   return (
     <article
@@ -137,7 +144,7 @@ function PlanCard({
             </p>
           </div>
           <CtaLink
-            href="/login"
+            href={href}
             variant={inverted ? "primary" : "ghost"}
             className={`mt-5 w-full ${
               inverted
@@ -156,6 +163,9 @@ function PlanCard({
 }
 
 export function Pricing() {
+  // True the moment any plan is buyable, which is also when the line about an
+  // administrator assigning plans stops being the whole story.
+  const anyPurchasable = PLAN_KEYS.some(isPlanPurchasable);
   const eventPlan = PLANS.event;
   const premiumPlan = PLANS.premium;
   const venuePlan = PLANS.venue;
@@ -225,7 +235,9 @@ export function Pricing() {
         </div>
 
         <p className="mx-auto mt-6 max-w-2xl text-center text-sm leading-relaxed text-canvas/60">
-          Plans are assigned by the Klik administrator during onboarding.
+          {anyPurchasable
+            ? "Your event is set up by the Klik team once payment clears, usually the same day."
+            : "Plans are assigned by the Klik administrator during onboarding."}
         </p>
       </Container>
     </section>

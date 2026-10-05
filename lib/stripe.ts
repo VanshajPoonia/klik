@@ -1,6 +1,5 @@
 import Stripe from "stripe";
 import { env } from "@/lib/env";
-import type { PlanKey } from "@/lib/plans";
 
 /**
  * The pinned API version carries the `custom_checkout_payment_form_preview=v1`
@@ -35,30 +34,6 @@ export function getStripe(): Stripe | null {
   return client;
 }
 
-/**
- * Which Stripe Price backs each Klik plan, and whether buying it is a one-off
- * charge or a subscription.
- *
- * The Price ID is read from the environment and never accepted from the client.
- * A request that names its own price is a request that names a cheaper one, and
- * the failure is invisible: the payment succeeds, the webhook grants the plan,
- * and only the Stripe balance disagrees.
- *
- * The mode is derived here rather than passed in for the same reason. Venue is
- * the only recurring plan today, and `subscription` against a one-time Price is
- * rejected by Stripe, so a mismatch would surface at checkout rather than in a
- * reconciliation weeks later.
- */
-export function getPlanBilling(planKey: PlanKey): {
-  mode: Stripe.Checkout.SessionCreateParams.Mode;
-  priceId: string | undefined;
-} {
-  switch (planKey) {
-    case "event":
-      return { mode: "payment", priceId: env.STRIPE_PRICE_EVENT };
-    case "premium":
-      return { mode: "payment", priceId: env.STRIPE_PRICE_PREMIUM };
-    case "venue":
-      return { mode: "subscription", priceId: env.STRIPE_PRICE_VENUE_MONTHLY };
-  }
-}
+// Re-exported so callers that already hold a Stripe client have one import,
+// while the marketing page can reach the same answer without the SDK.
+export { getPlanBilling, isPlanPurchasable } from "@/lib/billing-plans";

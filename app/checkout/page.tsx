@@ -39,6 +39,14 @@ export default async function CheckoutPage({
         {definition.price} {definition.priceSuffix}. Payment is handled by Stripe, and card details
         are entered in Stripe&apos;s own frame without ever reaching Klik.
       </p>
+      {/* Said before paying, not after. A plan is granted by a person, so the
+          gap between the card clearing and the event going live is real and
+          measured in hours. Someone who was not told will read it as a failure
+          and ask for their money back. */}
+      <p className="mt-2 text-sm text-muted">
+        Your plan is applied by the Klik team once the payment clears. You will not see it on your
+        events straight away.
+      </p>
       <Card className="mt-8">
         <EmbeddedCheckoutForm planKey={plan} />
       </Card>
