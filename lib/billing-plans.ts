@@ -47,3 +47,23 @@ export function getPlanBilling(planKey: PlanKey): {
 export function isPlanPurchasable(planKey: PlanKey): boolean {
   return Boolean(env.STRIPE_SECRET_KEY && getPlanBilling(planKey).priceId);
 }
+
+/**
+ * Stripe's own hosted payment pages, one per plan.
+ *
+ * These are a different route to the same money than `/checkout`: Stripe hosts
+ * the page, so the customer leaves Klik, and nothing server side is involved.
+ * No API keys, no webhook, no Price IDs. That is the point of them.
+ *
+ * They are LIVE links and take real payments. They are also public by design,
+ * which is why they sit in code rather than in the environment.
+ *
+ * What they do not do is tell Klik anything. A purchase through one appears in
+ * the Stripe Dashboard and nowhere else, so it is matched to an account by the
+ * email the buyer typed and activated by hand.
+ */
+export const PAYMENT_LINKS: Record<PlanKey, string> = {
+  event: "https://buy.stripe.com/8x27sK88b75LbVgbKS2cg03",
+  premium: "https://buy.stripe.com/dRmaEW2NR9dT6AW7uC2cg01",
+  venue: "https://buy.stripe.com/cNifZg603bm1aRc6qy2cg02",
+};

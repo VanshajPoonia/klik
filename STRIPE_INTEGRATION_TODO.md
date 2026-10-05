@@ -10,10 +10,12 @@ deliberately not automated, and what to do next.
 | Embedded Stripe Checkout | Built, verified |
 | Webhook, signed and idempotent | Built, verified against the live API |
 | Database tables | Migrated, in production |
-| Pricing page links | Live, and self-disabling until Stripe is configured |
-| Production Stripe keys | **Not set.** Nothing can be bought on the live site |
-| Dashboard webhook endpoint | **Not created.** Nothing reaches the webhook |
-| A payment granting a plan | **Not automated, on purpose.** See "The grant is manual" |
+| Pricing page links | Live, pointing at Stripe's **hosted** pages |
+| How money is taken today | Stripe-hosted Payment Links. No keys, no webhook, nothing to deploy |
+| Embedded checkout at `/checkout` | Built and working, **not linked from anywhere**. Waiting on a decision, not on code |
+| Production Stripe keys | Not set. Only the embedded path needs them |
+| Dashboard webhook endpoint | Not created. Only the embedded path needs it |
+| A payment granting a plan | **Never automatic.** True of both paths. See "The grant is manual" |
 
 ## The two Stripe accounts
 
@@ -93,11 +95,22 @@ control, so nothing is written from it. The webhook is the record.
    can work. An event that keeps its claim after failing never completes, and
    that row is the only trace of a payment that did not land.
 
-### The Payment Links are a different thing
+### The Payment Links are what the site actually uses
 
-Three links at `buy.stripe.com` exist for the same products. They are a
-self-contained hosted checkout that **bypasses all of the above**. Nothing in
-this repo references them, and they are listed only so the two are not confused.
+Three links at `buy.stripe.com`, one per plan, held in
+[lib/billing-plans.ts](lib/billing-plans.ts) and wired to the three pricing
+buttons. They are a self-contained hosted checkout that **bypasses everything
+above**: Stripe hosts the page, the customer leaves Klik to pay, and no key,
+webhook or deploy is involved.
+
+The trade is that Klik learns nothing. A purchase through one appears in the
+Stripe Dashboard and nowhere else: no row in `purchases`, no entry in `/admin`.
+It is matched to an account by the email the buyer typed, and activated by hand.
+
+Switching to the embedded form is one line in
+[components/marketing/pricing.tsx](components/marketing/pricing.tsx), changing
+`PAYMENT_LINKS[plan.key]` back to `/checkout?plan=${plan.key}`, once the keys and
+the webhook endpoint from step 3 are in place.
 
 | Plan | Link |
 |---|---|
@@ -105,7 +118,7 @@ this repo references them, and they are listed only so the two are not confused.
 | Klik Premium | https://buy.stripe.com/dRmaEW2NR9dT6AW7uC2cg01 |
 | Klik Venue | https://buy.stripe.com/cNifZg603bm1aRc6qy2cg02 |
 
-They need the webhook too. A Payment Link grants nothing on its own either.
+A Payment Link grants nothing on its own. Nothing does: see below.
 
 ## The grant is manual, on purpose
 
@@ -188,7 +201,17 @@ Amounts are integer minor units. Money is never a float.
 
 ## Next steps
 
-### 1. Claim the sandbox
+### 1. Test a Payment Link
+
+Open https://buy.stripe.com/8x27sK88b75LbVgbKS2cg03 and pay the $39 with a real
+card, or refund yourself afterwards. These are live links taking real money, so
+this is the one check worth doing before anyone else clicks them: confirm the
+page looks right, the product name and price are correct, and the payment lands
+in your Stripe Dashboard.
+
+Nothing else is needed to start selling. Everything below is optional.
+
+### 2. Claim the sandbox
 
 ```
 stripe sandbox claim
@@ -196,7 +219,7 @@ stripe sandbox claim
 
 Deadline **2026-10-12**. Cheapest item here, hardest to recover if missed.
 
-### 2. Run one real card payment locally
+### 3. Run one real card payment locally (only for the embedded path)
 
 The only part not yet exercised through the UI. Two terminals:
 
@@ -219,7 +242,7 @@ code.
 
 Full list: https://docs.stripe.com/testing
 
-### 3. Wire production
+### 4. Wire production (only for the embedded path)
 
 Only after step 2 passes.
 
@@ -241,15 +264,16 @@ STRIPE_PRICE_VENUE_MONTHLY          price_1UNGQPBaW05Ewcp3cfrkX1WN
 STRIPE_WEBHOOK_SECRET               whsec_...  (from the endpoint above, not the local one)
 ```
 
-The pricing page buttons point at `/login` until these are set, and switch
-themselves to `/checkout?plan=...` the moment they are. Nothing to deploy twice.
+The pricing buttons point at the hosted Payment Links and will keep doing so
+until someone changes that one line. Setting these variables does not switch
+them over by itself.
 
-### 4. Alert on the webhook
+### 5. Alert on the webhook (only for the embedded path)
 
 ROADMAP F-9 names this route alongside the purge cron as one that fails silently
 by nature. A webhook that stops processing looks exactly like a quiet week.
 
-### 5. Smaller, whenever
+### 6. Smaller, whenever
 
 - Replace `customer_creation` thinking with a real customer lookup once PAY-2's
   `stripe_customers` is populated, and pass `client_reference_id` and `eventId`
@@ -279,7 +303,7 @@ Not assumed. Run against the sandbox and the production database.
 | Webhook, valid signature | 200, purchase recorded |
 | **Same event delivered twice** | 200, then 200 duplicate |
 | **Purchase rows after two deliveries** | **1, not 2** |
-| Pricing page | renders all three `/checkout?plan=` links |
+| Pricing page | renders all three `buy.stripe.com` links |
 | `/checkout?plan=venue`, signed out | 307 to `/login?next=%2Fcheckout%3Fplan%3Dvenue` |
 | `/login?next=https://evil.example` | stays on login, value never becomes a link |
 | `/login?next=//evil.example` | same |

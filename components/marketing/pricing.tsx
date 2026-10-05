@@ -9,8 +9,8 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { isPlanPurchasable } from "@/lib/billing-plans";
-import { PLANS, PLAN_KEYS, type PlanDefinition } from "@/lib/plans";
+import { PAYMENT_LINKS } from "@/lib/billing-plans";
+import { PLANS, type PlanDefinition } from "@/lib/plans";
 import { Container } from "./container";
 import { CtaLink } from "./cta-link";
 
@@ -53,11 +53,10 @@ function PlanCard({
 }) {
   const isFeatured = Boolean(plan.featured);
 
-  // Only send someone to checkout when there is a checkout to send them to.
-  // Where Stripe is not configured, which is every environment until the keys
-  // are in Vercel, this stays the sign-in link it has always been rather than
-  // a button that leads to "payments are not configured".
-  const href = isPlanPurchasable(plan.key) ? `/checkout?plan=${plan.key}` : "/login";
+  // Stripe's own hosted page. The customer leaves Klik to pay, which needs no
+  // keys, no webhook and nothing deployed, and is why this is the link rather
+  // than the embedded form at /checkout.
+  const href = PAYMENT_LINKS[plan.key];
 
   return (
     <article
@@ -163,9 +162,6 @@ function PlanCard({
 }
 
 export function Pricing() {
-  // True the moment any plan is buyable, which is also when the line about an
-  // administrator assigning plans stops being the whole story.
-  const anyPurchasable = PLAN_KEYS.some(isPlanPurchasable);
   const eventPlan = PLANS.event;
   const premiumPlan = PLANS.premium;
   const venuePlan = PLANS.venue;
@@ -235,9 +231,8 @@ export function Pricing() {
         </div>
 
         <p className="mx-auto mt-6 max-w-2xl text-center text-sm leading-relaxed text-canvas/60">
-          {anyPurchasable
-            ? "Your event is set up by the Klik team once payment clears, usually the same day."
-            : "Plans are assigned by the Klik administrator during onboarding."}
+          Payment is handled by Stripe. Your event is set up by the Klik team once it clears,
+          usually the same day.
         </p>
       </Container>
     </section>
