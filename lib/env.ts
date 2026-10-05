@@ -52,6 +52,36 @@ const schema = z.object({
   // up there, not the product's marketing domain.
   AUTH_EMAIL_FROM: optionalString(z.string().min(3)),
 
+  // Stripe. Optional, in the same way as the providers above: without the
+  // secret key the checkout route answers 503 and nothing else in Klik
+  // changes. The prefix checks catch the mistake that actually happens here,
+  // which is the publishable and secret keys being pasted into each other's
+  // slot, since both are long opaque strings that look interchangeable.
+  STRIPE_SECRET_KEY: optionalString(
+    z.string().regex(/^sk_/, "STRIPE_SECRET_KEY must start with sk_"),
+  ),
+
+  // Read in the browser, so the NEXT_PUBLIC_ prefix is load-bearing: Next
+  // inlines only prefixed variables into the client bundle, and an unprefixed
+  // name is simply undefined there, with no build error to say why.
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: optionalString(
+    z.string().regex(/^pk_/, "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY must start with pk_"),
+  ),
+
+  // One Price per plan in `lib/plans.ts`. These live in the environment rather
+  // than in code because the client must never name its own price: a request
+  // that chooses what it pays for is a request that chooses to pay less. They
+  // also differ between test and live mode, which code cannot express.
+  STRIPE_PRICE_EVENT: optionalString(
+    z.string().regex(/^price_/, "STRIPE_PRICE_EVENT must be a Price ID, starting price_"),
+  ),
+  STRIPE_PRICE_PREMIUM: optionalString(
+    z.string().regex(/^price_/, "STRIPE_PRICE_PREMIUM must be a Price ID, starting price_"),
+  ),
+  STRIPE_PRICE_VENUE_MONTHLY: optionalString(
+    z.string().regex(/^price_/, "STRIPE_PRICE_VENUE_MONTHLY must be a Price ID, starting price_"),
+  ),
+
   // A URL the purge cron pings after a successful run, for a heartbeat monitor
   // (UptimeRobot, Better Stack, Healthchecks.io). Optional: without it the cron
   // behaves exactly as before. Its absence is the normal state locally, which
