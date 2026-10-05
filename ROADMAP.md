@@ -19,7 +19,7 @@
 - Plans exist as static definitions in `lib/plans.ts` with capability helpers, and are enforced on event creation and on feature gates.
 
 **Not built at all**
-- Granting a plan automatically. Stripe Checkout and the webhook now take and record money (see BILLING in `STRIPE_INTEGRATION_TODO.md`), but `users.plan_key` is still set by hand by a superadmin, because capability needs ACT-1's ledger before a webhook may touch it.
+- Granting a plan automatically. Stripe Checkout and the webhook now take and record money (see `BILLING.md`), but `users.plan_key` is still set by hand by a superadmin, because capability needs ACT-1's ledger before a webhook may touch it.
 - Any usage measurement. Nothing counts storage, media, or guests, so nothing can warn about limits.
 - Self-serve signup. There is a `/login` page and no `/signup`. Usernames exist only on admin-provisioned credential accounts.
 - Guest accounts, guest event history, guest to organizer upgrade.
@@ -410,25 +410,29 @@ An organizer asks for activation; the request lands in a queue on the admin dash
 
 ---
 
-## Phase PAY: Stripe (deferred out of v1, 2026-10-01)
+## Phase PAY: Stripe (deferred 2026-10-01, partly shipped 2026-10-06)
 
-Everything here still stands and none of it is wasted, because ACT-1's ledger was designed for exactly this: Stripe becomes a second `source` writing rows a human already writes today. Start it when you want to stop activating events by hand.
+**PAY-2 and PAY-4 shipped on 2026-10-06, and PAY-3 shipped in part. `BILLING.md` is the record of what exists.** The site itself sells through Stripe-hosted Payment Links, and everything built here is linked from nowhere until someone changes one line in `components/marketing/pricing.tsx`. Read `BILLING.md` before touching any of it: the code is close to impossible to read correctly on its own, because it is all working and all unused.
+
+What shipped records money. It does not grant capability, and that line is the whole design. Everything below still stands for the same reason it always did: ACT-1's ledger was designed for exactly this, so Stripe becomes a second `source` writing rows a human already writes today. Start it when you want to stop activating events by hand.
 
 **One thing to re-read before starting:** architecture note 2 below. Plan limits are enforced both in `lib/plans.ts` and in plpgsql triggers that hard-code `venue -> 5, else 1` and read `users.plan_key` directly. ACT-1 moves plan resolution off that column, so the triggers have to be resolved as part of ACT-1, not left for PAY. They agree today only by coincidence.
 
-### PAY-2. Stripe data model
-**Size:** M. **Depends on:** PAY-1.
+### PAY-2. Stripe data model. SHIPPED 2026-10-06
+**Size:** M. **Depends on:** PAY-1. Built as `drizzle/0012_stripe_billing.sql`, applied to production, typed in `lib/schema.ts`. All four tables are as designed below. `subscriptions.status` deliberately carries no check constraint: the vocabulary is Stripe's, and an unknown value must be stored rather than bounce the webhook into endless retries.
 - `stripe_customers` (user_id primary key, stripe_customer_id unique).
 - `subscriptions` (id, user_id, stripe_subscription_id unique, plan_key, status, current_period_end, cancel_at_period_end, created_at, updated_at).
 - `purchases` (id, user_id, event_id nullable, stripe_checkout_session_id unique, stripe_payment_intent_id, plan_key, amount_cents, currency, status, consumed_at, refunded_at). A purchase with `consumed_at` null is an unused event pass the dashboard offers to apply to a new event.
 - `stripe_webhook_events` (stripe_event_id primary key, type, received_at, processed_at, error). This is the idempotency ledger; without it a retried webhook double-grants a plan.
 
-### PAY-3. Checkout
-**Size:** M. **Depends on:** PAY-2.
+### PAY-3. Checkout. SHIPPED IN PART 2026-10-06
+**Size:** M. **Depends on:** PAY-2. Built as `POST /api/billing/checkout` plus an embedded form at `/checkout?plan=...`, with the Stripe customer reused from `stripe_customers` and Price IDs read from env. Three deviations from the design below, all deliberate. It returns a **client secret rather than a Session URL**, because the form is embedded in a Klik page rather than hosted by Stripe, and a 303 would silently swap one integration for another. It takes `{ planKey }` only: **`eventId` is not carried yet**, so the webhook cannot tell which event a pass was bought for. And there is **no `STRIPE_PRICE_VENUE_ANNUAL`**, because no annual product exists in Stripe.
 `POST /api/billing/checkout` taking `{ planKey, eventId? }`, creating or reusing a Stripe customer, and returning a Checkout Session URL. Price IDs come from env (`STRIPE_PRICE_EVENT`, `STRIPE_PRICE_PREMIUM`, `STRIPE_PRICE_VENUE_MONTHLY`, `STRIPE_PRICE_VENUE_ANNUAL`), never from the client. Mode is `payment` for Event and Premium, `subscription` for Venue. Pass `client_reference_id` as the user ID and the intended `eventId` in metadata. Success returns to the event dashboard with a pending state; the grant happens in the webhook, not on the success page, because the success page is not a trustworthy signal.
 
-### PAY-4. Webhook
-**Size:** M. **Depends on:** PAY-2. Highest-risk task in the phase.
+### PAY-4. Webhook. SHIPPED 2026-10-06
+**Size:** M. **Depends on:** PAY-2. Highest-risk task in the phase. Built as designed below, and verified against the live API: a forged signature is refused, and the same event delivered twice produces one purchase row rather than two.
+
+**One deviation, and it is the important one.** The handlers record money and never touch `users.plan_key`, in either direction. A refund marks the purchase refunded and revokes nothing, because granting and revoking capability needs ACT-1's ledger first, and a webhook writing the single plan column is precisely how a comped venue gets silently downgraded. Paid purchases surface in `/admin` under "Paid, awaiting activation" and a superadmin grants the plan by hand. When ACT-1 lands, these same handlers write `source = 'stripe'` rows and the manual step goes away.
 `POST /api/webhooks/stripe` with `export const runtime = "nodejs"`, reading the **raw** body for signature verification (Next's App Router gives this via `await request.text()`; do not parse first). Insert into `stripe_webhook_events` before processing and skip if already present. Handle `checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`. Every handler must be idempotent and must never trust amounts from the client. On refund, revoke the grant and mark the event downgraded rather than deleting media.
 
 ### PAY-5. Billing surface for organizers
