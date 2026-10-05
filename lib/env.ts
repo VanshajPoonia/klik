@@ -57,8 +57,13 @@ const schema = z.object({
   // changes. The prefix checks catch the mistake that actually happens here,
   // which is the publishable and secret keys being pasted into each other's
   // slot, since both are long opaque strings that look interchangeable.
+  // Accepts a standard secret key (sk_) and the restricted keys the CLI hands
+  // out for a sandbox (rk_, rkcs_). Those are real secret keys with a narrower
+  // scope, so rejecting them would mean the documented way to get a test
+  // environment fails validation at boot, which is a confusing place to learn
+  // that your test keys are the wrong shape.
   STRIPE_SECRET_KEY: optionalString(
-    z.string().regex(/^sk_/, "STRIPE_SECRET_KEY must start with sk_"),
+    z.string().regex(/^(sk|rk)/, "STRIPE_SECRET_KEY must be a secret key, starting sk_ or rk_"),
   ),
 
   // Read in the browser, so the NEXT_PUBLIC_ prefix is load-bearing: Next
@@ -80,6 +85,14 @@ const schema = z.object({
   ),
   STRIPE_PRICE_VENUE_MONTHLY: optionalString(
     z.string().regex(/^price_/, "STRIPE_PRICE_VENUE_MONTHLY must be a Price ID, starting price_"),
+  ),
+
+  // Signs the webhook. Without it the route answers 503 rather than trusting an
+  // unverified body, because anyone can POST to a public URL and the payload is
+  // only evidence once the signature says Stripe sent it. Local development
+  // gets one from `stripe listen`, and it differs from the production secret.
+  STRIPE_WEBHOOK_SECRET: optionalString(
+    z.string().regex(/^whsec_/, "STRIPE_WEBHOOK_SECRET must start with whsec_"),
   ),
 
   // A URL the purge cron pings after a successful run, for a heartbeat monitor
