@@ -10,9 +10,12 @@ import { PasswordInput } from "@/components/ui/password-input";
 export function LoginForm({
   googleEnabled,
   resendEnabled,
+  next = null,
 }: {
   googleEnabled: boolean;
   resendEnabled: boolean;
+  /** Already sanitised on the server. Never read from the URL here. */
+  next?: string | null;
 }) {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -34,8 +37,12 @@ export function LoginForm({
         return;
       }
 
-      const session = await fetch("/api/auth/session").then((res) => res.json());
-      router.push(session?.user?.role === "superadmin" ? "/admin" : "/dashboard");
+      if (next) {
+        router.push(next);
+      } else {
+        const session = await fetch("/api/auth/session").then((res) => res.json());
+        router.push(session?.user?.role === "superadmin" ? "/admin" : "/dashboard");
+      }
       router.refresh();
     } catch {
       setError("Could not sign in. Check your connection and try again.");
@@ -90,7 +97,7 @@ export function LoginForm({
                 type="button"
                 variant="ghost"
                 className="w-full"
-                onClick={() => signIn("google")}
+                onClick={() => signIn("google", next ? { callbackUrl: next } : undefined)}
               >
                 Continue with Google
               </Button>
@@ -100,7 +107,7 @@ export function LoginForm({
                 type="button"
                 variant="ghost"
                 className="w-full"
-                onClick={() => signIn("resend")}
+                onClick={() => signIn("resend", next ? { callbackUrl: next } : undefined)}
               >
                 Continue with email
               </Button>

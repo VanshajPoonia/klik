@@ -4,15 +4,24 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { LoginForm } from "@/components/auth/login-form";
+import { safeInternalPath } from "@/lib/safe-redirect";
 
 export const metadata: Metadata = {
   title: "Sign in",
 };
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  // Untrusted, and the reason safeInternalPath exists: without it this is an
+  // open redirect that signs someone in and hands them to another site.
+  const next = safeInternalPath((await searchParams).next);
+
   const session = await auth();
   if (session?.user) {
-    redirect(session.user.role === "superadmin" ? "/admin" : "/dashboard");
+    redirect(next ?? (session.user.role === "superadmin" ? "/admin" : "/dashboard"));
   }
 
   const googleEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
@@ -31,7 +40,7 @@ export default async function LoginPage() {
         Organizer and venue accounts sign in here. Guests never need an account.
       </p>
       <div className="mt-9 flex justify-center">
-        <LoginForm googleEnabled={googleEnabled} resendEnabled={resendEnabled} />
+        <LoginForm googleEnabled={googleEnabled} resendEnabled={resendEnabled} next={next} />
       </div>
     </div>
   );

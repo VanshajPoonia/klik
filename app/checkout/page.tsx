@@ -19,14 +19,21 @@ export default async function CheckoutPage({
 }: {
   searchParams: Promise<{ plan?: string }>;
 }) {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-
-  // The plan comes from the URL, but only as a choice between the three keys
-  // the app already knows. The price it maps to is resolved on the server from
-  // the environment, so a hand-edited query string can pick a different plan to
-  // look at and still cannot pick what it costs.
   const { plan } = await searchParams;
+  const session = await auth();
+
+  // Someone arriving from the pricing page has already chosen a plan. Carrying
+  // it through sign-in is the difference between coming back to the thing they
+  // clicked and being dropped on the dashboard wondering what happened.
+  if (!session?.user) {
+    const next = isPlanKey(plan) ? `/checkout?plan=${plan}` : "/checkout";
+    redirect(`/login?next=${encodeURIComponent(next)}`);
+  }
+
+  // The plan is a choice between the three keys the app already knows. The price
+  // it maps to is resolved on the server from the environment, so a hand-edited
+  // query string can pick a different plan to look at and still cannot pick
+  // what it costs.
   if (!isPlanKey(plan)) notFound();
   const definition = PLANS[plan];
 

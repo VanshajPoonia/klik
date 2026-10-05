@@ -47,6 +47,7 @@ customer never leaves the site.
 ```
 organizer clicks a plan on /#pricing
   -> /checkout?plan=event                 Klik's page, signed-in only
+     (signed out: /login?next=... and back here after)
   -> POST /api/billing/checkout           body is {planKey} and nothing else
   -> Klik asks Stripe for a Session       Price resolved server side, from env
   -> { client_secret } back to browser    never a redirect to session.url
@@ -170,6 +171,7 @@ no build error to say why.
 | [components/admin/pending-activations.tsx](components/admin/pending-activations.tsx) | The panel at the top of `/admin` |
 | [components/marketing/pricing.tsx](components/marketing/pricing.tsx) | The three buy buttons |
 | [lib/billing.test.ts](lib/billing.test.ts) | Charge mode per plan, invoice shape parsing |
+| [lib/safe-redirect.ts](lib/safe-redirect.ts) | Narrows an untrusted `?next=` to a path inside Klik, so sign-in cannot be turned into an open redirect |
 
 ### Tables
 
@@ -247,14 +249,7 @@ themselves to `/checkout?plan=...` the moment they are. Nothing to deploy twice.
 ROADMAP F-9 names this route alongside the purge cron as one that fails silently
 by nature. A webhook that stops processing looks exactly like a quiet week.
 
-### 5. Carry the plan through sign-in
-
-A signed-out visitor clicking "Start with Event" reaches `/checkout?plan=event`,
-is redirected to `/login`, signs in, and lands on `/dashboard` having lost the
-plan they chose. Sign-in has no `callbackUrl` support, so fixing it means
-touching the auth flow. It is the most visible rough edge in the funnel.
-
-### 6. Smaller, whenever
+### 5. Smaller, whenever
 
 - Replace `customer_creation` thinking with a real customer lookup once PAY-2's
   `stripe_customers` is populated, and pass `client_reference_id` and `eventId`
@@ -285,7 +280,10 @@ Not assumed. Run against the sandbox and the production database.
 | **Same event delivered twice** | 200, then 200 duplicate |
 | **Purchase rows after two deliveries** | **1, not 2** |
 | Pricing page | renders all three `/checkout?plan=` links |
-| Suite | 196 tests passing |
+| `/checkout?plan=venue`, signed out | 307 to `/login?next=%2Fcheckout%3Fplan%3Dvenue` |
+| `/login?next=https://evil.example` | stays on login, value never becomes a link |
+| `/login?next=//evil.example` | same |
+| Suite | 210 tests passing |
 
 Test rows were deleted afterwards. All four tables are empty.
 
