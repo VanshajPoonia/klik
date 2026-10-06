@@ -53,7 +53,11 @@ export function LoginForm({
   return (
     <div className="w-full max-w-sm space-y-6">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="Username">
+        {/* Both, because two kinds of account sign in here. A venue set up at
+            /admin/new was handed a generated username; somebody who signed
+            themselves up only ever saw their email. Labelling it "Username"
+            made the second group think they were on the wrong form. */}
+        <Field label="Email or username">
           <input
             className={inputClass}
             value={username}

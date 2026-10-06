@@ -29,6 +29,20 @@ export const users = pgTable("users", {
   credentialVersion: integer("credential_version").notNull().default(0),
   username: text("username").unique(), // set only for credential-based accounts
   passwordHash: text("password_hash"), // bcrypt, set only alongside username
+  /**
+   * When a superadmin granted this account its plan. Null means the account was
+   * created by someone filling in the signup form and is not yet entitled to
+   * anything: it can sign in and see its dashboard, and it cannot create an
+   * event. See drizzle/0013_self_signup.sql for why this is a column of its own
+   * rather than a change to `planKey`.
+   */
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  /**
+   * When the account was created. Needed to order the queue of signups waiting
+   * on a superadmin: the first thing asked about one is how long it has been
+   * sitting there.
+   */
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const accounts = pgTable("accounts", {

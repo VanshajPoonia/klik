@@ -3,7 +3,7 @@ import Google from "next-auth/providers/google";
 import Resend from "next-auth/providers/resend";
 import Credentials from "next-auth/providers/credentials";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import { users, accounts, sessions, verificationTokens, type UserRole } from "./schema";
 import { verifyPassword } from "./credentials";
@@ -66,11 +66,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        // Two kinds of account sign in through this one form. A superadmin or a
+        // venue set up at /admin/new has a generated username and no email; a
+        // self-serve signup has both, and will type the email it chose, because
+        // that is the only identifier it was ever shown.
+        //
+        // Branching on "@" rather than matching either column keeps the lookup
+        // unambiguous. An OR across two unique columns can match two different
+        // rows, and then which one authenticates depends on row order.
+        const identifier = username.trim();
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.username, username))
+          .where(
+            identifier.includes("@")
+              ? sql`lower(${users.email}) = ${identifier.toLowerCase()}`
+              : eq(users.username, identifier),
+          )
           .limit(1);
+        // No hash means this account has no password to check: an account created
+        // through Google or a sign-in link. Returning null rather than falling
+        // through is what stops a credential attempt from being a way in to one.
         if (!user?.passwordHash) return null;
 
         const valid = await verifyPassword(password, user.passwordHash);

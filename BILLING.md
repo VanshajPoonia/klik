@@ -10,12 +10,15 @@ deliberately not automated, and what to do next.
 | Embedded Stripe Checkout | Built, verified |
 | Webhook, signed and idempotent | Built, verified against the live API |
 | Database tables | Migrated, in production |
-| Pricing page links | Live, pointing at Stripe's **hosted** pages |
+| Pricing page buttons | Open an explainer dialog, then signup, then Stripe's **hosted** page |
+| Buying without an account | Not possible. The hosted link is never rendered to a signed-out visitor |
+| Onboarding email | Built, **cannot send**: no Resend key and no verified sender |
 | How money is taken today | Stripe-hosted Payment Links. No keys, no webhook, nothing to deploy |
 | Embedded checkout at `/checkout` | Built and working, **not linked from anywhere**. Waiting on a decision, not on code |
 | Production Stripe keys | Not set. Only the embedded path needs them |
 | Dashboard webhook endpoint | Not created. Only the embedded path needs it |
 | A payment granting a plan | **Never automatic.** True of both paths. See "The grant is manual" |
+| A new account's capability | **None.** `users.activated_at` is null until a superadmin grants the plan |
 
 ## The two Stripe accounts
 
@@ -95,22 +98,102 @@ control, so nothing is written from it. The webhook is the record.
    can work. An event that keeps its claim after failing never completes, and
    that row is the only trace of a payment that did not land.
 
+### Buying starts with an account
+
+A plan button on the pricing page does not link to Stripe. It opens
+[components/marketing/plan-dialog.tsx](components/marketing/plan-dialog.tsx),
+which says what the next few minutes hold, and its one link goes to
+`/signup?plan=<key>`.
+
+```
+visitor clicks a plan on /#pricing
+  -> dialog: pay, wait ~5 minutes, support number
+  -> /signup?plan=event
+     already signed in: 307 straight to the Payment Link
+     signed out:        the form, then POST /api/signup
+  -> account created, activated_at NULL, welcome email sent
+  -> signed in, then window.location.replace(PAYMENT_LINKS.event)
+  -> Stripe's hosted page takes the money
+
+later:
+superadmin -> Stripe Dashboard, find the payment by email
+           -> /admin, "Signed up, not activated"
+           -> assign the plan, which sets activated_at
+```
+
+Three things about that are load-bearing.
+
+**The plan key crosses the gap, never a URL.** `/signup?plan=venue` carries one
+of three known keys and the destination is resolved from `PAYMENT_LINKS` on the
+server. A `?next=` would hand the choice of redirect target to whoever wrote the
+link, and [lib/safe-redirect.ts](lib/safe-redirect.ts) cannot help here because
+the legitimate destination is off-origin by design.
+
+**The dialog needs no session, so `/` stays static.** Resolving signed-in state
+in `Pricing` would make the marketing home page server-rendered on every visit.
+Instead both cases go to `/signup?plan=`, and that page redirects whoever is
+already signed in. Confirmed: `/` is still prerendered after this change.
+
+**A signed-out visitor is never shown a `buy.stripe.com` URL.** It is not in the
+page, not in the client bundle, and `PAYMENT_LINKS` is imported only by server
+components. Buying therefore cannot happen without an email address attached to
+an account, which is the only thing that later joins the payment to the buyer.
+
+### The accounts this creates cannot do anything yet
+
+`users.plan_key` is `NOT NULL DEFAULT 'event'`. That was harmless while the only
+way to get a row in `users` was a superadmin at `/admin/new`. A public signup
+form makes it a hole: the plan limit checks are satisfied for a brand new
+account, so it could create one event with a 30-day upload window and a 6-month
+gallery, which is Klik Event, the $39 product, for free.
+
+`users.activated_at` is the fix, from
+[drizzle/0013_self_signup.sql](drizzle/0013_self_signup.sql). Null means the
+account exists, can sign in, and can see its dashboard, and cannot create an
+event. It is checked in two places that must agree:
+
+| Where | What it does when null |
+|---|---|
+| [app/api/events/route.ts](app/api/events/route.ts) | 403 before the plan limits are even read |
+| [app/dashboard/page.tsx](app/dashboard/page.tsx) | Shows `AwaitingActivation` instead of the create form, and "No plan yet" instead of a plan name |
+
+It is set in two places, both of them a superadmin deciding:
+
+| Where | When |
+|---|---|
+| [app/api/admin/clients/[userId]/plan/route.ts](app/api/admin/clients/%5BuserId%5D/plan/route.ts) | Assigning a plan. `COALESCE`, so re-assigning later does not move the date |
+| [app/api/admin/clients/route.ts](app/api/admin/clients/route.ts) | Creating a client at `/admin/new`, which is already a decision |
+
+Deliberately **not** a change to `plan_key`. Two plpgsql triggers read that
+column directly ([0002](drizzle/0002_plan_capabilities.sql),
+[0003](drizzle/0003_soft_delete_and_retention.sql)) and ROADMAP ACT-1 is the task
+that retires it. A nullable column alongside is additive, so ACT-1 can absorb or
+drop it without unpicking anything.
+
 ### The Payment Links are what the site actually uses
 
 Three links at `buy.stripe.com`, one per plan, held in
-[lib/billing-plans.ts](lib/billing-plans.ts) and wired to the three pricing
-buttons. They are a self-contained hosted checkout that **bypasses everything
-above**: Stripe hosts the page, the customer leaves Klik to pay, and no key,
-webhook or deploy is involved.
+[lib/billing-plans.ts](lib/billing-plans.ts) and reached through signup. They are
+a self-contained hosted checkout that **bypasses everything above**: Stripe hosts
+the page, the customer leaves Klik to pay, and no key, webhook or deploy is
+involved.
 
 The trade is that Klik learns nothing. A purchase through one appears in the
-Stripe Dashboard and nowhere else: no row in `purchases`, no entry in `/admin`.
-It is matched to an account by the email the buyer typed, and activated by hand.
+Stripe Dashboard and nowhere else: no row in `purchases`, no `stripe_customers`
+entry, and no way for any code here to know it happened. It is matched to an
+account by the email the buyer typed, and activated by hand.
 
-Switching to the embedded form is one line in
-[components/marketing/pricing.tsx](components/marketing/pricing.tsx), changing
-`PAYMENT_LINKS[plan.key]` back to `/checkout?plan=${plan.key}`, once the keys and
-the webhook endpoint from step 3 are in place.
+What changed is who can reach them. The links are no longer rendered to a
+visitor: they are resolved in [app/signup/page.tsx](app/signup/page.tsx), a
+server component, so the buyer has an account with an email on it by the time
+Stripe's page opens. That email is the whole of the audit trail.
+
+**Switching to the embedded form is one line**, and it has moved. It is the
+`payUrl` in [app/signup/page.tsx](app/signup/page.tsx): point it at
+`/checkout?plan=${planKey}` instead of `PAYMENT_LINKS[planKey]`, once the keys
+and the webhook endpoint from step 4 are in place. The signup gate, the dialog
+and the activation column all work unchanged either way, because none of them
+know or care which Stripe integration takes the money.
 
 | Plan | Link |
 |---|---|
@@ -123,8 +206,20 @@ A Payment Link grants nothing on its own. Nothing does: see below.
 ## The grant is manual, on purpose
 
 **The webhook never touches `users.planKey`.** A payment is recorded and then
-waits for a superadmin, who sees it in `/admin` under "Paid, awaiting
-activation" and grants the plan with the control already on that page.
+waits for a superadmin, who grants the plan with the control on `/admin`.
+
+There are two queues on that page, and only one of them has anything in it.
+
+| Panel | Reads | State today |
+|---|---|---|
+| "Paid, awaiting activation" | `purchases` | **Always empty.** Only the webhook writes that table, and the hosted Payment Links reach no webhook |
+| "Signed up, not activated" | `users` where `activated_at IS NULL` | The real queue, with the email needed to find the payment in Stripe |
+
+The second exists because of what the first cannot see. A Payment Link payment
+appears in the Stripe Dashboard carrying an email and nothing else, and before
+this panel a self-signup appeared nowhere in `/admin` at all: the client list is
+built from accounts that already have an event, and a new signup has neither an
+event nor a plan. Matching money to a person was impossible, not merely manual.
 
 This is ROADMAP ACT-2: "This is the v1 revenue mechanism: a human decides."
 
@@ -153,6 +248,8 @@ told reads the delay as a failure and asks for their money back.
 | `STRIPE_PRICE_PREMIUM` | What Klik Premium costs | [lib/billing-plans.ts](lib/billing-plans.ts) |
 | `STRIPE_PRICE_VENUE_MONTHLY` | What Klik Venue costs | [lib/billing-plans.ts](lib/billing-plans.ts) |
 | `STRIPE_WEBHOOK_SECRET` | Proves a webhook came from Stripe | [webhooks/stripe/route.ts](app/api/webhooks/stripe/route.ts) |
+| `AUTH_RESEND_KEY` | Sends the onboarding email. Shared with sign-in links, same account | [lib/email.ts](lib/email.ts) |
+| `AUTH_EMAIL_FROM` | Who the onboarding email comes from. No default on purpose: Resend rejects any unverified domain, and a fallback would turn "nobody set this" into "the provider refuses every send" | [lib/email.ts](lib/email.ts) |
 
 All six are optional in [lib/env.ts](lib/env.ts), like Google and Resend. Without
 the secret key the checkout route answers 503 and nothing else in Klik changes. A
@@ -182,8 +279,21 @@ no build error to say why.
 | [app/checkout/page.tsx](app/checkout/page.tsx) | Auth gate, plan validation, expectations |
 | [components/billing/embedded-checkout-form.tsx](components/billing/embedded-checkout-form.tsx) | Loads Stripe.js, mounts the iframe, wires confirm |
 | [components/admin/pending-activations.tsx](components/admin/pending-activations.tsx) | The panel at the top of `/admin` |
-| [components/marketing/pricing.tsx](components/marketing/pricing.tsx) | The three buy buttons |
+| [components/marketing/pricing.tsx](components/marketing/pricing.tsx) | The three buy buttons, each opening the dialog rather than linking out |
+| [components/marketing/plan-dialog.tsx](components/marketing/plan-dialog.tsx) | What a plan button does now: pay, wait, who to call. Native `<dialog>`, so the focus trap and Escape are the browser's |
+| [app/signup/page.tsx](app/signup/page.tsx) | Resolves `?plan=` to a Payment Link server side, and redirects anyone already signed in |
+| [app/api/signup/route.ts](app/api/signup/route.ts) | Creates the account with `activated_at` null, then sends the welcome email |
+| [lib/signup.ts](lib/signup.ts) | The rules for a valid signup, kept pure so they are testable |
+| [lib/email.ts](lib/email.ts) | Resend wrapper. Reports instead of throwing, because an account must survive a failed send |
+| [lib/emails/onboarding.ts](lib/emails/onboarding.ts) | The welcome email, HTML and text |
+| [lib/support.ts](lib/support.ts) | The support number and the stated wait, in one place |
+| [lib/account-plans.ts](lib/account-plans.ts) | `isAccountActivated`, the gate on event creation |
+| [components/admin/pending-signups.tsx](components/admin/pending-signups.tsx) | The queue that actually has rows in it |
+| [components/dashboard/awaiting-activation.tsx](components/dashboard/awaiting-activation.tsx) | What a signed-up, unactivated account sees |
+| [components/dashboard/support-card.tsx](components/dashboard/support-card.tsx) | The support number on every organizer's dashboard |
 | [lib/billing.test.ts](lib/billing.test.ts) | Charge mode per plan, invoice shape parsing |
+| [lib/signup.test.ts](lib/signup.test.ts) | Email normalisation, the bcrypt 72-byte ceiling, a password that restates the address |
+| [lib/emails/onboarding.test.ts](lib/emails/onboarding.test.ts) | The welcome email links to the plans, states the wait, and escapes the name |
 | [lib/safe-redirect.ts](lib/safe-redirect.ts) | Narrows an untrusted `?next=` to a path inside Klik, so sign-in cannot be turned into an open redirect |
 
 ### Tables
@@ -200,6 +310,30 @@ Created by [drizzle/0012_stripe_billing.sql](drizzle/0012_stripe_billing.sql).
 Amounts are integer minor units. Money is never a float.
 
 ## Next steps
+
+### 0. Apply the migration, before deploying
+
+```
+npm run db:migrate -- 0013_self_signup.sql
+```
+
+**Before the push, not after.** `lib/auth.ts` reads the whole `users` row when a
+credential login is checked, so the deployed code selects `activated_at` and
+`created_at` the moment it is live. Deploying first means every sign-in on Klik
+fails until this runs.
+
+### 0b. Configure the sender, or the welcome email never goes out
+
+```
+AUTH_RESEND_KEY    re_...                       (both are empty today)
+AUTH_EMAIL_FROM    Klik <hello@kreativvantage.com>
+```
+
+The address has to be on a domain verified in the Resend account, which is also
+what turns on "Continue with email" on the login page, since both read the same
+key. Until they are set, `/api/signup` logs `email.not_configured` and creates
+the account anyway: somebody who has paid must never lose an account because a
+welcome message could not be sent.
 
 ### 1. Test a Payment Link
 
@@ -303,7 +437,11 @@ Not assumed. Run against the sandbox and the production database.
 | Webhook, valid signature | 200, purchase recorded |
 | **Same event delivered twice** | 200, then 200 duplicate |
 | **Purchase rows after two deliveries** | **1, not 2** |
-| Pricing page | renders all three `buy.stripe.com` links |
+| Pricing page, signed out | renders zero `buy.stripe.com` links, three `/signup?plan=` links |
+| `/` after the dialog change | still statically prerendered |
+| `/signup?plan=venue` | names Klik Venue, $69 per month |
+| `/signup?plan=bogus` | falls back to the generic page, does not 404 or throw |
+| Suite after signup and email tests | 236 passing, up from 210 |
 | `/checkout?plan=venue`, signed out | 307 to `/login?next=%2Fcheckout%3Fplan%3Dvenue` |
 | `/login?next=https://evil.example` | stays on login, value never becomes a link |
 | `/login?next=//evil.example` | same |

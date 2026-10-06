@@ -12,7 +12,8 @@ import { CtaLink } from "@/components/marketing/cta-link";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
 import { PlanAssignmentControl } from "@/components/admin/plan-assignment-control";
 import { PendingActivations } from "@/components/admin/pending-activations";
-import { getPendingActivations } from "@/lib/billing-admin";
+import { PendingSignups } from "@/components/admin/pending-signups";
+import { getPendingActivations, getPendingSignups } from "@/lib/billing-admin";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -24,13 +25,18 @@ export default async function AdminPage() {
   if (!session?.user) redirect("/login");
   if (session.user.role !== "superadmin") redirect("/dashboard");
 
-  const pending = await getPendingActivations();
+  const [pending, signups] = await Promise.all([
+    getPendingActivations(),
+    getPendingSignups(),
+  ]);
 
   const rows = await db
     .select({
       userId: users.id,
       username: users.username,
       contactName: users.name,
+      email: users.email,
+      activatedAt: users.activatedAt,
       planKey: users.planKey,
       eventId: events.id,
       eventName: events.name,
@@ -50,6 +56,8 @@ export default async function AdminPage() {
       userId: string;
       username: string | null;
       contactName: string | null;
+      email: string | null;
+      activatedAt: Date | null;
       planKey: (typeof rows)[number]["planKey"];
       events: Array<{
         id: string;
@@ -76,6 +84,8 @@ export default async function AdminPage() {
         userId: row.userId,
         username: row.username,
         contactName: row.contactName,
+        email: row.email,
+        activatedAt: row.activatedAt,
         planKey: row.planKey,
         events:
           row.eventId && row.eventName && row.eventSlug && row.visibility
@@ -114,6 +124,10 @@ export default async function AdminPage() {
           </form>
         </header>
 
+        {/* Above the paid-and-waiting panel because it is the one with rows in
+            it. That panel reads `purchases`, which only the webhook writes, and
+            the hosted Payment Links the site sells through reach no webhook. */}
+        <PendingSignups signups={signups} />
         <PendingActivations pending={pending} />
 
         <div className="mb-8 flex items-center justify-between">
@@ -133,10 +147,19 @@ export default async function AdminPage() {
                 <div className="min-w-0">
                   <p className="truncate font-medium text-paper">{client.contactName}</p>
                   <p className="truncate text-xs text-muted">@{client.username}</p>
+                  {/* Shown because this is what a Stripe payment carries. An
+                      account provisioned at /admin/new has none, which is why
+                      this is conditional rather than always present. */}
+                  {client.email && (
+                    <p className="truncate text-xs text-muted">{client.email}</p>
+                  )}
                 </div>
-                <p className="text-xs text-muted">
-                  {client.events.length} {client.events.length === 1 ? "event" : "events"}
-                </p>
+                <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
+                  <p className="text-xs text-muted">
+                    {client.events.length} {client.events.length === 1 ? "event" : "events"}
+                  </p>
+                  {!client.activatedAt && <Badge tone="warning">not activated</Badge>}
+                </div>
               </div>
 
               <PlanAssignmentControl

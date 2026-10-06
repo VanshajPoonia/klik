@@ -9,10 +9,10 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { PAYMENT_LINKS } from "@/lib/billing-plans";
 import { PLANS, type PlanDefinition } from "@/lib/plans";
+import { KIT_WAIT_MINUTES, SUPPORT_PHONE } from "@/lib/support";
 import { Container } from "./container";
-import { CtaLink } from "./cta-link";
+import { PlanDialog } from "./plan-dialog";
 
 function PlanFeatures({
   plan,
@@ -52,11 +52,6 @@ function PlanCard({
   cta: string;
 }) {
   const isFeatured = Boolean(plan.featured);
-
-  // Stripe's own hosted page. The customer leaves Klik to pay, which needs no
-  // keys, no webhook and nothing deployed, and is why this is the link rather
-  // than the embedded form at /checkout.
-  const href = PAYMENT_LINKS[plan.key];
 
   return (
     <article
@@ -142,19 +137,23 @@ function PlanCard({
               {plan.description}
             </p>
           </div>
-          <CtaLink
-            href={href}
+          {/* Opens the explainer rather than going straight to Stripe. Buying
+              means creating an account first, so the payment can be matched to
+              somebody, and it means a short wait afterwards. Both are better
+              learned here than discovered on Stripe's page or on an empty
+              dashboard. */}
+          <PlanDialog
+            plan={plan}
+            cta={cta}
             variant={inverted ? "primary" : "ghost"}
-            className={`mt-5 w-full ${
+            className={`mt-5 ${
               inverted
                 ? ""
                 : isFeatured
                   ? "border-canvas bg-canvas text-paper hover:border-canvas"
                   : "border-paper bg-paper text-canvas hover:border-paper"
             }`}
-          >
-            {cta}
-          </CtaLink>
+          />
         </div>
       </div>
     </article>
@@ -231,8 +230,8 @@ export function Pricing() {
         </div>
 
         <p className="mx-auto mt-6 max-w-2xl text-center text-sm leading-relaxed text-canvas/60">
-          Payment is handled by Stripe. Your event is set up by the Klik team once it clears,
-          usually the same day.
+          You create an account, pay through Stripe, and your kit is ready in about{" "}
+          {KIT_WAIT_MINUTES} minutes. Questions before you buy? Call or text {SUPPORT_PHONE}.
         </p>
       </Container>
     </section>

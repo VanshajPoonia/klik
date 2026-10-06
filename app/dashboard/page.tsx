@@ -15,6 +15,8 @@ import { canManageEventClients, formatFileSize } from "@/lib/plans";
 import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
 import { VenueClientsPanel } from "@/components/dashboard/venue-clients-panel";
 import { VenueQrPanel } from "@/components/dashboard/venue-qr-panel";
+import { SupportCard } from "@/components/dashboard/support-card";
+import { AwaitingActivation } from "@/components/dashboard/awaiting-activation";
 import { getAppUrl } from "@/lib/env";
 
 export const metadata: Metadata = {
@@ -50,7 +52,7 @@ export default async function DashboardPage() {
       .then((rows) => rows.map((row) => row.event)),
     getAccountPlan(session.user.id),
     db
-      .select({ venueSlug: users.venueSlug })
+      .select({ venueSlug: users.venueSlug, activatedAt: users.activatedAt })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1)
@@ -71,8 +73,15 @@ export default async function DashboardPage() {
   const monthlyEventCount = ownedRows.filter((event) =>
     wasCreatedThisUtcMonth(event.createdAt),
   ).length;
+  // `users.plan_key` defaults to 'event', so the two limits below are already
+  // satisfied for an account that signed itself up and was never granted
+  // anything. Activation is the real gate, and this has to agree with
+  // app/api/events/route.ts or the form becomes a button that returns a 403.
+  const activated = Boolean(account?.activatedAt);
   const canCreateEvent =
-    activeEventCount < plan.maxActiveEvents && monthlyEventCount < plan.maxEventsPerMonth;
+    activated &&
+    activeEventCount < plan.maxActiveEvents &&
+    monthlyEventCount < plan.maxEventsPerMonth;
 
   return (
     <div className="min-h-screen px-6 py-10 md:px-10">
@@ -100,17 +109,29 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="rounded-xl border border-volt/30 bg-volt/10 px-4 py-3 sm:text-right">
-            <p className="text-xs font-medium text-volt">{plan.name}</p>
-            <p className="mt-1 text-sm text-paper">
-              {activeEventCount} of {plan.maxActiveEvents} active{" "}
-              {plan.maxActiveEvents === 1 ? "event" : "events"}
-            </p>
-            <p className="mt-1 text-xs text-muted">
-              {monthlyEventCount} of {plan.maxEventsPerMonth} created this month
-            </p>
-            <p className="mt-1 text-xs text-muted">
-              {plan.uploadWindowDays}-day uploads · {formatFileSize(plan.maxVideoBytes)} videos
-            </p>
+            {activated ? (
+              <>
+                <p className="text-xs font-medium text-volt">{plan.name}</p>
+                <p className="mt-1 text-sm text-paper">
+                  {activeEventCount} of {plan.maxActiveEvents} active{" "}
+                  {plan.maxActiveEvents === 1 ? "event" : "events"}
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  {monthlyEventCount} of {plan.maxEventsPerMonth} created this month
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  {plan.uploadWindowDays}-day uploads · {formatFileSize(plan.maxVideoBytes)} videos
+                </p>
+              </>
+            ) : (
+              // Naming a plan here would be a lie with a number attached. The
+              // column reads 'event' because that is its default, not because
+              // anybody decided to grant it.
+              <>
+                <p className="text-xs font-medium text-volt">No plan yet</p>
+                <p className="mt-1 text-sm text-paper">Choose one to get started</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -124,18 +145,25 @@ export default async function DashboardPage() {
           {canManageEventClients(plan.key) && (
             <VenueClientsPanel initialClients={clientRows} />
           )}
-          <CreateEventForm
-            canCreate={canCreateEvent}
-            canManageClients={canManageEventClients(plan.key)}
-            clients={clientRows}
-            limitMessage={
-              canCreateEvent
-                ? undefined
-                : monthlyEventCount >= plan.maxEventsPerMonth
-                  ? `${plan.name} has reached its monthly event limit. The allowance resets on the first day of the next UTC month.`
-                  : `${plan.name} has reached its active event limit. Ask an administrator to change the plan or wait for an event to end.`
-            }
-          />
+          {/* The form, or the reason it is absent. Rendering it disabled was the
+              other option, and a dead control reads as a broken page rather
+              than as a step that has not happened yet. */}
+          {activated ? (
+            <CreateEventForm
+              canCreate={canCreateEvent}
+              canManageClients={canManageEventClients(plan.key)}
+              clients={clientRows}
+              limitMessage={
+                canCreateEvent
+                  ? undefined
+                  : monthlyEventCount >= plan.maxEventsPerMonth
+                    ? `${plan.name} has reached its monthly event limit. The allowance resets on the first day of the next UTC month.`
+                    : `${plan.name} has reached its active event limit. Ask an administrator to change the plan or wait for an event to end.`
+              }
+            />
+          ) : (
+            <AwaitingActivation />
+          )}
         </div>
 
         <div className="space-y-3">
@@ -170,6 +198,10 @@ export default async function DashboardPage() {
               </Card>
             </Link>
           ))}
+        </div>
+
+        <div className="mt-10">
+          <SupportCard />
         </div>
       </div>
     </div>

@@ -73,6 +73,11 @@ async function createOrganizerUserAndEvent(
         venueSlug: planKey === "venue" ? createVenueSlug(contactName) : null,
         username,
         passwordHash,
+        // Activated on creation. Reaching this route means a superadmin has
+        // already made the decision that `activated_at` records, and the event
+        // is being created in the same batch, so an inactive account here would
+        // be an account that cannot touch the event it was just given.
+        activatedAt: new Date(),
       })
       .returning();
     const { query: eventQuery } = await prepareEventInsert({

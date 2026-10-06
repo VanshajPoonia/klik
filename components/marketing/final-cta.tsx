@@ -11,7 +11,7 @@ export function FinalCta() {
         <p className="mt-5 max-w-md text-lg text-muted">
           Create the gallery, download the QR code, and put it on the table.
         </p>
-        <CtaLink href="/login" size="lg" className="mt-9">
+        <CtaLink href="/signup" size="lg" className="mt-9">
           Create your event
         </CtaLink>
       </Container>

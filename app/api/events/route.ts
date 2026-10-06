@@ -5,10 +5,11 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, venueClients, EVENT_VISIBILITIES } from "@/lib/schema";
 import { createEvent, toOrganizerEvent } from "@/lib/events";
-import { getAccountPlan } from "@/lib/account-plans";
+import { getAccountPlan, isAccountActivated } from "@/lib/account-plans";
 import { isEventActive } from "@/lib/access";
 import { canManageEventClients } from "@/lib/plans";
 import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
+import { SUPPORT_PHONE } from "@/lib/support";
 
 const createEventSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -72,8 +73,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const [plan, existingEvents] = await Promise.all([
+  const [plan, activated, existingEvents] = await Promise.all([
     getAccountPlan(session.user.id),
+    isAccountActivated(session.user.id),
     db
       .select({
         isActive: events.isActive,
@@ -83,6 +85,21 @@ export async function POST(request: Request) {
       .from(events)
       .where(and(eq(events.ownerId, session.user.id), isNull(events.deletedAt))),
   ]);
+  // Checked before the plan limits, because an account that signed itself up
+  // has a plan it was never granted: `users.plan_key` defaults to 'event', so
+  // the limit checks below would happily let it create the $39 product. This is
+  // the only thing standing between the public signup form and free access.
+  if (!activated) {
+    return NextResponse.json(
+      {
+        error:
+          "Your account is not active yet. Choose a plan and complete payment, and the Klik team will activate it. Call or text " +
+          `${SUPPORT_PHONE} if you have already paid.`,
+      },
+      { status: 403 },
+    );
+  }
+
   const activeEventCount = existingEvents.filter((event) => isEventActive(event)).length;
   const monthlyEventCount = existingEvents.filter((event) =>
     wasCreatedThisUtcMonth(event.createdAt),

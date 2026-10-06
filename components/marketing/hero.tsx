@@ -16,7 +16,7 @@ export function Hero() {
             cut. No app to download, no account to make.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-4">
-            <CtaLink href="/login" size="lg">
+            <CtaLink href="/signup" size="lg">
               Create your event
             </CtaLink>
             <CtaLink href="#how-it-works" variant="ghost" size="lg">

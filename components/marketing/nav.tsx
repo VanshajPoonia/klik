@@ -31,7 +31,7 @@ export function Nav() {
           >
             Log in
           </Link>
-          <CtaLink href="/login" size="md">
+          <CtaLink href="/signup" size="md">
             Create your event
           </CtaLink>
         </nav>

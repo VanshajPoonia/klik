@@ -42,6 +42,13 @@ export default async function LoginPage({
       <div className="mt-9 flex justify-center">
         <LoginForm googleEnabled={googleEnabled} resendEnabled={resendEnabled} next={next} />
       </div>
+
+      <p className="mt-7 text-sm text-muted">
+        New to Klik?{" "}
+        <Link href="/signup" className="font-medium text-volt hover:underline">
+          Create an account
+        </Link>
+      </p>
     </div>
   );
 }

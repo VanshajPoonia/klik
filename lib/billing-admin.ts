@@ -60,3 +60,33 @@ export async function getPendingActivations() {
     venueDrift: venueDrift.filter((row) => PAYING_STATUSES.includes(row.status)),
   };
 }
+
+/**
+ * Accounts that signed themselves up and are waiting on a decision.
+ *
+ * This is the queue that `getPendingActivations` above cannot see. That one
+ * reads `purchases`, which only the webhook writes, and the site sells through
+ * Stripe-hosted Payment Links that reach no webhook at all, so it is empty and
+ * will stay empty for as long as that is true (BILLING.md, "The Payment Links
+ * are what the site actually uses").
+ *
+ * What a superadmin actually has is a payment in the Stripe Dashboard carrying
+ * an email, and no way to find the matching Klik account, because the admin
+ * client list is built from accounts that already have an event. A self-signup
+ * has neither an event nor a plan, so it appeared nowhere. Hence the email in
+ * this select: it is the only thing joining Stripe's record of the money to the
+ * account that is owed something for it.
+ */
+export async function getPendingSignups() {
+  return db
+    .select({
+      userId: users.id,
+      name: users.name,
+      email: users.email,
+      username: users.username,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .where(and(eq(users.role, "organizer"), isNull(users.activatedAt)))
+    .orderBy(desc(users.createdAt));
+}

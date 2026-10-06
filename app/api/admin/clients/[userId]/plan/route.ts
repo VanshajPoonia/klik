@@ -81,6 +81,14 @@ export async function PATCH(
           parsed.data.planKey === "venue"
             ? account.venueSlug ?? createVenueSlug(account.name ?? "venue")
             : account.venueSlug,
+        // Assigning a plan IS the activation. Making it a second control would
+        // mean a plan granted and access still refused, which looks from the
+        // dashboard exactly like a payment that never landed, and the person who
+        // forgot the second click is not the person who waits.
+        //
+        // COALESCE, so re-assigning a plan later does not move the date. When
+        // this account first became entitled is a fact about the past.
+        activatedAt: sql`COALESCE(${users.activatedAt}, now())`,
       })
       .where(and(eq(users.id, userId), eq(users.role, "organizer")))
       .returning({ id: users.id, planKey: users.planKey });

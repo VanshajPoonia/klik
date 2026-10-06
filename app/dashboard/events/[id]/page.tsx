@@ -19,6 +19,7 @@ import {
 } from "@/lib/plans";
 import { withProtectedMediaUrl } from "@/lib/media-delivery";
 import { EventDashboard } from "@/components/dashboard/event-dashboard";
+import { SupportCard } from "@/components/dashboard/support-card";
 import { resolveEventActor } from "@/lib/roles";
 import { can } from "@/lib/permissions";
 
@@ -72,26 +73,35 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const guestUrl = `${getAppUrl()}/e/${event.slug}`;
   const backHref = session.user.role === "superadmin" ? "/admin" : "/dashboard";
   return (
-    <EventDashboard
-      event={toOrganizerEvent(event)}
-      initialMedia={mediaRows}
-      guestUrl={guestUrl}
-      backHref={backHref}
-      canManageClients={canManageEventClients(plan.key)}
-      canSlideshow={canUseSlideshow(plan.key)}
-      canManageAlbums={canUseAlbums(plan.key)}
-      canManageCoHosts={canUseCoHosts(plan.key) && session.user.id === event.ownerId}
-      canManageShares={can(actor.role, "shares.manage")}
-      canCustomizeGallery={canCustomizeGallery(plan.key)}
-      canCustomizeQr={canCustomizeQr(plan.key)}
-      canDownloadQrSign={canDownloadQrSign(plan.key)}
-      canUseVenueHub={canUseVenueHub(plan.key)}
-      canDeleteEvent={
-        session.user.id === event.ownerId || session.user.role === "superadmin"
-      }
-      albums={albumRows}
-      coHosts={coHostRows}
-      clients={clientRows}
-    />
+    // Support sits outside EventDashboard rather than inside it. That component
+    // is a tabbed client view with its own modals, and where a help card belongs
+    // in it depends on which tab is open. Below it is a footer, which is where
+    // someone looks for a phone number anyway.
+    <>
+      <EventDashboard
+        event={toOrganizerEvent(event)}
+        initialMedia={mediaRows}
+        guestUrl={guestUrl}
+        backHref={backHref}
+        canManageClients={canManageEventClients(plan.key)}
+        canSlideshow={canUseSlideshow(plan.key)}
+        canManageAlbums={canUseAlbums(plan.key)}
+        canManageCoHosts={canUseCoHosts(plan.key) && session.user.id === event.ownerId}
+        canManageShares={can(actor.role, "shares.manage")}
+        canCustomizeGallery={canCustomizeGallery(plan.key)}
+        canCustomizeQr={canCustomizeQr(plan.key)}
+        canDownloadQrSign={canDownloadQrSign(plan.key)}
+        canUseVenueHub={canUseVenueHub(plan.key)}
+        canDeleteEvent={
+          session.user.id === event.ownerId || session.user.role === "superadmin"
+        }
+        albums={albumRows}
+        coHosts={coHostRows}
+        clients={clientRows}
+      />
+      <div className="mx-auto w-full max-w-5xl px-6 pb-10 md:px-10">
+        <SupportCard />
+      </div>
+    </>
   );
 }
