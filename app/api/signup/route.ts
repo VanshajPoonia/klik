@@ -10,6 +10,7 @@ import { sendEmail } from "@/lib/email";
 import { onboardingEmail } from "@/lib/emails/onboarding";
 import { getAppUrl } from "@/lib/env";
 import { log, reportError } from "@/lib/observability";
+import { recordAccountEvent } from "@/lib/timeline";
 
 /**
  * Creates an organizer account from the public signup form.
@@ -129,15 +130,41 @@ export async function POST(request: Request) {
 
   log.info("signup.created", { userId: created.id });
 
+  // No actor: nobody did this to them, they did it themselves. That is the
+  // distinction the actor column exists to make.
+  await recordAccountEvent({
+    userId: created.id,
+    kind: "account_created",
+    // The route does not receive the plan the dialog was opened from, so there
+    // is nothing honest to say about intent here. Carrying it through the form
+    // would make this row answer "which plan were they trying to buy", which is
+    // the first thing asked about a signup that never paid.
+    detail: "Signed up through the form.",
+  });
+
   // Best effort, and deliberately after the account exists. A welcome email that
   // cannot be sent is a bad morning; an account rolled back because of it is a
   // person who paid and has nothing. `sendEmail` reports instead of throwing, so
   // the only failure left to guard is an unexpected one.
   try {
     const message = onboardingEmail({ name, appUrl: getAppUrl() });
-    await sendEmail({ ...message, to: email });
+    const result = await sendEmail({ ...message, to: email });
+    await recordAccountEvent({
+      userId: created.id,
+      kind: result.sent ? "welcome_email_sent" : "welcome_email_failed",
+      detail: result.sent
+        ? `Sent to ${email}.`
+        : result.reason === "not_configured"
+          ? "Email is not configured on this deployment."
+          : `The provider refused the send to ${email}.`,
+    });
   } catch (error) {
     reportError("signup.welcome_email_failed", error, { userId: created.id });
+    await recordAccountEvent({
+      userId: created.id,
+      kind: "welcome_email_failed",
+      detail: "Sending failed unexpectedly.",
+    });
   }
 
   return NextResponse.json({ email, username: created.username }, { status: 201 });

@@ -9,6 +9,7 @@ import { isEventActive } from "@/lib/access";
 import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
 import { createVenueSlug } from "@/lib/venue";
 import { describeActivationNotice, sendActivationNotice } from "@/lib/activation-notice";
+import { recordAccountEvent } from "@/lib/timeline";
 
 const requestSchema = z.object({
   planKey: z.enum(PLAN_KEYS),
@@ -39,6 +40,7 @@ export async function PATCH(
       // that decides whether to send: whether this account was already active.
       // COALESCE below means the column looks the same afterwards either way.
       activatedAt: users.activatedAt,
+      planKey: users.planKey,
     })
     .from(users)
     .where(and(eq(users.id, userId), eq(users.role, "organizer")))
@@ -131,19 +133,40 @@ export async function PATCH(
     })
     .where(and(eq(events.ownerId, userId), isNull(events.deletedAt)));
 
-  // Only on the transition into being active, never on a later plan change.
-  // Re-sending "you are all set" to somebody who has been running events for a
-  // month because their plan was corrected reads as a billing problem. The
-  // resend control on /admin covers every deliberate repeat.
+  const actor = {
+    id: session.user.id,
+    label: session.user.username ?? session.user.name ?? null,
+  };
   const justActivated = !account.activatedAt;
+
+  // Recorded before the email is attempted, because the grant is what happened
+  // and it happened whether or not anybody could be told about it. A plan
+  // corrected later is its own row rather than an edit of this one, so the
+  // history shows the correction instead of hiding it.
+  await recordAccountEvent({
+    userId: account.id,
+    kind: justActivated ? "plan_assigned" : "plan_changed",
+    detail: justActivated
+      ? `Activated on ${plan.name}.`
+      : `Changed from ${getPlan(account.planKey).name} to ${plan.name}.`,
+    actor,
+  });
+
+  // The email goes only on the transition into being active, never on a later
+  // plan change. Re-sending "you are all set" to somebody who has been running
+  // events for a month because their plan was corrected reads as a billing
+  // problem. The resend control on /admin covers every deliberate repeat.
   const notice = justActivated
-    ? await sendActivationNotice({
-        id: account.id,
-        name: account.name,
-        email: account.email,
-        username: account.username,
-        planKey: parsed.data.planKey,
-      })
+    ? await sendActivationNotice(
+        {
+          id: account.id,
+          name: account.name,
+          email: account.email,
+          username: account.username,
+          planKey: parsed.data.planKey,
+        },
+        actor,
+      )
     : null;
 
   // The send result travels back with the response rather than being logged and

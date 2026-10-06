@@ -7,6 +7,7 @@ import { getAppUrl } from "./env";
 import { getPlan } from "./plans";
 import type { PlanKey } from "./plans";
 import { log, reportError } from "./observability";
+import { recordAccountEvent } from "./timeline";
 
 /**
  * Telling somebody their access is open, and recording that we did.
@@ -31,18 +32,31 @@ export type ActivationNoticeResult =
   /** An unexpected throw, already reported. */
   | { sent: false; reason: "failed" };
 
-export async function sendActivationNotice(account: {
-  id: string;
-  name: string | null;
-  email: string | null;
-  username: string | null;
-  planKey: PlanKey;
-}): Promise<ActivationNoticeResult> {
+export async function sendActivationNotice(
+  account: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    username: string | null;
+    planKey: PlanKey;
+  },
+  /**
+   * Who triggered it, recorded against the history entry. Omitted when nobody
+   * did it by hand, which today never happens: both callers are a superadmin.
+   */
+  actor?: { id: string; label: string | null } | null,
+): Promise<ActivationNoticeResult> {
   if (!account.email) {
     // Not an error, and not silent either. A venue set up by hand at /admin/new
     // may genuinely have no address, and the superadmin needs to see that this
     // is the reason nothing was sent rather than assuming it worked.
     log.warn("activation.no_email", { userId: account.id });
+    await recordAccountEvent({
+      userId: account.id,
+      kind: "activation_email_failed",
+      detail: "No email address on file, so nothing was sent.",
+      actor,
+    });
     return { sent: false, reason: "no_email" };
   }
 
@@ -55,7 +69,21 @@ export async function sendActivationNotice(account: {
     });
     const result = await sendEmail({ ...message, to: account.email });
 
-    if (!result.sent) return { sent: false, reason: result.reason };
+    if (!result.sent) {
+      // A failure is the entry most worth having. The success leaves a column
+      // behind it; a refusal at 2am currently leaves nothing at all, and that is
+      // the case somebody rings up about.
+      await recordAccountEvent({
+        userId: account.id,
+        kind: "activation_email_failed",
+        detail:
+          result.reason === "not_configured"
+            ? "Email is not configured on this deployment."
+            : `The provider refused the send to ${account.email}.`,
+        actor,
+      });
+      return { sent: false, reason: result.reason };
+    }
 
     // Stamped only on a send the provider accepted. A timestamp written
     // optimistically would answer "did we tell them" with a yes that is worth
@@ -65,10 +93,23 @@ export async function sendActivationNotice(account: {
       .set({ activationEmailSentAt: new Date() })
       .where(eq(users.id, account.id));
 
+    await recordAccountEvent({
+      userId: account.id,
+      kind: "activation_email_sent",
+      detail: `Sent to ${account.email}.`,
+      actor,
+    });
+
     log.info("activation.email_sent", { userId: account.id, planKey: account.planKey });
     return { sent: true };
   } catch (error) {
     reportError("activation.email_failed", error, { userId: account.id });
+    await recordAccountEvent({
+      userId: account.id,
+      kind: "activation_email_failed",
+      detail: "Sending failed unexpectedly.",
+      actor,
+    });
     return { sent: false, reason: "failed" };
   }
 }

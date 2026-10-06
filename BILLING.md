@@ -157,6 +157,58 @@ because the mail says their access is open. It is rate limited per recipient, no
 per admin: the thing being protected is one person's inbox against a
 double-click, and the route already demands a superadmin.
 
+### The chain, and the history behind it
+
+Every client card on `/admin` carries seven steps, always in the same order and
+including the ones already done, so a page of accounts can be scanned for the one
+that is stuck:
+
+```
+1. Account created      users.created_at
+2. Welcome email        account_timeline
+3. Payment confirmed    NOT OBSERVABLE: see below
+4. Plan assigned        users.activated_at
+5. Access email         users.activation_email_sent_at
+6. Event created        events, excluding soft-deleted
+7. Guests uploading     media, excluding soft-deleted
+```
+
+Each step is `done`, `waiting`, `action` or `unknown`, and **only `action` is
+coloured**. That distinction is the point: most incomplete steps are the
+customer's turn, and a panel where everything incomplete looks urgent stops being
+read. `resolveChain` in [lib/timeline.ts](lib/timeline.ts) is a pure function and
+[lib/timeline.test.ts](lib/timeline.test.ts) is where its judgement is pinned
+down.
+
+**Step 3 is the honest one.** A Stripe-hosted Payment Link reports to Stripe and
+tells this application nothing, so there is no way to tick it from data. It reads
+`action` with the address to search Stripe for, and flips to `done` the moment a
+plan is assigned, because assigning the plan *is* a human confirming the payment.
+That is the whole workflow, so recording it twice would be theatre.
+
+**The chain is derived, never stored.** The state columns and `account_timeline`
+are the inputs. A stored copy of the answer would be one more thing to disagree
+with them.
+
+`account_timeline` is append-only: rows are written and never updated or deleted,
+and a correction is another row. It carries what present state cannot, which is
+everything that *happened* rather than everything that is currently true: emails
+that were refused, who granted a plan, and a plan corrected twice. `actor_label`
+denormalises the admin's name at the time, because the FK goes null when an
+account is removed and "somebody granted this" is worth much less than a name.
+
+Two deliberate choices in [drizzle/0015_account_timeline.sql](drizzle/0015_account_timeline.sql).
+There is **no CHECK constraint on `kind`**, because a rejected insert loses a
+record and this table exists so records are not lost; an unrecognised kind is a
+cosmetic problem, a refused insert is a hole in the history. And `user_id`
+**cascades**, despite this being a log, because `lib/erasure.ts` hard-deletes the
+users row and an erasure that leaves someone's address in an audit trail is not
+an erasure.
+
+`recordAccountEvent` never throws. Every call site is more important than its own
+log entry: losing the entry is a worse history, but letting the entry lose the
+activation is a customer who paid and got nothing.
+
 Three things about the buying flow are load-bearing.
 
 **The plan key crosses the gap, never a URL.** `/signup?plan=venue` carries one

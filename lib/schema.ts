@@ -59,6 +59,57 @@ export const users = pgTable("users", {
   activationEmailSentAt: timestamp("activation_email_sent_at", { withTimezone: true }),
 });
 
+/**
+ * The vocabulary `account_timeline.kind` is written with.
+ *
+ * Not a database CHECK constraint, on purpose: see
+ * drizzle/0015_account_timeline.sql. A kind the database refuses is a lost
+ * record, and this table exists so records are not lost. Reading code should
+ * handle an unknown kind rather than assume this list is exhaustive, because an
+ * older deployment can have written one this build has never heard of.
+ */
+export const TIMELINE_KINDS = [
+  "account_created",
+  "welcome_email_sent",
+  "welcome_email_failed",
+  "plan_assigned",
+  "plan_changed",
+  "activation_email_sent",
+  "activation_email_failed",
+  "event_created",
+] as const;
+export type TimelineKind = (typeof TIMELINE_KINDS)[number];
+
+/**
+ * What has happened to an account, append-only.
+ *
+ * Written through `recordAccountEvent` in lib/timeline.ts, which never throws,
+ * because nothing here is worth failing a signup or an activation over. Read by
+ * /admin to show how far each customer has got and where they are stuck.
+ *
+ * Rows are never updated. A correction is another row.
+ */
+export const accountTimeline = pgTable(
+  "account_timeline",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Typed for writers, deliberately widened to string for readers. */
+    kind: text("kind").$type<TimelineKind | (string & {})>().notNull(),
+    detail: text("detail"),
+    actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** The actor's name at the time, so the history survives them being renamed or removed. */
+    actorLabel: text("actor_label"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("account_timeline_user_idx").on(table.userId, table.createdAt),
+    index("account_timeline_kind_idx").on(table.kind, table.createdAt),
+  ],
+);
+
 export const accounts = pgTable("accounts", {
   userId: text("userId")
     .notNull()

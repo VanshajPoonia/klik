@@ -15,6 +15,9 @@ import { ActivationEmailControl } from "@/components/admin/activation-email-cont
 import { PendingActivations } from "@/components/admin/pending-activations";
 import { PendingSignups } from "@/components/admin/pending-signups";
 import { getPendingActivations, getPendingSignups } from "@/lib/billing-admin";
+import { AccountChain } from "@/components/admin/account-chain";
+import { getAccountChains } from "@/lib/timeline";
+import { getPlan } from "@/lib/plans";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -39,6 +42,7 @@ export default async function AdminPage() {
       email: users.email,
       activatedAt: users.activatedAt,
       activationEmailSentAt: users.activationEmailSentAt,
+      accountCreatedAt: users.createdAt,
       planKey: users.planKey,
       eventId: events.id,
       eventName: events.name,
@@ -61,6 +65,7 @@ export default async function AdminPage() {
       email: string | null;
       activatedAt: Date | null;
       activationEmailSentAt: Date | null;
+      accountCreatedAt: Date;
       planKey: (typeof rows)[number]["planKey"];
       events: Array<{
         id: string;
@@ -90,6 +95,7 @@ export default async function AdminPage() {
         email: row.email,
         activatedAt: row.activatedAt,
         activationEmailSentAt: row.activationEmailSentAt,
+        accountCreatedAt: row.accountCreatedAt,
         planKey: row.planKey,
         events:
           row.eventId && row.eventName && row.eventSlug && row.visibility
@@ -107,6 +113,20 @@ export default async function AdminPage() {
     }
     return grouped;
   }, []);
+
+  // One batched pass rather than a query per card. The rows above already carry
+  // everything about the account itself; this adds the counts and the history
+  // the chain is derived from.
+  const chains = await getAccountChains(
+    clients.map((client) => ({
+      userId: client.userId,
+      email: client.email,
+      createdAt: client.accountCreatedAt,
+      activatedAt: client.activatedAt,
+      activationEmailSentAt: client.activationEmailSentAt,
+      planName: getPlan(client.planKey).name,
+    })),
+  );
 
   return (
     <div className="min-h-screen px-6 py-10 md:px-10">
@@ -189,6 +209,11 @@ export default async function AdminPage() {
                     : null
                 }
               />
+
+              {(() => {
+                const steps = chains.get(client.userId);
+                return steps ? <AccountChain steps={steps} /> : null;
+              })()}
 
               {client.events.length > 0 ? (
                 <div className="divide-y divide-canvas-line rounded-xl border border-canvas-line">

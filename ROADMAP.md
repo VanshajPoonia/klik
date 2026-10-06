@@ -23,6 +23,7 @@
 - Transactional email through Resend in `lib/email.ts`, used by the signup welcome mail (`lib/emails/onboarding.ts`). Absent configuration is a normal state that reports itself rather than throwing, so a failed send never costs the account that was just created.
 - Two test suites: Vitest with no database and no network, plus `npm run test:db` against a throwaway local Postgres cluster.
 - The activation loop is closed, 2026-10-06. Assigning a plan on `/admin` sets `activated_at` **and** emails the organizer their dashboard link and the steps to get live, recorded in `users.activation_email_sent_at` with a resend control on the client card. Part of ACT-3, done at account level rather than per event.
+- An append-only account history, `account_timeline`, 2026-10-07. Records what happened rather than what is currently true: email sends and refusals, who granted a plan, plan corrections. `/admin` derives a seven-step chain from it per client, marking only the steps a superadmin has to act on. This is a narrow slice of ADM-4's audit log, built because the activation loop needed somewhere to record a failed send; ADM-4 can widen it rather than start over.
 
 **Not built at all**
 - Granting a plan automatically. Stripe Checkout and the webhook now take and record money (see `BILLING.md`), but `users.plan_key` is still set by hand by a superadmin, because capability needs ACT-1's ledger before a webhook may touch it.

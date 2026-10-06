@@ -10,6 +10,7 @@ import { isEventActive } from "@/lib/access";
 import { canManageEventClients } from "@/lib/plans";
 import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
 import { SUPPORT_PHONE } from "@/lib/support";
+import { recordAccountEvent } from "@/lib/timeline";
 
 const createEventSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -183,6 +184,16 @@ export async function POST(request: Request) {
     }
     throw error;
   }
+
+  // The step that turns an activated account into a working one. Recorded here
+  // rather than derived from a row count, because the count says how many they
+  // have and this says when the first one appeared, which is the number that
+  // tells you whether somebody who paid ever actually started.
+  await recordAccountEvent({
+    userId: session.user.id,
+    kind: "event_created",
+    detail: `Created "${event.name}".`,
+  });
 
   return NextResponse.json({ event: toOrganizerEvent(event) }, { status: 201 });
 }

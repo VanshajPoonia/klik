@@ -69,7 +69,10 @@ export async function POST(
     );
   }
 
-  const notice = await sendActivationNotice(account);
+  const notice = await sendActivationNotice(account, {
+    id: session.user.id,
+    label: session.user.username ?? session.user.name ?? null,
+  });
   if (!notice.sent) {
     return NextResponse.json({ error: describeActivationNotice(notice) }, { status: 502 });
   }
