@@ -14,14 +14,17 @@ const oauthProviders = [];
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
   oauthProviders.push(Google);
 }
-if (process.env.AUTH_RESEND_KEY) {
-  // Was hard-coded to no-reply@klik.app, a domain this project does not own.
-  // Resend refuses to send from an unverified domain, so every magic link would
-  // have failed the moment a key was added, and it would have looked like the
-  // key was wrong rather than the sender.
-  oauthProviders.push(
-    Resend({ from: env.AUTH_EMAIL_FROM ?? "Klik <no-reply@klik.kreativvantage.com>" }),
-  );
+// Both, not just the key. A hard-coded fallback sender was here and was wrong:
+// it read `no-reply@klik.kreativvantage.com` while the domain actually verified
+// in Resend is the `mail.` subdomain, as .env.example has said all along. Resend
+// refuses any unverified domain, so that fallback did not provide a default, it
+// provided a "Continue with email" button that fails every single time and
+// reports it as a bad key rather than a bad sender.
+//
+// There is no correct address to guess, so the provider is simply not offered
+// until someone names one. Same reasoning as `sender()` in lib/email.ts.
+if (process.env.AUTH_RESEND_KEY && env.AUTH_EMAIL_FROM) {
+  oauthProviders.push(Resend({ from: env.AUTH_EMAIL_FROM }));
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

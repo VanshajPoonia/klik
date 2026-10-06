@@ -25,7 +25,11 @@ export default async function LoginPage({
   }
 
   const googleEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
-  const resendEnabled = Boolean(process.env.AUTH_RESEND_KEY);
+  // Must match the condition lib/auth.ts registers the provider under. Gating
+  // the button on the key alone would render "Continue with email" for a
+  // provider that was never registered, and clicking it fails in next-auth
+  // rather than anywhere that could explain why.
+  const resendEnabled = Boolean(process.env.AUTH_RESEND_KEY && process.env.AUTH_EMAIL_FROM);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16 text-center">
