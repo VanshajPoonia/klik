@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
 import { PlanAssignmentControl } from "@/components/admin/plan-assignment-control";
+import { ActivationEmailControl } from "@/components/admin/activation-email-control";
 import { PendingActivations } from "@/components/admin/pending-activations";
 import { PendingSignups } from "@/components/admin/pending-signups";
 import { getPendingActivations, getPendingSignups } from "@/lib/billing-admin";
@@ -37,6 +38,7 @@ export default async function AdminPage() {
       contactName: users.name,
       email: users.email,
       activatedAt: users.activatedAt,
+      activationEmailSentAt: users.activationEmailSentAt,
       planKey: users.planKey,
       eventId: events.id,
       eventName: events.name,
@@ -58,6 +60,7 @@ export default async function AdminPage() {
       contactName: string | null;
       email: string | null;
       activatedAt: Date | null;
+      activationEmailSentAt: Date | null;
       planKey: (typeof rows)[number]["planKey"];
       events: Array<{
         id: string;
@@ -86,6 +89,7 @@ export default async function AdminPage() {
         contactName: row.contactName,
         email: row.email,
         activatedAt: row.activatedAt,
+        activationEmailSentAt: row.activationEmailSentAt,
         planKey: row.planKey,
         events:
           row.eventId && row.eventName && row.eventSlug && row.visibility
@@ -165,6 +169,25 @@ export default async function AdminPage() {
               <PlanAssignmentControl
                 userId={client.userId}
                 initialPlanKey={client.planKey}
+              />
+
+              <ActivationEmailControl
+                userId={client.userId}
+                email={client.email}
+                activated={Boolean(client.activatedAt)}
+                // Formatted here rather than in the client component, so the
+                // date does not render one way on the server and another in the
+                // browser and trip hydration.
+                sentAt={
+                  client.activationEmailSentAt
+                    ? client.activationEmailSentAt.toLocaleString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : null
+                }
               />
 
               {client.events.length > 0 ? (

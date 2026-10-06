@@ -1,5 +1,6 @@
 import type { EmailMessage } from "../email";
 import { KIT_WAIT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "../support";
+import { CANVAS, LINE, MUTED, PAPER, VOLT, escapeHtml, renderStepsHtml, renderStepsText } from "./theme";
 
 /**
  * The email somebody gets the moment they create an account.
@@ -15,28 +16,6 @@ import { KIT_WAIT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "../support";
  * without a mail provider. See lib/emails/onboarding.test.ts.
  */
 
-/**
- * Escapes the one value here that comes from a person.
- *
- * A name is user input, it is interpolated into HTML, and this mail is rendered
- * by someone else's client. `<` and `&` are the two that break the document;
- * quotes matter because a name could land in an attribute in a later revision
- * of this template and finding out then is worse.
- */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-const CANVAS = "#050505";
-const PAPER = "#f3f1e9";
-const VOLT = "#edee00";
-const MUTED = "#8c8a80";
-const LINE = "#232320";
 
 /**
  * The recipient is the caller's business. This builds the message; `to` is the
@@ -73,26 +52,7 @@ export function onboardingEmail({
     ],
   ];
 
-  const stepsHtml = steps
-    .map(
-      ([title, body], index) => `
-          <tr>
-            <td style="padding:0 0 18px 0;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-                <tr>
-                  <td width="34" valign="top" style="padding:0;">
-                    <div style="width:26px;height:26px;border-radius:13px;background-color:${VOLT};color:${CANVAS};font:600 13px/26px Helvetica,Arial,sans-serif;text-align:center;">${index + 1}</div>
-                  </td>
-                  <td valign="top" style="padding:0;">
-                    <p style="margin:2px 0 4px 0;font:600 15px/1.4 Helvetica,Arial,sans-serif;color:${PAPER};">${escapeHtml(title)}</p>
-                    <p style="margin:0;font:400 14px/1.6 Helvetica,Arial,sans-serif;color:${MUTED};">${escapeHtml(body)}</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>`,
-    )
-    .join("");
+  const stepsHtml = renderStepsHtml(steps);
 
   const html = `<!doctype html>
 <html lang="en">
@@ -178,7 +138,7 @@ export function onboardingEmail({
     "",
     "WHAT HAPPENS NEXT",
     "",
-    ...steps.flatMap(([title, body], index) => [`${index + 1}. ${title}`, `   ${body}`, ""]),
+    ...renderStepsText(steps),
     `See the plans: ${plansUrl}`,
     `Your dashboard: ${dashboardUrl}`,
     "",

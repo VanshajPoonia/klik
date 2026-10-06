@@ -43,6 +43,20 @@ export const users = pgTable("users", {
    * sitting there.
    */
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * When this account was last told, by email, that its access is open.
+   *
+   * Set by the plan route when activation first happens, and by the resend
+   * control on /admin. Null means nobody has been told, which is why it is not
+   * backfilled: see drizzle/0014_activation_email.sql.
+   *
+   * Separate from `activatedAt` because the two genuinely come apart. An account
+   * with no email on file can be activated and can never be mailed, and a send
+   * can be rejected by the provider long after the plan was granted. Reading
+   * activation as proof of notification is how somebody waits for an email that
+   * was never sent.
+   */
+  activationEmailSentAt: timestamp("activation_email_sent_at", { withTimezone: true }),
 });
 
 export const accounts = pgTable("accounts", {

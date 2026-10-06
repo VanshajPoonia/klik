@@ -22,6 +22,7 @@
 - Rate limiting in `lib/ratelimit.ts`: Postgres counters incremented inside a single upsert, wired into credential login and into the signup route per IP and per email.
 - Transactional email through Resend in `lib/email.ts`, used by the signup welcome mail (`lib/emails/onboarding.ts`). Absent configuration is a normal state that reports itself rather than throwing, so a failed send never costs the account that was just created.
 - Two test suites: Vitest with no database and no network, plus `npm run test:db` against a throwaway local Postgres cluster.
+- The activation loop is closed, 2026-10-06. Assigning a plan on `/admin` sets `activated_at` **and** emails the organizer their dashboard link and the steps to get live, recorded in `users.activation_email_sent_at` with a resend control on the client card. Part of ACT-3, done at account level rather than per event.
 
 **Not built at all**
 - Granting a plan automatically. Stripe Checkout and the webhook now take and record money (see `BILLING.md`), but `users.plan_key` is still set by hand by a superadmin, because capability needs ACT-1's ledger before a webhook may touch it.
@@ -413,7 +414,7 @@ An organizer creates an event and it is **inactive**: no live QR, no guest acces
 
 Three things this has to get right, because they are what turn a waiting screen into a support ticket:
 - **Never a dead end.** A blocked action says what is happening and who is doing it, not "403".
-- **The organizer must know when it flips.** They will not sit refreshing. Email on activation (F-8), which is one more reason Resend sits early in the build order.
+- **The organizer must know when it flips. SHIPPED 2026-10-06, at account level.** Assigning a plan now sends the access email itself (`lib/activation-notice.ts`, `lib/emails/activation.ts`), carrying the dashboard link and the five steps from signing in to downloading the zip. `users.activation_email_sent_at` records it and `/admin` offers a resend, because the support call this answers is "I paid and never heard anything". What is **not** done is the event-scoped version this task actually describes: ACT-1's ledger can grant a plan for one event, and an organizer with three events needs to know which one just went live. Reuse the template, change what it is addressed about.
 - **The QR must not exist until activation.** A QR generated against an inactive event either 404s or silently starts working later; both are worse than not offering it yet. This interacts with QR-1: a slug is permanent once printed, so it should not be mintable before the event is real.
 
 ### ACT-4. Activation requests and queue

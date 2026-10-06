@@ -57,7 +57,8 @@ export function PendingSignups({
 
       <p className="text-xs leading-relaxed text-muted">
         These accounts can sign in and cannot create an event. Find their payment in Stripe by
-        email, then assign the plan below, which activates them.
+        email, then assign the plan below. That activates them and emails them the link to their
+        dashboard, so assigning the plan is the only step: there is nothing to send by hand.
       </p>
     </Card>
   );

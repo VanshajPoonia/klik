@@ -119,9 +119,45 @@ later:
 superadmin -> Stripe Dashboard, find the payment by email
            -> /admin, "Signed up, not activated"
            -> assign the plan, which sets activated_at
+           -> access email goes out automatically, with the dashboard link
+  -> organizer signs in, creates the event
+  -> gallery, QR code and printable sign are generated on the spot
 ```
 
-Three things about that are load-bearing.
+### Nothing about activation is silent
+
+Assigning a plan sends the access email itself, through
+[lib/activation-notice.ts](lib/activation-notice.ts). There is no second button
+to remember, for the same reason assigning a plan is also what sets
+`activated_at`: a grant that needs two clicks gets one, and the person who
+forgets the second is never the person who waits.
+
+Three details worth knowing before changing any of it.
+
+**It fires on the transition only.** The route reads `activated_at` *before* its
+own update, because `COALESCE` makes the column look identical afterwards either
+way. Correcting somebody's plan a month later sends nothing, since "you are all
+set" arriving out of nowhere reads as a billing problem.
+
+**The timestamp means the provider accepted it.** `users.activation_email_sent_at`
+is written after the send, never before. The column exists to answer one support
+question, "I paid and never heard anything", and an optimistic timestamp answers
+it with a yes worth nothing.
+
+**The send can never cost the grant.** `sendActivationNotice` reports its outcome
+instead of throwing, and the result travels back in the PATCH response so the
+superadmin sees it while they are still looking at the screen. An account with no
+email on file is a normal outcome, not an error: `/admin/new` creates accounts
+with a username and no address, and the panel says so rather than implying a
+mail went out.
+
+Re-sending is `POST /api/admin/clients/[userId]/activation-email`, surfaced as
+"Send again" on the client card. It refuses an account that is not active yet,
+because the mail says their access is open. It is rate limited per recipient, not
+per admin: the thing being protected is one person's inbox against a
+double-click, and the route already demands a superadmin.
+
+Three things about the buying flow are load-bearing.
 
 **The plan key crosses the gap, never a URL.** `/signup?plan=venue` carries one
 of three known keys and the destination is resolved from `PAYMENT_LINKS` on the

@@ -8,6 +8,7 @@ import { requireSuperadmin } from "@/lib/roles";
 import { isEventActive } from "@/lib/access";
 import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
 import { createVenueSlug } from "@/lib/venue";
+import { describeActivationNotice, sendActivationNotice } from "@/lib/activation-notice";
 
 const requestSchema = z.object({
   planKey: z.enum(PLAN_KEYS),
@@ -28,7 +29,17 @@ export async function PATCH(
 
   const { userId } = await params;
   const [account] = await db
-    .select({ id: users.id, name: users.name, venueSlug: users.venueSlug })
+    .select({
+      id: users.id,
+      name: users.name,
+      venueSlug: users.venueSlug,
+      email: users.email,
+      username: users.username,
+      // Read before the update, because the update itself destroys the one fact
+      // that decides whether to send: whether this account was already active.
+      // COALESCE below means the column looks the same afterwards either way.
+      activatedAt: users.activatedAt,
+    })
     .from(users)
     .where(and(eq(users.id, userId), eq(users.role, "organizer")))
     .limit(1);
@@ -120,5 +131,28 @@ export async function PATCH(
     })
     .where(and(eq(events.ownerId, userId), isNull(events.deletedAt)));
 
-  return NextResponse.json({ account: updatedAccount });
+  // Only on the transition into being active, never on a later plan change.
+  // Re-sending "you are all set" to somebody who has been running events for a
+  // month because their plan was corrected reads as a billing problem. The
+  // resend control on /admin covers every deliberate repeat.
+  const justActivated = !account.activatedAt;
+  const notice = justActivated
+    ? await sendActivationNotice({
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        username: account.username,
+        planKey: parsed.data.planKey,
+      })
+    : null;
+
+  // The send result travels back with the response rather than being logged and
+  // forgotten. The superadmin who clicked is the only person who can act on a
+  // failure, and they are looking at the screen right now.
+  return NextResponse.json({
+    account: updatedAccount,
+    notice: notice
+      ? { sent: notice.sent, message: describeActivationNotice(notice) }
+      : null,
+  });
 }
