@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PLANS, type PlanDefinition } from "@/lib/plans";
-import { KIT_WAIT_MINUTES, SUPPORT_PHONE } from "@/lib/support";
+import { KIT_WAIT_HOURS, SUPPORT_PHONE } from "@/lib/support";
 import { Container } from "./container";
 import { PlanDialog } from "./plan-dialog";
 
@@ -230,8 +230,8 @@ export function Pricing() {
         </div>
 
         <p className="mx-auto mt-6 max-w-2xl text-center text-sm leading-relaxed text-canvas/60">
-          You create an account, pay through Stripe, and your kit is ready in about{" "}
-          {KIT_WAIT_MINUTES} minutes. Questions before you buy? Call or text {SUPPORT_PHONE}.
+          You create an account, pay through Stripe, and your kit is ready within{" "}
+          {KIT_WAIT_HOURS} hours. Questions before you buy? Call or text {SUPPORT_PHONE}.
         </p>
       </Container>
     </section>

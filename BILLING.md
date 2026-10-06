@@ -107,7 +107,7 @@ which says what the next few minutes hold, and its one link goes to
 
 ```
 visitor clicks a plan on /#pricing
-  -> dialog: pay, wait ~5 minutes, support number
+  -> dialog: pay, kit ready within 24 hours, support number
   -> /signup?plan=event
      already signed in: 307 straight to the Payment Link
      signed out:        the form, then POST /api/signup

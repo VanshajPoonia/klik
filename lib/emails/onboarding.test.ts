@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { onboardingEmail } from "./onboarding";
-import { KIT_WAIT_MINUTES, SUPPORT_PHONE } from "../support";
+import { KIT_WAIT_HOURS, SUPPORT_PHONE } from "../support";
 
 /**
  * This email is the only thing that reaches somebody who created an account and
@@ -28,8 +28,8 @@ describe("onboardingEmail", () => {
    * meets it as a blank dashboard instead, and reads that as a failed payment.
    */
   it("states the wait before anyone has paid", () => {
-    expect(message.html).toContain(`${KIT_WAIT_MINUTES} minutes`);
-    expect(message.text).toContain(`${KIT_WAIT_MINUTES} minutes`);
+    expect(message.html).toContain(`${KIT_WAIT_HOURS} hours`);
+    expect(message.text).toContain(`${KIT_WAIT_HOURS} hours`);
   });
 
   /**

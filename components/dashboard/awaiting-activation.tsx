@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { buttonClassName } from "@/components/ui/button";
-import { KIT_WAIT_MINUTES, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
+import { KIT_WAIT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 
 /**
  * What an account sees between signing up and being granted a plan.
@@ -46,10 +46,9 @@ export function AwaitingActivation() {
       </div>
 
       <p className="border-t border-canvas-line pt-4 text-sm leading-relaxed text-muted">
-        <span className="font-semibold text-paper">Already paid?</span> Your kit takes about{" "}
-        {KIT_WAIT_MINUTES} minutes to put together, and this page turns on by itself once it is
-        done. If it has been longer than that, call or text {SUPPORT_PHONE} and we will sort it out
-        on the spot.
+        <span className="font-semibold text-paper">Already paid?</span> Your kit is ready within{" "}
+        {KIT_WAIT_HOURS} hours, and this page turns on by itself once it is done. If it has been
+        longer than that, call or text {SUPPORT_PHONE} and we will sort it out on the spot.
       </p>
     </Card>
   );

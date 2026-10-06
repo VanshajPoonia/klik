@@ -13,11 +13,17 @@ export const SUPPORT_PHONE = "+1 314 756 1100";
 export const SUPPORT_PHONE_HREF = "tel:+13147561100";
 
 /**
- * How long someone waits between paying and their kit being ready, in minutes.
+ * The outer bound on how long someone waits between paying and their kit being
+ * ready, in hours.
  *
  * Said out loud before they pay, not after. The gap is real, because a plan is
  * granted by a person rather than by the webhook (BILLING.md, "The grant is
  * manual"), and somebody who was not told reads a blank dashboard as a failed
  * payment and asks for their money back.
+ *
+ * **Phrase this as "within", never "about".** It is a ceiling a human has to
+ * beat, not an estimate to land on: most grants will take minutes, and the
+ * number exists so that the slowest one is still a promise kept. Was 5 minutes
+ * until 2026-10-06, which left no room for the grant to be manual at all.
  */
-export const KIT_WAIT_MINUTES = 5;
+export const KIT_WAIT_HOURS = 24;

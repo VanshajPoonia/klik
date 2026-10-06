@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CreditCard, Phone, QrCode, Timer, X } from "lucide-react";
 import { buttonClassName } from "@/components/ui/button";
 import type { PlanDefinition } from "@/lib/plans";
-import { KIT_WAIT_MINUTES, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
+import { KIT_WAIT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 
 /**
  * What a plan button does now: explain the next few minutes, then go.
@@ -67,7 +67,7 @@ export function PlanDialog({
     },
     {
       icon: Timer,
-      title: `Wait about ${KIT_WAIT_MINUTES} minutes`,
+      title: `Ready within ${KIT_WAIT_HOURS} hours`,
       body:
         "We put your kit together once the payment clears: your live gallery, your QR code and the printable sign your guests scan.",
     },

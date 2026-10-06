@@ -1,5 +1,5 @@
 import type { EmailMessage } from "../email";
-import { KIT_WAIT_MINUTES, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "../support";
+import { KIT_WAIT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "../support";
 
 /**
  * The email somebody gets the moment they create an account.
@@ -64,7 +64,7 @@ export function onboardingEmail({
       `Payment happens on Stripe's own secure page. Card details never reach Klik.`,
     ],
     [
-      `Give us about ${KIT_WAIT_MINUTES} minutes`,
+      `Give us up to ${KIT_WAIT_HOURS} hours`,
       `Your kit is put together after the payment clears: your gallery, your QR code and the sign your guests scan. Your dashboard updates once it is ready.`,
     ],
     [

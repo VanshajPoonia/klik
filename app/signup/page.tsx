@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { SignupForm } from "@/components/auth/signup-form";
 import { PAYMENT_LINKS } from "@/lib/billing-plans";
 import { PLAN_KEYS, PLANS, type PlanKey } from "@/lib/plans";
-import { KIT_WAIT_MINUTES, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
+import { KIT_WAIT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Create your account",
@@ -82,8 +82,8 @@ export default async function SignupPage({
           by a person, so the gap between paying and the kit being ready is real.
           Someone who was not told reads an empty dashboard as a failed payment. */}
       <p className="mt-10 max-w-sm text-xs leading-relaxed text-muted">
-        After payment, your kit takes about {KIT_WAIT_MINUTES} minutes to put together. Any
-        trouble, call or text{" "}
+        After payment, your kit is ready within {KIT_WAIT_HOURS} hours. Any trouble, call or
+        text{" "}
         <a href={SUPPORT_PHONE_HREF} className="font-medium text-paper hover:text-volt">
           {SUPPORT_PHONE}
         </a>
