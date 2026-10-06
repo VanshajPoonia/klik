@@ -325,13 +325,14 @@ fails until this runs.
 ### 0b. Configure the sender, or the welcome email never goes out
 
 ```
-AUTH_RESEND_KEY    re_...                       (both are empty today)
-AUTH_EMAIL_FROM    Klik <hello@kreativvantage.com>
+AUTH_RESEND_KEY    re_...                            (both are empty today)
+AUTH_EMAIL_FROM    Klik <no-reply@klik.kreativvantage.com>
 ```
 
-The address has to be on a domain verified in the Resend account, which is also
-what turns on "Continue with email" on the login page, since both read the same
-key. Until they are set, `/api/signup` logs `email.not_configured` and creates
+The address has to be on a domain verified in the Resend account. Both variables
+also gate "Continue with email" on the login page, which is deliberate: the
+provider is not registered without a sender, so a button shown on the key alone
+would fail on every click. Until they are set, `/api/signup` logs `email.not_configured` and creates
 the account anyway: somebody who has paid must never lose an account because a
 welcome message could not be sent.
 
