@@ -8,7 +8,7 @@
 
 ## 0. Where the code actually is today
 
-`ARCHITECTURE.md` is stale and will mislead any agent that reads it. The real state:
+`ARCHITECTURE.md` was rewritten against the code in F-1 and is accurate as of the "last verified against commit" line in its own header. Check that line against `git log` before trusting it, and read this section for whatever landed afterwards. The real state:
 
 **Built and working**
 - Next.js 16 App Router, Drizzle on Neon, Auth.js v5 with JWT sessions.
@@ -17,16 +17,21 @@
 - Event CRUD, slug generation, QR PNG/SVG, one printable sign in three fixed templates, access gate (public / password / private), guest entry sheet with consent, direct-to-R2 upload with server-side HEIC conversion and compression, moderation queue, streaming ZIP download with batching, expiry cron, lightbox with a working slideshow, in-app camera with six client-side looks.
 - `albums` (flat, Premium only), `event_co_hosts` (add by username or email, capped at 5), `venue_clients`, venue hub at `/v/[venueSlug]`, superadmin console at `/admin` with quick-create and password reset.
 - Plans exist as static definitions in `lib/plans.ts` with capability helpers, and are enforced on event creation and on feature gates.
+- **Self-serve signup at `/signup`, shipped 2026-10-06, and it is now how buying works.** A pricing button opens an explainer dialog, which links to `/signup?plan=<key>`, which creates the account and then redirects to a Stripe-hosted Payment Link. Email plus password, which is **not** ACC-2's OTP design; see that task for what it means for the rest of ACC. `BILLING.md` is the full record.
+- **`users.activated_at` is what grants capability.** A new account has it null and can create nothing until a superadmin assigns a plan. This matters more than it looks: `users.plan_key` is `NOT NULL DEFAULT 'event'`, so every new account reads as owning the $39 plan, and anything deciding access from that column is wrong.
+- Rate limiting in `lib/ratelimit.ts`: Postgres counters incremented inside a single upsert, wired into credential login and into the signup route per IP and per email.
+- Transactional email through Resend in `lib/email.ts`, used by the signup welcome mail (`lib/emails/onboarding.ts`). Absent configuration is a normal state that reports itself rather than throwing, so a failed send never costs the account that was just created.
+- Two test suites: Vitest with no database and no network, plus `npm run test:db` against a throwaway local Postgres cluster.
 
 **Not built at all**
 - Granting a plan automatically. Stripe Checkout and the webhook now take and record money (see `BILLING.md`), but `users.plan_key` is still set by hand by a superadmin, because capability needs ACT-1's ledger before a webhook may touch it.
 - Any usage measurement. Nothing counts storage, media, or guests, so nothing can warn about limits.
-- Self-serve signup. There is a `/login` page and no `/signup`. Usernames exist only on admin-provisioned credential accounts.
+- Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt, and usernames are auto-generated at signup rather than claimed (ID-2).
 - Guest accounts, guest event history, guest to organizer upgrade.
-- Per-photo visibility, per-photo share links, revocable access, nested folders.
+- Nested folders (MED-4). Per-photo visibility, share links and revocable access **are** built: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
 - Any AI beyond client-side CSS filters.
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
-- Rate limiting (`lib/ratelimit.ts` does not exist), any tests, any error tracking, any transactional email, any background job runner.
+- Error tracking (F-9 shipped structured logging; Sentry is wired but has no DSN) and a background job runner, which SEC-2's orphan reaper and ACT-3's activation email both need.
 
 
 ## Contents
@@ -35,7 +40,7 @@
 
 | Section | What it holds |
 |---|---|
-| §0 Where the code actually is | Real state of the codebase, since ARCHITECTURE.md is stale until F-1 |
+| §0 Where the code actually is | Real state of the codebase, including whatever is newer than ARCHITECTURE.md's last-verified line |
 | Phase SEC | Security findings from the audit, most already fixed |
 | Phase F | Foundations: tests, permissions, usage, jobs, email, env, error tracking |
 | Phase ID | Global usernames (v1.1) |
@@ -306,7 +311,14 @@ Decide and document: there is one `users` table. `role` stays `organizer | super
 - Add `guests.user_id` nullable FK to `users`, with an index.
 
 ### ACC-2. Passwordless sign-up
-**Size:** M. **Depends on:** F-2, F-8.
+**Size:** M, reduced. **Depends on:** F-2, F-8.
+
+**Partly overtaken 2026-10-06.** A `/signup` page shipped ahead of this phase because buying needed an account to attach a payment to, and it takes **email plus a password**, not a code. So the page, the route, its rate limits, the welcome email and the Credentials path all exist; what is still open here is the OTP itself and the choices around it. Re-scope before starting rather than building the page again:
+
+- The page, `POST /api/signup`, per-IP and per-email rate limits, and the onboarding email are **done**. Reuse them.
+- Usernames are **auto-generated** from the email at signup, which pre-empts the "claimed after, via ID-2" decision below. Either accept generated usernames and cut that part of ID-2, or add a rename flow.
+- The Credentials provider is now the **main** signup path, not an admin-only one, so hiding it behind a "venue login" disclosure no longer makes sense.
+
 Passwords are the wrong friction for someone standing at a wedding. Ship email OTP as the primary path:
 - Customise the existing Auth.js Resend provider with `generateVerificationToken` producing a 6-digit numeric code and a `sendVerificationRequest` that sends the code rather than a link, so the person can type it into the tab they are already in. Keep the magic link as a fallback in the same email.
 - Keep Google as a one-tap option.

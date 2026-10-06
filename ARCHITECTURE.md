@@ -212,7 +212,11 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 ## 12. What is not built
 
-Self-serve signup. Guest accounts and guest event history. Per-photo visibility, per-photo share links, nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking. Transactional email. A background job runner. Video transcoding, and video metadata stripping with it.
+> **This section was corrected on 2026-10-06, later than the header's last-verified commit.** Four things it listed as missing had in fact shipped: self-serve signup, per-photo visibility, per-photo share links and transactional email. The rest of this file has not been re-read against the code since `0e7fe18`.
+
+Guest accounts and guest event history. Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging, since Sentry is wired but has no DSN. A background job runner. Video transcoding, and video metadata stripping with it.
+
+**Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
 
 `ROADMAP.md` has all of it with task IDs and an order.
 
