@@ -162,6 +162,23 @@ Three safety properties, all deliberate:
 
 **Erasure.** `lib/erasure.ts`. A legal data-removal request. Hard, immediate, irreversible, and it deliberately runs **bytes before rows**, the opposite order to the purge, so the system never reports data as erased while it is still sitting in the bucket. It includes soft-deleted rows and deletes video posters explicitly.
 
+### The backup, and why it is locked
+
+**`klik-media-backup` holds a second copy of every object for 30 days, and nothing in this codebase can delete from it.** `lib/backup.ts` copies; `app/api/cron/backup-sweep/route.ts` runs nightly at 02:00 UTC.
+
+R2 has no object versioning, so until 2026-10-07 a bug in `deleteBlobs` would have destroyed the only copy of a customer's gallery. The old EU bucket was an accidental second copy and OPS-4 removed it, which is what forced this.
+
+Four decisions worth not re-litigating:
+
+- **Bucket Lock, 30 days.** `ROADMAP.md` rejected Bucket Lock for the *primary* bucket, where immutability would break rejected-upload cleanup and erasure. On the backup it is the whole point: a backup the application can delete from does not protect against the one thing it exists for. Verified by attempting a delete with the app's own credentials and getting `ObjectLockedByBucketPolicy 409`.
+- **A lifecycle rule at 31 days**, one day after the lock releases. The backup is a rolling window, not an archive, so a photo somebody asked you to erase does not live here forever. The gap avoids racing the lock expiry.
+- **02:00, an hour before the purge at 03:00.** The purge is the most likely thing to delete something it should not have. Copying first means the night's backup comes from a bucket the purge has not touched, so a purge bug is recoverable from that night's copy instead of being faithfully replicated into it.
+- **Server-side `CopyObject`, not read-then-write.** Both buckets are the same account and the same jurisdiction, so the bytes move inside R2 and never enter the function. A 54 MB video is a 7 second call rather than a memory problem. This is why the sweep can afford to be a single cron rather than a queue.
+
+**What this means for an erasure request.** The primary is cleared immediately, as it always was, and the request is recorded in the erasure log from `drizzle/0004_erasure_log.sql`. The backup copy cannot be removed early, by design, and expires on the rotation. So erasure completes everywhere **within 31 days**, not instantly, and that is the promise to make to customers rather than a stricter one you cannot keep. Decided 2026-10-08; the alternative was an unlocked backup that erases instantly and offers no protection from the bug it exists for.
+
+`R2_BACKUP_BUCKET` is optional. Unset, the sweep reports itself unconfigured rather than failing, the same way `lib/email.ts` treats a missing key, because a deployment with no backup is a valid one and a silent success that protects nothing is not.
+
 ---
 
 ## 8. Delivery and access

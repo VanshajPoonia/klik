@@ -48,6 +48,13 @@ const schema = z.object({
   // Delete the fallback once no bucket is on the EU host.
   R2_ENDPOINT: optionalString(z.string().url("R2_ENDPOINT must be a full https URL")),
 
+  // The second bucket the nightly sweep copies into. Optional: without it the
+  // sweep reports that it is unconfigured rather than failing, because a
+  // deployment with no backup is a valid one and a silent success that protects
+  // nothing is not. R2 has no object versioning, so this is the only recovery
+  // path from a bug in `deleteBlobs`. See `lib/backup.ts`.
+  R2_BACKUP_BUCKET: optionalString(z.string().min(1)),
+
   // No trailing slash: QR codes and share links concatenate onto this, and a
   // double slash breaks slug matching in ways that are tedious to trace back.
   APP_URL: optionalString(
