@@ -125,6 +125,10 @@ This is the critical path and the most security-sensitive code in the repo. `POS
 1. **Sign.** `/api/upload` checks the viewer may upload, then presigns an R2 PUT binding the key, the content type **and the content length** (SEC-2: without `ContentLength` a signed URL was an unbounded free-storage grant).
 2. **Client prepares.** The browser reads EXIF capture time off the original, then compresses via canvas, which strips metadata. Videos get a poster frame and a duration extracted on-device (`lib/video-poster.ts`), because asking a browser for `metadata` on an iPhone `.mov` means reaching to the end of the file for the moov atom.
 3. **Client uploads** straight to R2. Bytes never pass through a function.
+
+   **This step depends on the bucket's CORS policy, which is bucket configuration and lives nowhere in this repo.** The PUT sets `Content-Type` explicitly, which makes it a non-simple request, so the browser sends a preflight first. A bucket with no CORS rule fails that preflight and every upload dies as an `onerror` with status 0, which `putWithRetry` reads as a network blip and retries three times before giving up. Nothing in a build, a test or a type check can catch it, and the gallery still loads perfectly, so the only symptom is that uploads stop.
+
+   It bit us on 2026-10-07: OPS-4's new bucket was created through the API, the objects were copied and verified, production cut over cleanly, and uploads were broken until the policy was copied across. The rule needs `content-type` in `allowed.headers` and the app's origins in `allowed.origins`; `https://klik.kreativvantage.com` and `http://localhost:3000` today. **Any new bucket needs this set before it serves traffic.**
 4. **Register.** `/api/e/[slug]/media` then does, in order:
    - `HeadObject` to confirm the object exists and its real size matches the claim.
    - Size against the plan limit.
