@@ -806,6 +806,31 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 
 ### OPS-4. Move the media bucket to a US jurisdiction
 **Size:** S today, L after launch. **Do this before anything else in the plan.**
+
+> **IN PROGRESS 2026-10-07. The bytes have moved; production has not.**
+> `klik-media-us` and `klik-media-backup` exist, both unpinned (jurisdiction
+> `default`) with an ENAM location hint, and all 12 objects are copied and
+> verified against the source by count, total size and content type. `.env.local`
+> points at the new bucket and a signed read through the app's own code path
+> returns 200.
+>
+> **Still to do:** the four Vercel variables (`R2_BUCKET_NAME`, `R2_ENDPOINT`,
+> `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) in both Production and Preview,
+> then a redeploy, then re-run `scripts/copy-bucket.mjs` to sweep up anything
+> uploaded during the window. `klik-media` is untouched and still serving
+> production, so there is no hurry and no broken state to fix.
+>
+> **Note on "US jurisdiction", which this task's title gets slightly wrong.**
+> R2 does offer a `us` jurisdiction, and it was not used. A jurisdiction is a
+> residency guarantee that pins the data and cannot be undone, which is the
+> exact property that made the EU setting expensive. The new buckets take a
+> location hint instead: same placement, no lock. If a customer ever requires
+> contractual US residency, a pinned bucket can be created for them then.
+>
+> **The custom domain and the caching half are deliberately not done.** See the
+> paragraph below about signed cookies: attaching `media.klik.kreativvantage.com`
+> as a plain public domain would hand out permanent unrevocable URLs for private
+> galleries, which is a regression, not a step forward.
 `klik-media` was created as an EU-jurisdiction R2 bucket, which is why `lib/storage.ts` has to use the `.eu.` endpoint. For a US-only product every upload and every video playback crosses the Atlantic, which hurts exactly the 200 MB 4K case OPS-1 is about.
 
 **Jurisdiction is fixed at bucket creation and cannot be changed**, so this means a new bucket plus a migration. Right now that is 12 objects. After launch it is a migration project with downtime, which is why this sits at the top of the build order despite being nobody's idea of exciting work.

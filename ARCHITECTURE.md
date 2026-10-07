@@ -226,6 +226,6 @@ Guest accounts and guest event history. Nested folders. Any AI. The canvas print
 
 - `AUTH_SECRET` is absent from Vercel's **Preview** scope, so preview deployments fail to boot at module load.
 - Preview `DATABASE_URL` and the `R2_*` variables point at **production**.
-- The bucket is EU-jurisdiction for a US-only product, and jurisdiction cannot be changed after creation. OPS-4 is the migration.
+- The bucket is EU-jurisdiction for a US-only product, and jurisdiction cannot be changed after creation. OPS-4 is the migration, and as of 2026-10-07 it is half done: `klik-media-us` exists unpinned in ENAM with every object copied and verified, but Vercel still points at `klik-media`, so production still reads from the EU. `lib/storage.ts` now takes `R2_ENDPOINT` so finishing it is a configuration change.
 - R2 has **no object versioning**. There is no undo for a deletion bug. The planned mitigation is a second bucket the application holds no credentials to delete from, in OPS-4.
 - No staging database. Sixteen migrations have gone straight to the only database that exists.
