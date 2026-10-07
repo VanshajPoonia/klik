@@ -1,14 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "media.klik.kreativvantage.com",
-      },
-    ],
-  },
+  /**
+   * No `images.remotePatterns`. It listed `media.klik.kreativvantage.com`, a
+   * public bucket domain that was never attached and was rejected outright on
+   * 2026-10-07 (ARCHITECTURE.md section 8). Every image this app renders is
+   * same-origin: either a static asset or `/api/e/.../content`, which authorizes
+   * the request before redirecting to a signed URL. Re-adding a remote host here
+   * means media is being fetched without passing that check.
+   */
 
   /**
    * `sharp` is a native module: a thin JS binding that dlopens a libvips shared

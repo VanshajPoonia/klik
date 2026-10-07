@@ -169,6 +169,20 @@ Visibility rules, in the order they are applied:
 - A guest sees `approved` media, plus their own `pending` uploads when moderation is on.
 - Private and password galleries are gated by `canViewGallery` before any of this.
 
+**Every byte is authorized on every request, and that is a closed decision, not a pending optimization.** There is one delivery path: this route, which checks access and then redirects to a signed URL that expires in 60 seconds, or 6 hours for video so range requests survive a viewing session. The bucket is private, has no public custom domain, and is not fronted by a cache.
+
+The obvious optimization is a public R2 custom domain with CDN caching, and `ROADMAP.md` OPS-4 originally carried it. It was rejected on 2026-10-07 because a cached response never reaches this route, and five live controls here depend on being asked every time:
+
+- **Revocation.** `lib/share-access.ts` checks `revokedAt` first on every request precisely because it is the only control a host keeps after a link has left their hands.
+- **View caps.** `maxViews` is counted against `viewCount`, a counter this route increments. A cache hit cannot increment it, so a one-open link becomes unlimited.
+- **Per-media visibility.** `canViewMedia` decides per object, so "this gallery is public, cache it" is not a valid split: a public gallery can hold hidden photos.
+- **Trash.** Soft-deleted media stays visible to managers only. A cached copy serves it to everyone.
+- **Retention.** `resolveEventViewer` reads `galleryAccessDays`, and the plan route moves `retentionUntil`. Cached bytes outlive a downgrade.
+
+`lib/media-access.ts` and `lib/share-access.ts` are pure and shared so the page, the OG image, the content redirect and the download cannot disagree about who may see what. A CDN would be a fifth consumer of those bytes that is structurally unable to call either function.
+
+The cost of this decision is a database round trip per media request, and that is the real ceiling to watch. If a 200-guest gallery becomes slow, the fix is to batch the authorization queries, not to make the bytes public. The latency argument for caching was answered by OPS-4 instead: the bucket is now in ENAM rather than the EU, and storage round trips fell from 437ms to 104ms without weakening a single control above.
+
 `toPublicEvent` in `lib/events.ts` is an **allowlist** of 15 fields. It used to be a denylist, which meant every new column was published to guests by default, and it had already leaked `retentionUntil`, `deletedAt` and `purgedAt`. `lib/events.test.ts` now reads the column list out of the schema and fails if any column is neither published nor explicitly withheld with a reason, so a new column cannot default to public.
 
 ---
