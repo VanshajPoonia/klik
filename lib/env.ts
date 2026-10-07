@@ -35,6 +35,19 @@ const schema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().min(1, "R2_SECRET_ACCESS_KEY is required"),
   R2_BUCKET_NAME: z.string().min(1, "R2_BUCKET_NAME is required"),
 
+  // The S3 endpoint for the bucket above. Optional, and when it is absent
+  // `lib/storage.ts` falls back to R2's EU-jurisdiction host, which is where
+  // `klik-media` lives and must stay reachable.
+  //
+  // It exists so OPS-4 can be done as a configuration change rather than a
+  // deploy. Jurisdiction is fixed at bucket creation, so moving off the EU
+  // means a different bucket at a different host, and having to ship code in
+  // the middle of a data migration is how a cutover ends up half applied. Set
+  // this and R2_BUCKET_NAME together, and nothing else has to change.
+  //
+  // Delete the fallback once no bucket is on the EU host.
+  R2_ENDPOINT: optionalString(z.string().url("R2_ENDPOINT must be a full https URL")),
+
   // No trailing slash: QR codes and share links concatenate onto this, and a
   // double slash breaks slug matching in ways that are tedious to trace back.
   APP_URL: optionalString(

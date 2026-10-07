@@ -3,10 +3,16 @@ import { baseMimeType } from "./media-constants";
 import { env } from "./env";
 
 // klik-media is an EU-jurisdiction bucket, which requires the .eu. endpoint
-// instead of R2's default global one, or every request 403s.
+// instead of R2's default global one, or every request 403s. That is the
+// fallback rather than the rule, so the OPS-4 move to an unpinned bucket is a
+// change to R2_ENDPOINT and R2_BUCKET_NAME rather than a code deploy landing
+// in the middle of a data migration.
+const R2_ENDPOINT =
+  env.R2_ENDPOINT ?? `https://${env.R2_ACCOUNT_ID}.eu.r2.cloudflarestorage.com`;
+
 export const r2 = new S3Client({
   region: "auto",
-  endpoint: `https://${env.R2_ACCOUNT_ID}.eu.r2.cloudflarestorage.com`,
+  endpoint: R2_ENDPOINT,
   credentials: {
     accessKeyId: env.R2_ACCESS_KEY_ID,
     secretAccessKey: env.R2_SECRET_ACCESS_KEY,
