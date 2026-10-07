@@ -212,11 +212,13 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 ## 12. What is not built
 
-> **This section was corrected on 2026-10-06, later than the header's last-verified commit.** Four things it listed as missing had in fact shipped: self-serve signup, per-photo visibility, per-photo share links and transactional email. The rest of this file has not been re-read against the code since `0e7fe18`.
+> **This section was corrected on 2026-10-06 and again on 2026-10-07, later than the header's last-verified commit.** Four things it listed as missing had in fact shipped: self-serve signup, per-photo visibility, per-photo share links and transactional email. The rest of this file has not been re-read against the code since `0e7fe18`.
 
 Guest accounts and guest event history. Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging, since Sentry is wired but has no DSN. A background job runner. Video transcoding, and video metadata stripping with it.
 
 **Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
+
+**The activation loop, 2026-10-07.** Assigning a plan through `PATCH /api/admin/clients/[userId]/plan` is the single action that grants capability: it sets `activated_at`, sends the organizer their dashboard link and the steps through `lib/activation-notice.ts`, and stamps `users.activation_email_sent_at` only once the provider has accepted. Every outcome, including a refusal, is appended to `account_timeline` (`drizzle/0015_account_timeline.sql`), which is history rather than current state. `lib/timeline.ts` derives a seven-step chain from it for `/admin` and stores none of it. The table has no `CHECK` on `kind` on purpose, because a rejected insert loses the record this table exists to keep.
 
 `ROADMAP.md` has all of it with task IDs and an order.
 
@@ -226,4 +228,4 @@ Guest accounts and guest event history. Nested folders. Any AI. The canvas print
 - Preview `DATABASE_URL` and the `R2_*` variables point at **production**.
 - The bucket is EU-jurisdiction for a US-only product, and jurisdiction cannot be changed after creation. OPS-4 is the migration.
 - R2 has **no object versioning**. There is no undo for a deletion bug. The planned mitigation is a second bucket the application holds no credentials to delete from, in OPS-4.
-- No staging database. Nine migrations have gone straight to the only database that exists.
+- No staging database. Sixteen migrations have gone straight to the only database that exists.

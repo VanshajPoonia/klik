@@ -33,7 +33,7 @@
 - Nested folders (MED-4). Per-photo visibility, share links and revocable access **are** built: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
 - Any AI beyond client-side CSS filters.
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
-- Error tracking (F-9 shipped structured logging; Sentry is wired but has no DSN) and a background job runner, which SEC-2's orphan reaper and ACT-3's activation email both need.
+- Error tracking (F-9 shipped structured logging; Sentry is wired but has no DSN) and a background job runner, which SEC-2's orphan reaper and ACT-4's request queue both need. The activation email no longer waits on it: it sends inline from the plan route and records the outcome either way, which is the right trade for one mail a superadmin is watching send.
 
 
 ## Contents
@@ -1012,9 +1012,9 @@ One person, so nothing below assumes parallel work, and each block ends somewher
 **Block 2, activation (replaces the old payments block)**
 7. **ACT-1** entitlement ledger. This is the migration that retires `users.plan_key`, so re-read SEC-1 **and** architecture note 2 first: the plpgsql plan-limit triggers read that column directly and must be resolved here, not later.
 8. **ACT-2** admin activation surface, **ACT-3** the organizer's inactive-event experience
-9. **F-5** job runner, **F-8** transactional email, then **ACT-4** the activation request queue
+9. ~~**F-8** transactional email~~ **DONE 2026-10-06**, **F-5** job runner, then **ACT-4** the activation request queue
 
-**You could stop here and run the business by hand, which is the plan.**
+**You could stop here and run the business by hand, which is the plan.** As of 2026-10-07 you genuinely can, and that is a change from when this line was written. Signup takes the money through a Payment Link, assigning a plan on `/admin` grants capability and emails the organizer their dashboard link and the steps, and `account_timeline` keeps the record of who granted what and whether the mail landed. What the rest of ACT adds is a ledger a webhook may write to, per-event scope instead of per-account, and a queue instead of a WhatsApp message.
 
 **Block 3, the product itself**
 10. **ACC-1** through **ACC-5** guest accounts and signup
