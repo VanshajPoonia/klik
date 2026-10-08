@@ -567,6 +567,8 @@ Evolve `albums` rather than adding a parallel concept. Rename the user-facing la
 - Guest gallery gets folder tabs when the event has more than one folder, which is how folders earn their keep.
 
 ### MED-5. Bulk operations
+**DONE 2026-10-08** (`app/api/events/[id]/media/bulk/route.ts`, `test/bulk.dbtest.ts`), except the selection share link, which waits on album-scope shares. The selection bar gains an actions menu: hide, show, link only, move to a folder, reject, delete. One statement per action, scoped to the event in the WHERE clause so foreign ids match nothing, with the same capabilities as the single-photo controls; held photos are skipped and the bar says how many could not change. Delete is the soft delete with an Undo toast, which restores the same ids and puts them back on screen without a reload; the trash still holds them for 30 days after. Download of a selection already existed and now uses MED-7 above 400 MB.
+
 **Size:** M. **Depends on:** MED-1, MED-4.
 Selection mode already partially exists in the dashboard grid. Extend to: set visibility, move to folder, approve or reject, delete, create one share link for the selection (as an ad-hoc album), download selection as ZIP. Operate in batches server-side with a progress response, and make delete undoable for 30 seconds before the R2 objects are actually removed.
 

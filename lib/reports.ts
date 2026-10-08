@@ -211,6 +211,20 @@ export async function resolveReports(
   return rows.length;
 }
 
+/** The same, for a whole selection in one statement (MED-5). */
+export async function resolveReportsFor(
+  mediaIds: string[],
+  { byUserId, resolution }: { byUserId: string; resolution: string },
+): Promise<number> {
+  if (mediaIds.length === 0) return 0;
+  const rows = await db
+    .update(mediaReports)
+    .set({ resolvedAt: sql`now()`, resolvedByUserId: byUserId, resolution: resolution.slice(0, 300) })
+    .where(and(inArray(mediaReports.mediaId, mediaIds), isNull(mediaReports.resolvedAt)))
+    .returning({ id: mediaReports.id });
+  return rows.length;
+}
+
 /** Superadmin only: lift a hold, for a report that turned out to be false. */
 export async function releaseLegalHold(mediaId: string): Promise<boolean> {
   const rows = await db

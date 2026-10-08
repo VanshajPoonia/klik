@@ -259,6 +259,60 @@ export function EventDashboard({
     }
   }
 
+  // MED-5: actions on the whole selection. Deleted items are kept here so Undo
+  // can put them back without a reload; the server keeps them in the trash.
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [undo, setUndo] = useState<{ items: DashboardMedia[]; label: string } | null>(null);
+
+  type BulkRequest =
+    | { action: "approve" | "reject" | "delete" | "restore" }
+    | { action: "visibility"; visibility: MediaVisibility }
+    | { action: "move"; albumId: string | null };
+
+  async function runBulk(request: BulkRequest, ids: string[]) {
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setMediaError(null);
+    try {
+      const response = await fetch(`/api/events/${event.id}/media/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...request, ids }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error ?? "Could not update the selection.");
+      const changed = new Set<string>(data.changed ?? []);
+      if (request.action === "delete") {
+        const removed = mediaItems.filter((item) => changed.has(item.id));
+        setMediaItems((items) => items.filter((item) => !changed.has(item.id)));
+        setUndo({ items: removed, label: `Moved ${removed.length} to the trash` });
+        clearSelection();
+      } else if (request.action === "restore") {
+        setMediaItems((items) => [...(undo?.items.filter((item) => changed.has(item.id)) ?? []), ...items]);
+        setUndo(null);
+      } else {
+        setMediaItems((items) =>
+          items.map((item) => {
+            if (!changed.has(item.id)) return item;
+            if (request.action === "approve") return { ...item, status: "approved" as MediaStatus };
+            if (request.action === "reject") return { ...item, status: "rejected" as MediaStatus };
+            if (request.action === "visibility") return { ...item, visibility: request.visibility };
+            if (request.action === "move") return { ...item, albumId: request.albumId };
+            return item;
+          }),
+        );
+        if (request.action === "reject") clearSelection();
+      }
+      if (changed.size < ids.length && request.action !== "restore") {
+        setMediaError(`${ids.length - changed.size} could not be changed. Anything Klik is reviewing stays as it is.`);
+      }
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "Could not update the selection.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   /** TRS-1: the host looked at a reported photo and is keeping it. Reports on
    *  something they delete are closed by the delete itself being the answer. */
   async function clearReports(mediaId: string) {
@@ -587,7 +641,7 @@ export function EventDashboard({
       {tab === "gallery" && selectionMode && selectedItems.length > 0 && (
         <aside
           className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-3xl flex-wrap items-center gap-3 rounded-2xl bg-paper/95 p-3 pl-4 text-canvas backdrop-blur sm:rounded-full"
-          aria-label="Selected media download"
+          aria-label="Selected media"
         >
           <div className="mr-auto min-w-0">
             <p className="text-sm font-semibold">
@@ -602,6 +656,49 @@ export function EventDashboard({
                 : " in one ZIP file"}
             </p>
           </div>
+          <label className="sr-only" htmlFor="bulk-action">
+            Do something with the selection
+          </label>
+          <select
+            id="bulk-action"
+            value=""
+            disabled={bulkBusy}
+            onChange={(change) => {
+              const value = change.target.value;
+              const ids = selectedItems.map((item) => item.id);
+              if (value === "delete") {
+                if (window.confirm(`Move ${ids.length} to the trash? You can undo, and restore from the trash for 30 days.`)) {
+                  void runBulk({ action: "delete" }, ids);
+                }
+              } else if (value === "reject") void runBulk({ action: "reject" }, ids);
+              else if (value === "private" || value === "gallery" || value === "link") {
+                void runBulk({ action: "visibility", visibility: value }, ids);
+              } else if (value.startsWith("move:")) {
+                const albumId = value.slice(5);
+                void runBulk({ action: "move", albumId: albumId === "none" ? null : albumId }, ids);
+              }
+            }}
+            className="min-h-10 rounded-full border border-canvas/20 bg-transparent px-3 text-sm text-canvas"
+          >
+            <option value="" disabled>
+              {bulkBusy ? "Working…" : "Actions"}
+            </option>
+            <option value="private">Hide from guests</option>
+            <option value="gallery">Show in the gallery</option>
+            <option value="link">Link only</option>
+            {canManageAlbums && albums.length > 0 && (
+              <optgroup label="Move to folder">
+                <option value="move:none">Main gallery</option>
+                {albums.map((album) => (
+                  <option key={album.id} value={`move:${album.id}`}>
+                    {album.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <option value="reject">Reject</option>
+            <option value="delete">Delete</option>
+          </select>
           <button
             type="button"
             onClick={clearSelection}
@@ -646,6 +743,28 @@ export function EventDashboard({
             </form>
           ))}
         </aside>
+      )}
+
+      {undo && (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full bg-paper/95 py-2 pl-5 pr-2 text-sm text-canvas backdrop-blur"
+        >
+          <span>{undo.label}</span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => void runBulk({ action: "restore" }, undo.items.map((item) => item.id))}
+              className="min-h-10 rounded-full bg-canvas px-4 font-medium text-paper"
+            >
+              Undo
+            </button>
+            <button type="button" onClick={() => setUndo(null)} className="min-h-10 rounded-full px-3 text-canvas/70">
+              Dismiss
+            </button>
+          </div>
+        </div>
       )}
 
       {lightboxIndex >= 0 && (
