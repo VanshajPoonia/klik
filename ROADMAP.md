@@ -801,6 +801,8 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 ## Phase VEN: Venue surfaces
 
 ### VEN-1. Live venue display
+**DONE 2026-10-08** (`app/e/[slug]/live/page.tsx`, `components/live/live-display.tsx`). Opened from the event page by its team on a Premium or Venue live event; never by a guest, because a screen in a room is a broadcast. It shows only what a guest would see, never hidden or private photos, even though whoever opened it could. Photos crossfade every 7 seconds, new uploads join after a 60-second delay so a host can pull one before it is ten feet tall, and removals or hides leave the screen within one poll via the changes endpoint. A QR code in the corner says "Scan to add yours". It holds a screen wake lock, hides the cursor and controls when idle, refreshes its signed URLs every 10 minutes for an all-night run, and turns its fade off for reduced motion. Videos show their poster still.
+
 **Size:** M. `/e/[slug]/live` as a full-screen auto-advancing slideshow for a projector or TV, with the QR in a corner, new photos animating in, and a moderation-safe delay. The slideshow component already exists in the lightbox; this is a different surface for it. Venues will ask for this by name.
 
 ### VEN-2. Kiosk mode

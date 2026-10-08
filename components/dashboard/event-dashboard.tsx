@@ -4,7 +4,7 @@ import type { AssignableRole } from "@/lib/permissions";
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Download, X } from "lucide-react";
+import { ArrowLeft, Check, Download, X, MonitorPlay } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MediaGrid, type DashboardMedia } from "@/components/dashboard/media-grid";
@@ -334,6 +334,19 @@ export function EventDashboard({
             <p className="mt-1 text-sm text-muted">/e/{event.slug}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {canSlideshow && license.state === "live" && (
+              // VEN-1. A new tab, because it goes on the laptop plugged into the
+              // projector, and the dashboard should stay where it was.
+              <a
+                href={`/e/${event.slug}/live`}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line px-4 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt"
+              >
+                <MonitorPlay className="h-4 w-4" aria-hidden="true" />
+                Live display
+              </a>
+            )}
             {approved.length > 0 && streamsInline && (
               <a
                 href={`/api/events/${event.id}/download`}

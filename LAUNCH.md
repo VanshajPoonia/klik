@@ -183,3 +183,4 @@ early if you would rather not be asked mid-task.
 | 2026-10-08 | Trash and restore are on screen, for photos, folders and whole events. Deleting an event takes typing its name |
 | 2026-10-08 | Storage limits per event (25 GB Event, 100 GB Premium and Venue) with a meter, warnings at 75%, 90% and full, and reminders 30, 7 and 1 days before a gallery closes |
 | 2026-10-08 | Large videos upload in parts that survive wifi drops, instead of restarting from zero |
+| 2026-10-08 | **VEN-1**: a live slideshow for a projector or TV, with a QR code in the corner and a one-minute delay before new photos appear |
