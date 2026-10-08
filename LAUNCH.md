@@ -91,18 +91,27 @@ one line in `vercel.json`.
 **The highest-value hour you can spend on this.** Every test so far has been
 synthetic: API calls and curl. No human has been through it.
 
-On a real phone, as a stranger would:
+On a real phone, as a stranger would. **Use a fresh account and a fresh event:**
+all four test events in production are past their 30-day upload window (created
+in July), so uploads to them are correctly refused.
 
 1. Open the pricing page, pick a plan
 2. Sign up, pay
-3. Wait for the activation email, check it actually arrives
-4. Open the dashboard from the link in that email
-5. Create an event
-6. Print the QR sign
-7. Scan it on a second phone, agree to the consent notice
-8. Upload a photo and a video
-9. View the gallery, open the lightbox
-10. Download the zip
+3. Create your event straight away: it saves as a **draft**, and the page says
+   what it is waiting for. Press **Ask Klik to activate it**
+4. Check the request email reached `ALERT_EMAIL`, and that the draft is at the
+   top of `/admin` under **Waiting to go live**
+5. On `/admin`, grant that account a pass with a reason. The draft should go
+   live, and the access email should name the event
+6. Open the dashboard from the link in that email
+7. Print the QR sign
+8. Scan it on a second phone, agree to the consent notice
+9. Upload a photo and a video. The tiles should appear within seconds on the
+   first phone too
+10. On the first phone, delete one of them. It should vanish from the second
+    phone within a few seconds, without a reload
+11. View the gallery, open the lightbox
+12. Download the zip
 
 Send Claude anything that breaks. The CORS bug found this week is proof that
 this category of failure exists and that no test suite catches it.
@@ -152,3 +161,5 @@ early if you would rather not be asked mid-task.
 | 2026-10-08 | **F-5** background job queue live, with the **SEC-2** orphan reaper as its first job |
 | 2026-10-08 | Gallery rebuilt for a 200-guest wedding: thumbnails, one request per page instead of one per photo, and deleted or hidden photos now vanish from guests' phones without a reload |
 | 2026-10-08 | QR sign downloads protected from the native-library failure that took uploads down on 2 October |
+| 2026-10-08 | **ACT-1 to ACT-4**: plans granted through a ledger with a reason. A $39 pass now licenses one event, not one a month for ever. Events start as drafts, organizers can ask for activation, and you get an email when they do |
+| 2026-10-08 | Gallery password guessing rate limited |
