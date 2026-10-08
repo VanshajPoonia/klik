@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { events } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { eraseGuestUpload } from "@/lib/erasure";
@@ -18,11 +19,7 @@ export async function DELETE(
   { params }: { params: Promise<{ slug: string; mediaId: string }> },
 ) {
   const { slug, mediaId } = await params;
-  const [event] = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.slug, slug), isNull(events.deletedAt)))
-    .limit(1);
+  const event = (await findEventBySlug(slug))?.event;
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const limit = await consume(`guest-delete:ip:${clientIp(request)}`, 60, 60 * 60);

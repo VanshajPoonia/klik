@@ -278,6 +278,30 @@ export const events = pgTable(
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
 
+/**
+ * QR-1: every address an event used to have, which keeps working. The event's
+ * current address is `events.slug`. Uniqueness across both, and permanent
+ * reservation after an event is deleted, are enforced by triggers in
+ * drizzle/0023_slugs.sql. See lib/slugs.ts.
+ */
+export const eventSlugs = pgTable(
+  "event_slugs",
+  {
+    slug: text("slug").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("event_slugs_event_idx").on(table.eventId)],
+);
+
+/** Hashes of every address of every deleted event. Never released. */
+export const slugReservations = pgTable("slug_reservations", {
+  slugHash: text("slug_hash").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const eventCoHosts = pgTable(
   "event_co_hosts",
   {

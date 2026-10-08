@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { extensionForMime, r2 } from "@/lib/storage";
@@ -18,7 +19,7 @@ export async function GET(
   { params }: { params: Promise<{ slug: string; mediaId: string }> },
 ) {
   const { slug, mediaId } = await params;
-  const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
+  const event = (await findEventBySlug(slug))?.event;
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const [item] = await db

@@ -6,6 +6,7 @@ import { events } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
 import { getAppUrl } from "@/lib/env";
 import { eventLicenseState, eventPlan } from "@/lib/license";
+import { QR_STYLES, safeColors, styledQrSvg, verifyScannable } from "@/lib/qr-style";
 import { canCustomizeQr, canDownloadQrSign } from "@/lib/plans";
 
 export const runtime = "nodejs";
@@ -96,6 +97,45 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       headers: {
         "Content-Type": "image/png",
         "Content-Disposition": `attachment; filename="klik-${event.slug}-sign.png"`,
+      },
+    });
+  }
+
+  // QR-2: a styled code, on plans with QR customization. Decoded after it is
+  // drawn; if it does not decode, the classic code goes out instead and says
+  // so in a header, because a sign that does not scan is the one failure this
+  // feature must never cause.
+  const requestedStyle = url.searchParams.get("style");
+  const style = QR_STYLES.find((candidate) => candidate === requestedStyle) ?? "classic";
+  if (style !== "classic") {
+    const plan = eventPlan(event);
+    if (!canCustomizeQr(plan.key)) {
+      return NextResponse.json({ error: "Styled QR codes are part of Klik Premium" }, { status: 403 });
+    }
+    const colors = safeColors(event.accentColor, "#ffffff");
+    let svg = styledQrSvg({ text: target, style, foreground: colors.foreground, background: colors.background, size });
+    let fellBack = false;
+    if (!(await verifyScannable(svg, target))) {
+      svg = styledQrSvg({ text: target, style: "classic", foreground: "#050505", background: "#ffffff", size });
+      fellBack = true;
+    }
+    const headers: Record<string, string> = fellBack ? { "X-Klik-Qr-Fallback": "1" } : {};
+    if (format === "svg") {
+      return new NextResponse(svg, {
+        headers: {
+          ...headers,
+          "Content-Type": "image/svg+xml",
+          "Content-Disposition": `attachment; filename="klik-${event.slug}.svg"`,
+        },
+      });
+    }
+    const sharp = (await import("sharp")).default;
+    const png = await sharp(Buffer.from(svg)).png().toBuffer();
+    return new NextResponse(new Uint8Array(png), {
+      headers: {
+        ...headers,
+        "Content-Type": "image/png",
+        "Content-Disposition": `attachment; filename="klik-${event.slug}.png"`,
       },
     });
   }

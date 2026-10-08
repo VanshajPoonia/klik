@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { events, guests } from "@/lib/schema";
 import { isExpired } from "@/lib/access";
 import { CURRENT_CONSENT } from "@/lib/consent";
@@ -26,7 +27,7 @@ const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
+  const event = (await findEventBySlug(slug))?.event;
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   // A draft has no guests yet: it has not gone live, and its QR code does not
   // exist. Same answer the gallery page gives, so the two cannot disagree.

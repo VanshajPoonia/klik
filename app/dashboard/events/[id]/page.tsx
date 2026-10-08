@@ -10,6 +10,7 @@ import { eventLicenseState, eventPlan } from "@/lib/license";
 import { getAccountEntitlements } from "@/lib/entitlements";
 import { openReportCounts } from "@/lib/reports";
 import { eventUsage } from "@/lib/usage";
+import { listFormerSlugs } from "@/lib/slugs";
 import {
   canCustomizeGallery,
   canCustomizeQr,
@@ -48,7 +49,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
 
   const plan = eventPlan(event);
   const licenseState = eventLicenseState(event);
-  const reportCounts = await openReportCounts(event.id);
+  const [reportCounts, formerSlugs] = await Promise.all([
+    openReportCounts(event.id),
+    listFormerSlugs(event.id),
+  ]);
   const [mediaRows, albumRows, coHostRows, clientRows, held] = await Promise.all([
     db
       .select()
@@ -107,6 +111,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canManageCoHosts={canUseCoHosts(plan.key) && session.user.id === event.ownerId}
         canManageShares={can(actor.role, "shares.manage")}
         canManageTrash={can(actor.role, "trash.manage")}
+        addressing={plan.key !== "event" ? { origin: getAppUrl(), formerSlugs } : null}
         usage={(() => {
           const usage = eventUsage(event, plan);
           return {

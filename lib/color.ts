@@ -25,3 +25,9 @@ export function isLightColor(hex: string): boolean {
 export function readableOn(hex: string): string {
   return isLightColor(hex) ? "#050505" : "#ffffff";
 }
+
+/** WCAG contrast ratio between two #rrggbb colors, from 1 to 21. */
+export function contrastRatio(a: string, b: string): number {
+  const [light, dark] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (light + 0.05) / (dark + 0.05);
+}

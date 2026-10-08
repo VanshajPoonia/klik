@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { canViewMedia } from "@/lib/media-access";
@@ -42,14 +43,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     return NextResponse.json({ error: "since must be an ISO timestamp" }, { status: 400 });
   }
 
-  const [row] = await db
-    .select({ event: events, dbNow: sql<string>`now()` })
-    .from(events)
-    .where(and(eq(events.slug, slug), isNull(events.deletedAt)))
-    .limit(1);
-  if (!row) return NextResponse.json({ error: "Not found" }, { status: 404, headers: noStore });
-  const { event } = row;
-  const at = new Date(row.dbNow).toISOString();
+  // QR-1: any address the event has had, current or former.
+  const found = await findEventBySlug(slug);
+  if (!found) return NextResponse.json({ error: "Not found" }, { status: 404, headers: noStore });
+  const { event } = found;
+  const [clock] = await db.select({ dbNow: sql<string>`now()` }).from(events).limit(1);
+  const at = new Date(clock?.dbNow ?? Date.now()).toISOString();
 
   const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {

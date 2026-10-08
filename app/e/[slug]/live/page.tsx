@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { events } from "@/lib/schema";
 import { requireEventManagerSession } from "@/lib/roles";
 import { eventLicenseState, eventPlan } from "@/lib/license";
@@ -24,11 +25,7 @@ export const metadata: Metadata = { title: "Live display", robots: { index: fals
  */
 export default async function LiveDisplayPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [event] = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.slug, slug), isNull(events.deletedAt)))
-    .limit(1);
+  const event = (await findEventBySlug(slug))?.event;
   if (!event) notFound();
 
   const manager = await requireEventManagerSession(event.id, event.ownerId);

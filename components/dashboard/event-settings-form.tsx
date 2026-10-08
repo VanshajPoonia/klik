@@ -89,8 +89,11 @@ export function EventSettingsForm({
   canDeleteEvent = false,
   approvedMedia = [],
   clients = [],
+  addressing = null,
 }: {
   event: OrganizerEvent;
+  /** QR-1: present when the plan allows a custom address. */
+  addressing?: { origin: string; formerSlugs: string[] } | null;
   canManageClients?: boolean;
   canCustomizeGallery?: boolean;
   canCustomizeQr?: boolean;
@@ -118,6 +121,7 @@ export function EventSettingsForm({
   const [venueFeatured, setVenueFeatured] = useState(event.venueFeatured);
   // CAM-4. The develop time is edited in the browser's own time zone, which is
   // the host's, and sent as an instant.
+  const [slug, setSlug] = useState(event.slug);
   const [disposableMode, setDisposableMode] = useState(event.disposableMode);
   const [shotsPerGuest, setShotsPerGuest] = useState(event.shotsPerGuest);
   const [developsAt, setDevelopsAt] = useState(() => toDateTimeLocalValue(event.developsAt));
@@ -175,6 +179,7 @@ export function EventSettingsForm({
           backgroundColor: canCustomizeGallery ? backgroundColor : undefined,
           qrTemplate: canCustomizeQr ? qrTemplate : undefined,
           venueFeatured: canUseVenueHub ? venueFeatured : undefined,
+          slug: addressing && slug.trim() !== event.slug ? slug.trim() : undefined,
           disposableMode,
           shotsPerGuest,
           developsAt: developsAt ? new Date(developsAt).toISOString() : null,
@@ -367,6 +372,32 @@ export function EventSettingsForm({
             <option value="minimal">Minimal</option>
             <option value="bold">Bold</option>
           </select>
+        </Field>
+      )}
+
+      {addressing && (
+        <Field
+          label="Gallery address"
+          htmlFor="gallery-address"
+          hint="Changing it keeps every old address working, so signs you already printed still scan."
+        >
+          <div className="flex items-center overflow-hidden rounded-xl border border-canvas-line bg-canvas focus-within:border-volt/60">
+            <span className="shrink-0 pl-3.5 text-sm text-muted">{addressing.origin.replace(/^https?:\/\//, "")}/e/</span>
+            <input
+              id="gallery-address"
+              className="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-sm text-paper focus:outline-none"
+              value={slug}
+              onChange={(change) => setSlug(change.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
+              maxLength={60}
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+          </div>
+          {addressing.formerSlugs.length > 0 && (
+            <p className="mt-1.5 text-xs text-muted">
+              Still working: {addressing.formerSlugs.map((former) => `/e/${former}`).join(", ")}
+            </p>
+          )}
         </Field>
       )}
 

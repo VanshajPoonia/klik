@@ -698,6 +698,8 @@ Score each photo for recap-worthiness: sharpness (AI-7), faces present and looki
 ## Phase QR: QR control and the in-app print studio
 
 ### QR-1. Many slugs, one gallery (permanent aliases)
+**DONE 2026-10-08** (`drizzle/0023_slugs.sql`, `lib/slugs.ts`, `test/slugs.dbtest.ts`). `events.slug` stays the current address and `event_slugs` holds every former one, all of which keep serving the gallery directly (no redirect) with a canonical link to the current address. **No address is ever released**: when an event is deleted, a trigger turns all its addresses into hashed `slug_reservations` (hashed, so an erasure does not leave "anna-and-leo" in plain text), and triggers on both tables refuse any address in use or reserved. Changing an address is one statement, so the old one is never briefly free. Custom addresses on Premium and Venue, from settings, which lists the old addresses that still work. The reserved-word list lives in `lib/slugs.ts` until ID-1 shares one.
+
 **Size:** M. This is "should be able to change the QR code". **Decision (2026-09-30): aliases are permanent, never expiring.**
 A QR encodes `${APP_URL}/e/${slug}`, so renaming means a new slug, and printed signage already in the world would break. The model is therefore not "rotate and retire" but **many slugs pointing at one gallery, all permanently reserved to that event**:
 - Table `event_slugs` (slug primary key, event_id, is_primary boolean, created_at, retired_at nullable). Every slug an event has ever held stays in this table forever. `events.slug` becomes a denormalised pointer to the current primary, or is dropped in favour of a `where is_primary` lookup.
@@ -709,6 +711,8 @@ A QR encodes `${APP_URL}/e/${slug}`, so renaming means a new slug, and printed s
 - Migration: backfill one `event_slugs` row per existing event with `is_primary = true`.
 
 ### QR-2. Styled QR codes
+**DONE 2026-10-08** (`lib/qr-style.ts`). Classic, dots and rounded, drawn as SVG from the code's own module matrix in the event's accent when it has the contrast a camera needs (otherwise dark on white). **Every styled code is decoded with jsQR before it is served**, and one that does not decode is replaced by the classic code. That guard earned its place immediately: the first dot and rounded designs did not decode, and keeping the code's structural modules (timing, alignment, format) square fixed it, verified across three URLs at four sizes. No logo yet, which would need an upload path for brand assets.
+
 **Size:** M.
 Replace the plain `qrcode` render for display purposes with a styled renderer: rounded or dot modules, custom module and background colour drawn from the event's accent colour, optional logo in the centre, optional frame with a call-to-action caption ("Scan to share your photos").
 - Use error correction level H whenever a logo is overlaid, and cap logo coverage at 20 percent of the code area.
@@ -716,6 +720,8 @@ Replace the plain `qrcode` render for display purposes with a styled renderer: r
 - Keep the plain high-contrast version as the default and as a one-click fallback.
 
 ### QR-3. Share the QR properly
+**DONE 2026-10-08.** "Share QR code" sends the image itself through the phone's share sheet (straight into a WhatsApp group), with a download fallback; prefilled WhatsApp, Messages and email links; and a 1080x1920 story image. The story and the printable sign are now **drawn in the browser** (`lib/qr-compose.ts`) with the page's own Fraunces and Geist, because the server-rendered sign depended on fonts a Vercel function does not have. Not done: a short link, and the "add to home screen" card.
+
 **Size:** S. This is "and share the QR code".
 - Web Share API with the PNG as an actual file (`navigator.share({ files: [...] })`) so it goes straight into WhatsApp as an image.
 - Direct WhatsApp, Messages, and email intents with pre-written copy.

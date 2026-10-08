@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { albums, events, guests, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
@@ -31,7 +32,7 @@ import { GuestGallery } from "@/components/guest/guest-gallery";
 
 // Shared by the page and its metadata so one request runs one query.
 const getEventBySlug = cache(async (slug: string) => {
-  const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
+  const event = (await findEventBySlug(slug))?.event;
   return event ?? null;
 });
 
@@ -42,7 +43,15 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const event = await getEventBySlug(slug);
-  return { title: event?.name, robots: { index: false } };
+  // QR-1: a former address serves the gallery directly rather than
+  // redirecting, because a different URL appearing in a guest's address bar
+  // looks like a phishing hop on a phone. The canonical link says which address
+  // is current, for anything that cares.
+  return {
+    title: event?.name,
+    robots: { index: false },
+    alternates: event && event.slug !== slug ? { canonical: `/e/${event.slug}` } : undefined,
+  };
 }
 
 export default async function GuestEventPage({ params }: { params: Promise<{ slug: string }> }) {

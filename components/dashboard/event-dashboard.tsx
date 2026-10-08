@@ -44,6 +44,7 @@ export function EventDashboard({
   canDeleteEvent = false,
   canManageTrash = false,
   usage = null,
+  addressing = null,
   license = { state: "live", canGoLive: false, requestedAt: null },
   albums = [],
   coHosts = [],
@@ -65,6 +66,7 @@ export function EventDashboard({
   canDeleteEvent?: boolean;
   canManageTrash?: boolean;
   usage?: UsageSummary | null;
+  addressing?: { origin: string; formerSlugs: string[] } | null;
   license?: EventLicenseSummary;
   albums?: Album[];
   coHosts?: Array<{
@@ -533,6 +535,7 @@ export function EventDashboard({
               canDeleteEvent={canDeleteEvent}
               approvedMedia={approved}
               clients={clients}
+              addressing={addressing}
             />
             {(canManageAlbums || canManageCoHosts) && (
               <div className="space-y-5">
@@ -572,7 +575,11 @@ export function EventDashboard({
               eventId={event.id}
               slug={event.slug}
               guestUrl={guestUrl}
+              eventName={event.name}
+              accent={canCustomizeGallery ? event.accentColor : "#edee00"}
+              template={canCustomizeQr ? event.qrTemplate : "classic"}
               canDownloadSign={canDownloadQrSign}
+              canStyle={canCustomizeQr}
             />
           ))}
       </div>

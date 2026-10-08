@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { events, media, REPORT_REASONS } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { canViewMedia } from "@/lib/media-access";
@@ -34,11 +35,7 @@ export async function POST(
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a reason" }, { status: 400 });
 
-  const [event] = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.slug, slug), isNull(events.deletedAt)))
-    .limit(1);
+  const event = (await findEventBySlug(slug))?.event;
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed || (!viewer.guestId && !viewer.ownerSession)) {

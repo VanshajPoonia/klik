@@ -14,6 +14,7 @@ import { eraseEvent, LegalHoldError } from "@/lib/erasure";
 import { requireEventCapability, requireEventManagerSession, requireOwnerSession } from "@/lib/roles";
 import type { EventCapability } from "@/lib/permissions";
 import { describeLicenseRefusal, eventPlan } from "@/lib/license";
+import { changeEventSlug, validateCustomSlug } from "@/lib/slugs";
 import {
   canCustomizeGallery,
   canCustomizeQr,
@@ -45,6 +46,9 @@ const patchSchema = z.object({
   expiresAt: z.coerce.date().nullable().optional(),
   // CAM-4. Developing early is `developsAt: <now>`; there is no separate verb,
   // because "develop now" and "develop at this time" are the same setting.
+  // QR-1: a custom address. Validated by lib/slugs.ts, not here, so the rules
+  // live in one place.
+  slug: z.string().max(80).optional(),
   disposableMode: z.boolean().optional(),
   shotsPerGuest: z.number().int().min(1).max(200).optional(),
   developsAt: z.coerce.date().nullable().optional(),
@@ -173,7 +177,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  const { password, ...restInput } = parsed.data;
+  // QR-1: a new address, on plans that offer it. Applied on its own, before the
+  // rest, because it is one atomic statement that keeps the old address alive.
+  const { slug: requestedSlug, ...withoutSlug } = parsed.data;
+  if (requestedSlug !== undefined && requestedSlug.trim().toLowerCase() !== event.slug) {
+    if (plan.key === "event") {
+      return NextResponse.json(
+        { error: "A custom gallery address is part of Klik Premium and Klik Venue" },
+        { status: 403 },
+      );
+    }
+    const check = validateCustomSlug(requestedSlug);
+    if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 });
+    const changed = await changeEventSlug(event.id, check.slug);
+    if (!changed.ok) return NextResponse.json({ error: changed.reason }, { status: 409 });
+  }
+
+  const { password, ...restInput } = withoutSlug;
   const rest = selectedClient
     ? {
         ...restInput,

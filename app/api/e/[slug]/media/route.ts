@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import heicConvert from "heic-convert";
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { albums, events, media } from "@/lib/schema";
 import { canUpload } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
@@ -132,7 +133,7 @@ async function sanitizePhoto(
 }
 
 async function loadEvent(slug: string) {
-  const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
+  const event = (await findEventBySlug(slug))?.event;
   return event ?? null;
 }
 

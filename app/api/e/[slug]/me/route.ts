@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
+import { findEventBySlug } from "@/lib/slugs";
 import { events } from "@/lib/schema";
 import { guestCookieName, verifyGuestSession } from "@/lib/guest";
 import { eraseGuest, LegalHoldError } from "@/lib/erasure";
@@ -18,11 +19,7 @@ import { eraseGuest, LegalHoldError } from "@/lib/erasure";
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [event] = await db
-    .select()
-    .from(events)
-    .where(and(eq(events.slug, slug), isNull(events.deletedAt)))
-    .limit(1);
+  const event = (await findEventBySlug(slug))?.event;
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const cookieStore = await cookies();
