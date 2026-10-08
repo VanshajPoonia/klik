@@ -53,6 +53,10 @@ export const JOB_PAYLOADS = {
   "notify.retention": z.object({}),
   /** F-4: recompute the usage counters from the media rows. */
   "usage.reconcile": z.object({}),
+  /** MED-8: remove the location a phone wrote into one video. */
+  "media.scrub_video": z.object({ mediaId: z.string().min(1).max(64) }),
+  /** MED-8: queue a scrub for every video that has not had one. */
+  "media.backfill_video_scrubs": z.object({}),
 } as const;
 
 export type JobKind = keyof typeof JOB_PAYLOADS;
@@ -61,6 +65,11 @@ export type JobPayload<K extends JobKind> = z.infer<(typeof JOB_PAYLOADS)[K]>;
 /** Queues a thumbnail for one media row, at most once while one is pending. */
 export function enqueueThumbnail(mediaId: string) {
   return enqueue("media.thumbnail", { mediaId }, { dedupeKey: `thumb:${mediaId}`, maxAttempts: 3 });
+}
+
+/** Queues the location scrub for one video, at most once while one is pending. */
+export function enqueueVideoScrub(mediaId: string) {
+  return enqueue("media.scrub_video", { mediaId }, { dedupeKey: `scrub:${mediaId}`, maxAttempts: 4 });
 }
 
 export function isJobKind(kind: string): kind is JobKind {
@@ -174,6 +183,8 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     { kind: "exports.expire", payload: {} },
     { kind: "notify.retention", payload: {} },
     { kind: "usage.reconcile", payload: {} },
+    // MED-8: videos from before the scrub existed, and any whose job was lost.
+    { kind: "media.backfill_video_scrubs", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

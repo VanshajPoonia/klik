@@ -4,6 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2 } from "@/lib/storage";
 import { resolveShareRequest } from "@/lib/share-request";
 import { denialStatus, DENIAL_COPY } from "@/lib/share-access";
+import { videoHeldBack } from "@/lib/media-access";
 
 /**
  * The bytes behind a share link.
@@ -34,6 +35,14 @@ export async function GET(
   const { item } = resolved;
   const wantsPoster =
     new URL(request.url).searchParams.get("poster") === "1" && item.posterPathname;
+
+  if (!wantsPoster) {
+    // MED-8: a link holder is never the person who filmed it, so a video still
+    // being cleaned of its location waits.
+    if (videoHeldBack(item, { isManager: false, guestId: null })) {
+      return NextResponse.json({ error: "This video is still being prepared. Try again in a minute." }, { status: 409 });
+    }
+  }
 
   // Same reasoning as the gallery content route: a photo is one request, so a
   // short signature is plenty, while a video keeps issuing range requests

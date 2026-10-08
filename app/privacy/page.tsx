@@ -27,8 +27,8 @@ export default function PrivacyPage() {
         <>
           <p>
             Guests give us a first name, if they feel like it, and the photos they choose to
-            upload. We do not ask for a guest&rsquo;s email, we do not run facial recognition, and
-            we strip location data out of every photo before storing it. Galleries expire on a
+            upload. We never require a guest&rsquo;s email, we do not run facial recognition, and
+            we strip location data out of every photo and video. Galleries expire on a
             schedule the organizer paid for, and deleted things are gone within{" "}
             {BACKUP_EXPIRY_DAYS} days including from our backup. We have never sold anyone&rsquo;s
             data and the business does not depend on doing so.
@@ -67,9 +67,15 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
-        We do <strong>not</strong> ask a guest for an email address, a phone number or an account.
-        There is no guest login. A guest is identified to one gallery by a cookie on their own
-        device and by nothing else.
+        We do <strong>not</strong> require a guest to give an email address, a phone number or an
+        account to join a gallery or upload to it. A guest is identified to one gallery by a cookie
+        on their own device.
+      </p>
+      <p>
+        A guest <strong>may choose</strong> to sign in with their email address so they can find the
+        galleries they joined again later, from any phone. If they do, we store that email address,
+        and link the galleries they join while signed in, and the ones this device joined before,
+        to it. Signing in is never needed to view, upload or download.
       </p>
 
       <h3>What the consent notice says</h3>
@@ -88,8 +94,10 @@ export default function PrivacyPage() {
       <p>
         Phones embed a great deal in a photo file: GPS coordinates, the device serial, sometimes the
         owner&rsquo;s name. <strong>We re-encode every photo on upload, which discards all of it.</strong>{" "}
-        The one thing we deliberately keep is the time the photo was taken, because galleries are
-        ordered by it. We never store the location a photo was taken.
+        Videos are not re-encoded, so instead <strong>we remove the location a phone writes into a
+        video</strong> as soon as it arrives, and until that is done the video plays only for the
+        person who filmed it. The one thing we deliberately keep is the time a photo or video was
+        taken, because galleries are ordered by it. We never keep the location.
       </p>
 
       <h3>We do not analyse faces</h3>
@@ -191,15 +199,17 @@ export default function PrivacyPage() {
 
       <h2>Your choices</h2>
       <p>
-        <strong>Guests:</strong> delete your own uploads from the gallery at any time. To have your
-        name and uploads removed entirely, contact the event organizer, or write to us at{" "}
+        <strong>Guests:</strong> remove everything you added to a gallery, and your name, from the
+        bottom of that gallery at any time. If you signed in, you can do the same for any event
+        from &ldquo;Your galleries&rdquo;, and deleting your account removes everything you shared
+        everywhere. Otherwise write to us at{" "}
         <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a> and tell us which event.
-        Because we hold no email address for guests, we will usually need the organizer to confirm
-        which guest record is yours.
+        Unless you signed in we hold no email address for you, so we will usually need the organizer
+        to confirm which guest record is yours.
       </p>
       <p>
-        <strong>Organizers:</strong> write to the same address to export or delete your account and
-        everything in it. We action erasure immediately in the live system; the backup copy expires
+        <strong>Organizers:</strong> delete your account and everything in it yourself, from the
+        Account page, or write to the same address. Write to us for an export. We action erasure immediately in the live system; the backup copy expires
         within {BACKUP_EXPIRY_DAYS} days as described above.
       </p>
       <p>

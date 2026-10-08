@@ -292,6 +292,8 @@ Guest accounts and guest event history. Nested folders. Any AI. The canvas print
 
 **Guest accounts, 2026-10-09 (ACC-1 to ACC-5).** A guest is still a cookie and still needs no account. When they have one, `guests.user_id` links the two: set on join while signed in, claimed from cookies on `/me` and on gallery load, and resumed on a new phone. Email sign-in sends a six-digit code, limited in the Auth.js route wrapper. `users.organizer_intent_at` separates people who came to run events from guests keeping a gallery, and the admin signup queue reads it. Passkeys (ACC-6) are not built.
 
+**Video location removal, 2026-10-09 (MED-8).** Videos are scrubbed in place by the `media.scrub_video` job; `media.metadata_state` says where each one is, and `videoHeldBack` in `lib/media-access.ts` keeps a pending or failed one to its uploader. The Privacy Policy now says so.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

@@ -59,6 +59,8 @@ const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   "usage.reconcile": async () => async () => {
     await (await import("./notices")).reconcileUsage();
   },
+  "media.scrub_video": async () => (await import("./job-handlers/video-scrub")).scrubVideo,
+  "media.backfill_video_scrubs": async () => (await import("./job-handlers/video-scrub")).backfillVideoScrubs,
 };
 
 /** How long a job may sit in `running` before it is presumed killed. */

@@ -7,7 +7,7 @@ import { findEventBySlug } from "@/lib/slugs";
 import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { r2 } from "@/lib/storage";
-import { canViewMedia } from "@/lib/media-access";
+import { canViewMedia, videoHeldBack } from "@/lib/media-access";
 
 export async function GET(
   request: Request,
@@ -76,6 +76,12 @@ export async function GET(
       status: 307,
       headers: { "Cache-Control": "private, no-store" },
     });
+  }
+
+  // MED-8: a video still being cleaned of its location, or that could not be,
+  // plays only for the guest who filmed it.
+  if (videoHeldBack(item, { isManager: Boolean(viewer.ownerSession), guestId: viewer.guestId })) {
+    return NextResponse.json({ error: "This video is still being prepared. Try again in a minute." }, { status: 409 });
   }
 
   // A photo is one request, so a 60-second URL is plenty. Video is not: the

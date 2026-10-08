@@ -649,8 +649,14 @@ Three real gaps remain:
 - **This is a behaviour change**: a photo that cannot be decoded is now refused rather than stored intact. That is a worse upload experience and a much better privacy guarantee, and it was the right way round because the bytes a camera produces carry GPS, a device serial and often the owner's name, into a gallery whose whole purpose is a shareable link.
 - **HEIC keeps no capture time.** Its metadata lives in an ISO base media container, not a JPEG APP1 segment, and `heic-convert` does not carry EXIF across. iPhone photos fall back to upload time until OPS-1 puts a real decoder in the pipeline. Documented in `lib/exif.ts` rather than left to be rediscovered.
 
+**Gap 2, videos, DONE 2026-10-09, without ffmpeg** (`lib/video-metadata.ts`, `lib/job-handlers/video-scrub.ts`, `drizzle/0029_video_metadata.sql`). Location in an MP4 or QuickTime file lives in a handful of metadata boxes, never in the media data, so it can be removed **in place**: the box's type becomes `free`, which every reader skips, and its bytes are zeroed. Nothing changes size, nothing moves, nothing is re-encoded. Covered: iPhone's `com.apple.quicktime.location.*` keys, the `©xyz` atom, the 3GPP `loci` box ffmpeg and Android write, and XMP carrying GPS.
+
+- **Checked on real files, not only synthetic ones.** ffmpeg wrote each of the four forms into real H.264 videos; after the scrub ffprobe shows no location, no coordinate string survives anywhere in the file, other tags (title, make, creation date) are untouched, and every file decodes end to end. Then against the real bucket: a 27 MB video rewritten as six equal multipart parts, same size, 36 bytes changed, still decodes.
+- **The job** plans from ranged reads of box headers and the `moov` box only, streams the object through once with the patches applied back to the same key, reads it back and plans again before calling it clean. Queued on every video upload; a daily backfill catches videos from before this and any lost job. iPhone videos also yield their own capture time, stored as wall time like a photo's.
+- **Until a video is clean it plays only for the guest who filmed it** (`videoHeldBack`, in the gallery content and download routes and both share-link routes). Pending lasts seconds. A file that cannot be read as MP4 or QuickTime is `failed` and stays held back. WebM, which only the in-app camera produces and which carries no location, is clean on arrival.
+- **Not held back: the organizer's own ZIP and exports.** A ZIP made in the seconds a video is pending includes the original. Small window, organizer only, noted rather than fixed.
+
 Still open here:
-- **Videos.** QuickTime and MP4 store location in a `©xyz` atom and `sharp` cannot help. This is now the only remaining leak, and it needs ffmpeg, so it rides with OPS-1.
 - Add an organizer setting "keep full photo metadata", default off, for the professional-photographer case where EXIF is part of the deliverable.
 
 ### MED-9. Reactions and comments

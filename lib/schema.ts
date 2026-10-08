@@ -440,6 +440,11 @@ export const media = pgTable(
     // every video, every HEIC, every screenshot and anything re-encoded before
     // it reached us. Readers fall back to `created_at`, which is upload time.
     capturedAt: timestamp("captured_at", { mode: "string" }),
+    /**
+     * MED-8: whether a video's location has been removed. Null for photos and
+     * for videos from before drizzle/0029; see that file for the states.
+     */
+    metadataState: text("metadata_state").$type<"pending" | "clean" | "failed">(),
     // Soft delete. A deleted photo is irreplaceable and the storage to keep it
     // for 30 days is not, so every read path filters on this rather than the
     // row being gone. See ROADMAP.md SEC-4.

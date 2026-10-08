@@ -4,6 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { extensionForMime, r2 } from "@/lib/storage";
 import { resolveShareRequest } from "@/lib/share-request";
 import { denialStatus, DENIAL_COPY, shareDownloadFilename } from "@/lib/share-access";
+import { videoHeldBack } from "@/lib/media-access";
 
 export async function GET(
   _request: Request,
@@ -29,6 +30,12 @@ export async function GET(
       { error: "This link does not allow downloads" },
       { status: 403 },
     );
+  }
+
+  // MED-8: a link holder is never the person who filmed it, so a video still
+  // being cleaned of its location waits.
+  if (videoHeldBack(item, { isManager: false, guestId: null })) {
+    return NextResponse.json({ error: "This video is still being prepared. Try again in a minute." }, { status: 409 });
   }
 
   const filename = shareDownloadFilename(item, extensionForMime(item.mimeType));

@@ -175,6 +175,13 @@ land in spam.
 
 - [ ] Signed in from a gallery with an email code, and saw it on `/me`
 
+**The Privacy Policy changed on 9 October**, to match what was built: guests may now
+sign in (optional), videos have their location removed too, and accounts can be deleted
+from the Account page. Read the "What we collect from guests", "Location and camera
+data is removed" and "Your choices" sections before you rely on it.
+
+- [ ] Re-read the three changed sections of `/privacy`
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

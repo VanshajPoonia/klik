@@ -7,7 +7,7 @@ import { findEventBySlug } from "@/lib/slugs";
 import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { extensionForMime, r2 } from "@/lib/storage";
-import { canViewMedia } from "@/lib/media-access";
+import { canViewMedia, videoHeldBack } from "@/lib/media-access";
 
 function downloadFilename(slug: string, mimeType: string, mediaId: string) {
   const extension = extensionForMime(mimeType);
@@ -52,6 +52,12 @@ export async function GET(
     if (!canViewMedia(item, { isManager: false, guestId: viewer.guestId }, event)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+  }
+
+  // MED-8: a video still being cleaned of its location, or that could not be,
+  // plays only for the guest who filmed it.
+  if (videoHeldBack(item, { isManager: Boolean(viewer.ownerSession), guestId: viewer.guestId })) {
+    return NextResponse.json({ error: "This video is still being prepared. Try again in a minute." }, { status: 409 });
   }
 
   const command = new GetObjectCommand({

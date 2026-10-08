@@ -24,7 +24,7 @@ import {
 import { acceptDerivedObject } from "@/lib/derived-objects";
 import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
 import { renderThumbnail } from "@/lib/thumbnail";
-import { enqueue, enqueueThumbnail, kickJobRunner } from "@/lib/jobs";
+import { enqueue, enqueueThumbnail, enqueueVideoScrub, kickJobRunner } from "@/lib/jobs";
 import { claimUsageWarning } from "@/lib/notices";
 import { spendShot } from "@/lib/disposable";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
@@ -481,6 +481,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       posterPathname,
       thumbPathname,
       capturedAt,
+      // MED-8: played to its uploader alone until its location is removed.
+      metadataState: kind === "video" ? "pending" : null,
     })
     .returning();
 
@@ -497,6 +499,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   // response so the guest is not kept waiting for it.
   if (!row.thumbPathname && (row.kind === "photo" || row.posterPathname)) {
     await enqueueThumbnail(row.id).catch((error) => reportError("upload.thumbnail_enqueue_failed", error));
+    after(kickJobRunner);
+  }
+
+  if (row.kind === "video") {
+    await enqueueVideoScrub(row.id).catch((error) => reportError("upload.video_scrub_enqueue_failed", error));
     after(kickJobRunner);
   }
 

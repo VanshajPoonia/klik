@@ -154,3 +154,23 @@ export const VISIBILITY_OPTIONS = [
     description: "Out of the gallery. Reachable only by a share link you create.",
   },
 ] as const;
+
+/**
+ * MED-8: a video whose location metadata has not been removed yet, or could not
+ * be, is played only to the guest who uploaded it, since it is their own
+ * location. Pending lasts seconds after an upload; failed means the file could
+ * not be read as MP4 or QuickTime, so what it carries is unknown.
+ *
+ * Applied where original bytes leave for anyone but the host: the gallery's
+ * content and download routes and share links. A manager's own upload has no
+ * guest, so it is the manager's to see.
+ */
+export function videoHeldBack(
+  item: Pick<Media, "kind" | "metadataState" | "guestId">,
+  viewer: { isManager: boolean; guestId: string | null | undefined },
+): boolean {
+  if (item.kind !== "video") return false;
+  if (item.metadataState !== "pending" && item.metadataState !== "failed") return false;
+  if (item.guestId == null) return !viewer.isManager;
+  return viewer.guestId == null || viewer.guestId !== item.guestId;
+}
