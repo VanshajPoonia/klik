@@ -7,6 +7,7 @@ import { SignupForm } from "@/components/auth/signup-form";
 import { PAYMENT_LINKS } from "@/lib/billing-plans";
 import { PLAN_KEYS, PLANS, type PlanKey } from "@/lib/plans";
 import { KIT_WAIT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
+import { lookupInvite } from "@/lib/team";
 
 export const metadata: Metadata = {
   title: "Create your account",
@@ -19,9 +20,18 @@ function isPlanKey(value: string | undefined): value is PlanKey {
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string }>;
+  searchParams: Promise<{ plan?: string; invite?: string }>;
 }) {
-  const { plan } = await searchParams;
+  const { plan, invite: inviteToken } = await searchParams;
+
+  // ORG-3: arriving from an invitation. The account is free and nothing is
+  // bought, so a plan in the same link is ignored, and the email is the one the
+  // invitation was sent to because no other address can accept it.
+  const invited = inviteToken ? await lookupInvite(inviteToken) : null;
+  const invitation =
+    invited?.state === "valid" && inviteToken
+      ? { token: inviteToken, email: invited.invite.email, eventName: invited.eventName }
+      : null;
 
   /**
    * A plan key, never a URL.
@@ -32,14 +42,18 @@ export default async function SignupPage({
    * `PAYMENT_LINKS` here means the redirect target is chosen from a table in our
    * own code. A `?next=` would make it chosen by whoever wrote the link.
    */
-  const planKey = isPlanKey(plan) ? plan : null;
+  const planKey = !invitation && isPlanKey(plan) ? plan : null;
   const payUrl = planKey ? PAYMENT_LINKS[planKey] : null;
 
   const session = await auth();
   if (session?.user) {
     // Already signed in and came here from a plan button: send them on rather
     // than showing a signup form to somebody who has an account.
-    redirect(payUrl ?? (session.user.role === "superadmin" ? "/admin" : "/dashboard"));
+    redirect(
+      invitation
+        ? `/invite/${encodeURIComponent(invitation.token)}`
+        : (payUrl ?? (session.user.role === "superadmin" ? "/admin" : "/dashboard")),
+    );
   }
 
   const chosen = planKey ? PLANS[planKey] : null;
@@ -52,10 +66,18 @@ export default async function SignupPage({
       </Link>
 
       <h1 className="mt-10 max-w-md font-display text-3xl leading-tight tracking-tight text-paper sm:text-4xl">
-        {chosen ? `Create your account for ${chosen.name}` : "Create your Klik account"}
+        {invitation
+          ? `Create your account to join ${invitation.eventName}`
+          : chosen
+            ? `Create your account for ${chosen.name}`
+            : "Create your Klik account"}
       </h1>
 
-      {chosen ? (
+      {invitation ? (
+        <p className="mt-3 max-w-sm text-sm text-muted">
+          It is free. You are joining someone else&apos;s event, so there is nothing to pay.
+        </p>
+      ) : chosen ? (
         <p className="mt-3 max-w-sm text-sm text-muted">
           {chosen.price} {chosen.priceSuffix}. We take your details first so your payment can be
           matched to your account, then Stripe&apos;s secure page opens.
@@ -68,12 +90,19 @@ export default async function SignupPage({
       )}
 
       <div className="mt-9 flex justify-center">
-        <SignupForm payUrl={payUrl} planName={chosen?.name ?? null} />
+        <SignupForm
+          payUrl={payUrl}
+          planName={chosen?.name ?? null}
+          invitation={invitation ? { token: invitation.token, email: invitation.email } : null}
+        />
       </div>
 
       <p className="mt-7 text-sm text-muted">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-volt hover:underline">
+        <Link
+          href={invitation ? `/login?next=${encodeURIComponent(`/invite/${invitation.token}`)}` : "/login"}
+          className="font-medium text-volt hover:underline"
+        >
           Sign in
         </Link>
       </p>

@@ -27,6 +27,8 @@ import { EventDashboard } from "@/components/dashboard/event-dashboard";
 import { SupportCard } from "@/components/dashboard/support-card";
 import { resolveEventActor } from "@/lib/roles";
 import { can } from "@/lib/permissions";
+import { openInvites } from "@/lib/team";
+import { eventActivity } from "@/lib/activity";
 
 export const metadata: Metadata = {
   title: "Manage event",
@@ -49,9 +51,24 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
 
   const plan = eventPlan(event);
   const licenseState = eventLicenseState(event);
-  const [reportCounts, formerSlugs] = await Promise.all([
+  // ORG-2: managers add and invite too, as the route has always allowed. The
+  // owner alone removes people and hands the event over.
+  const isOwner = actor.role === "owner";
+  const canManageTeam = canUseCoHosts(plan.key) && can(actor.role, "cohosts.manage");
+  const [reportCounts, formerSlugs, invites, activity, offeredBy] = await Promise.all([
     openReportCounts(event.id),
     listFormerSlugs(event.id),
+    canManageTeam ? openInvites(event.id) : Promise.resolve([]),
+    can(actor.role, "cohosts.manage") ? eventActivity(event.id) : Promise.resolve(null),
+    // ORG-4: the event has been offered to whoever is looking at it.
+    event.transferToUserId === session.user.id
+      ? db
+          .select({ name: users.name, username: users.username })
+          .from(users)
+          .where(eq(users.id, event.ownerId))
+          .limit(1)
+          .then(([owner]) => owner?.name ?? (owner?.username ? `@${owner.username}` : "The owner"))
+      : Promise.resolve(null),
   ]);
   const [mediaRows, albumRows, coHostRows, clientRows, held] = await Promise.all([
     db
@@ -108,7 +125,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canManageClients={canManageEventClients(plan.key)}
         canSlideshow={canUseSlideshow(plan.key)}
         canManageAlbums={canUseAlbums(plan.key)}
-        canManageCoHosts={canUseCoHosts(plan.key) && session.user.id === event.ownerId}
+        canManageCoHosts={canManageTeam}
         canManageShares={can(actor.role, "shares.manage")}
         canManageTrash={can(actor.role, "trash.manage")}
         addressing={plan.key !== "event" ? { origin: getAppUrl(), formerSlugs } : null}
@@ -140,6 +157,18 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         }
         albums={albumRows}
         coHosts={coHostRows}
+        team={{
+          isOwner,
+          invites: invites.map((invite) => ({
+            id: invite.id,
+            email: invite.email,
+            role: invite.role,
+            expiresAt: invite.expiresAt.toISOString(),
+          })),
+          transferTo: isOwner ? event.transferToUserId : null,
+        }}
+        activity={activity}
+        transferOffer={offeredBy ? { fromName: offeredBy } : null}
         clients={clientRows}
       />
       <div className="mx-auto w-full max-w-5xl px-6 pb-10 md:px-10">

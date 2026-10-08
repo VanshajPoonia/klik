@@ -22,6 +22,7 @@ import {
   canManageEventClients,
   canUseVenueHub,
 } from "@/lib/plans";
+import { isUniqueViolation, raisedBy } from "@/lib/db-errors";
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
@@ -263,16 +264,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       [updated] = await updateQuery;
     }
   } catch (error) {
-    const errorCode = (error as { code?: string })?.code;
-    // Re-opening an event under a Venue grant that is already at its live-event
+        // Re-opening an event under a Venue grant that is already at its live-event
     // limit. The trigger in drizzle/0018 decides, from the grant's own numbers.
-    if (error instanceof Error && error.message.includes("entitlement_active_limit")) {
+    if (raisedBy(error, "entitlement_active_limit")) {
       return NextResponse.json(
         { error: describeLicenseRefusal("entitlement_active_limit", plan) },
         { status: 409 },
       );
     }
-    if (errorCode === "23505" && rest.venueFeatured) {
+    if (isUniqueViolation(error) && rest.venueFeatured) {
       return NextResponse.json(
         { error: "Another event was featured at the same time. Refresh and try again." },
         { status: 409 },

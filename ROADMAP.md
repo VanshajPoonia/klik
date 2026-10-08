@@ -15,7 +15,7 @@
 - Storage is **Cloudflare R2**, not Vercel Blob. `lib/storage.ts` uses the S3 SDK against an EU-jurisdiction endpoint. The bucket is private and media is delivered through `GET /api/e/[slug]/media/[mediaId]/content` with short-lived signed URLs.
 - Three roles exist in `users.role`: `organizer` and `superadmin`, plus anonymous guests who never get a row in `users` (they get a row in `guests` plus an HMAC cookie).
 - Event CRUD, slug generation, QR PNG/SVG, one printable sign in three fixed templates, access gate (public / password / private), guest entry sheet with consent, direct-to-R2 upload with server-side HEIC conversion and compression, moderation queue, streaming ZIP download with batching, expiry cron, lightbox with a working slideshow, in-app camera with six client-side looks.
-- `albums` (flat, Premium only), `event_co_hosts` (add by username or email, capped at 5), `venue_clients`, venue hub at `/v/[venueSlug]`, superadmin console at `/admin` with quick-create and password reset.
+- `albums` (flat, Premium only), `event_co_hosts` (add by username or email, capped by plan, invite by email, hand the event over: ORG-2 to ORG-4), `venue_clients`, venue hub at `/v/[venueSlug]`, superadmin console at `/admin` with quick-create and password reset.
 - Plans exist as static definitions in `lib/plans.ts` with capability helpers, and are enforced on event creation and on feature gates.
 - **Self-serve signup at `/signup`, shipped 2026-10-06, and it is now how buying works.** A pricing button opens an explainer dialog, which links to `/signup?plan=<key>`, which creates the account and then redirects to a Stripe-hosted Payment Link. Email plus password, which is **not** ACC-2's OTP design; see that task for what it means for the rest of ACC. `BILLING.md` is the full record.
 - **`users.activated_at` is what grants capability.** A new account has it null and can create nothing until a superadmin assigns a plan. This matters more than it looks: `users.plan_key` is `NOT NULL DEFAULT 'event'`, so every new account reads as owning the $39 plan, and anything deciding access from that column is wrong.
@@ -379,6 +379,16 @@ Tested both ways. `lib/permissions.test.ts` spells the matrix out a second time,
 `maxCoHosts` is now part of the plan definition: Event 0, Premium 5, Venue 10. The literal `>= 5` is gone, and `canUseCoHosts` is derived from `maxCoHosts > 0` rather than compared against `"premium"`. That second part was a latent bug rather than a tidy-up: Venue accounts would have been refused co-hosts despite paying for a plan built entirely around running events for other people.
 
 ### ORG-3. Invite by username, with a real invite flow
+**DONE 2026-10-08** (`drizzle/0026_team.sql`, `lib/team.ts`, `/invite/[token]`, `test/team.dbtest.ts`). Built without ID-3, so differently from the design below:
+
+- **Username or email, one box.** An existing account, matched by username or by email without case, is added at once and emailed. An address with no account gets an invitation. There is no username search picker, because global usernames (ID) do not exist yet; when they do, the picker goes in front of the same route.
+- **Only a hash of the token is stored.** The email carries the token, so a database leak hands out no working invitations.
+- **Accepting needs an account signed in with the invited address**, read from the account row rather than the session. A forwarded invitation is useless to whoever it was forwarded to. `/signup?invite=` fixes the email, skips any plan and payment, and lands back on the invitation.
+- **Open invitations count against `maxCoHosts`**, and inviting the same address again replaces its link, so there is one live link per address. Sends are rate limited per sender, because each one is mail from our domain to an address somebody typed.
+- Withdrawable from the team card, listed there with their expiry, and removed when the invited person erases their account.
+- Managers can invite as well as owners, as the route already allowed. Only the owner removes people.
+
+Original design, for reference:
 **Size:** M. **Depends on:** ID-3, F-8.
 Table `event_invites` (id, event_id, invited_user_id nullable, invited_email nullable, role, token unique, invited_by, expires_at, accepted_at, revoked_at).
 - Picker searches usernames (ID-3) and shows an avatar plus handle so you cannot mis-invite a stranger with a similar name.
@@ -387,6 +397,14 @@ Table `event_invites` (id, event_id, invited_user_id nullable, invited_email nul
 - Accepting requires being signed in as the invited identity, or, for email invites, proving the email.
 
 ### ORG-4. Ownership transfer and activity attribution
+**DONE 2026-10-08** (`lib/team.ts`, `/api/events/[id]/transfer`, `lib/activity.ts`). Two deliberate departures:
+
+- **Billing responsibility does not move.** The event stays live on the licence it already has, which is the old owner's pass or Venue grant; a Venue event handed on still counts against the old owner's live limit until it ends. Moving a licence between accounts is a money question, and money is granted by a person on `/admin` (see `BILLING.md`). The client link is cleared because clients belong to an account; the client's name stays on the event as text. `venue_featured` is cleared for the same reason.
+- **The feed is the audit log, not a new `event_activity` table.** `lib/activity.ts` reads `audit_log` through an allowlist and words it for organizers. What Klik did shows as "Klik", without the staff member's name or Klik's notes. Single-photo approve, reject and hide are not audited, so they are not in the feed.
+
+How it works: the owner offers the event to a **manager** on its team; the recipient sees it on their dashboard and on the event, and accepts or declines. Acceptance is one conditional update that also re-checks that the recipient is still a manager, so removing or demoting them makes the offer impossible to take. The old owner stays on as a manager. Refused while any photo in the event is under a legal hold.
+
+Original design, for reference:
 **Size:** M. **Depends on:** ORG-1.
 Transfer flow (owner picks a manager, that person accepts, billing responsibility moves with it, both get an email). Plus an `event_activity` feed so co-hosts can see who approved, deleted, or shared what. This matters the moment more than one person can delete a guest's photo.
 

@@ -206,8 +206,12 @@ export default async function DashboardPage() {
                     <p className="mt-0.5 text-xs text-paper/70">{event.clientName}</p>
                   )}
                   <p className="text-xs text-muted">/e/{event.slug}</p>
-                  {event.ownerId !== session.user.id && (
-                    <p className="mt-1 text-xs text-volt">Co-hosted event</p>
+                  {event.transferToUserId === session.user.id ? (
+                    <p className="mt-1 text-xs text-volt">Offered to you. Open it to accept.</p>
+                  ) : (
+                    event.ownerId !== session.user.id && (
+                      <p className="mt-1 text-xs text-volt">Co-hosted event</p>
+                    )
                   )}
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-2">

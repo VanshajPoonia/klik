@@ -17,13 +17,16 @@ export function SignupForm({
    */
   payUrl,
   planName,
+  /** ORG-3: signing up to accept an invitation, which fixes the address. */
+  invitation = null,
 }: {
   payUrl: string | null;
   planName: string | null;
+  invitation?: { token: string; email: string } | null;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(invitation?.email ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,6 +61,12 @@ export function SignupForm({
         return;
       }
 
+      if (invitation) {
+        router.replace(`/invite/${encodeURIComponent(invitation.token)}`);
+        router.refresh();
+        return;
+      }
+
       if (payUrl) {
         // A full navigation, not router.push. The destination is Stripe's own
         // page on another origin, which the client router cannot route to.
@@ -88,12 +97,20 @@ export function SignupForm({
         />
       </Field>
 
-      <Field label="Email" hint="Where your gallery links and receipts go.">
+      <Field
+        label="Email"
+        hint={
+          invitation
+            ? "The address your invitation was sent to."
+            : "Where your gallery links and receipts go."
+        }
+      >
         <input
           className={inputClass}
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
+          readOnly={Boolean(invitation)}
           autoComplete="email"
           autoCapitalize="none"
           autoCorrect="off"

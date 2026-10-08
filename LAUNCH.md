@@ -151,7 +151,14 @@ camera), the selection bar's **Actions**, `/admin` (grants, reports, waiting to 
 live) and `/admin/search`, `/admin/capacity`, `/admin/audit`, and the **live display**
 from a Premium event. Send anything that looks wrong.
 
+Added later the same day: **teams**. On a Premium event's **Settings** tab, invite an
+email address that has no Klik account (use a second address of yours), open the
+email on your phone, and follow it through creating the account. Then, back as the
+owner, hand the event to that person with the arrows button next to their name, and
+accept it from the other account. Check the **Team activity** card shows all of it.
+
 - [ ] Looked at each
+- [ ] Walked an invitation and a handover with a second email address
 
 ---
 

@@ -10,6 +10,7 @@ import { requireSuperadmin } from "@/lib/roles";
 import { generateUsername, generatePassword, hashPassword } from "@/lib/credentials";
 import { prepareEventInsert, toPublicEvent, type CreateEventInput } from "@/lib/events";
 import { createVenueSlug } from "@/lib/venue";
+import { isUniqueViolation } from "@/lib/db-errors";
 
 const createClientSchema = z.object({
   contactName: z.string().trim().min(1).max(120),
@@ -93,8 +94,8 @@ async function createOrganizerUserAndEvent(
       const [[user], [event]] = await db.batch([userQuery, eventQuery]);
       return { user, event, password };
     } catch (error) {
-      const isUniqueViolation = (error as { code?: string })?.code === "23505";
-      if (!isUniqueViolation || attempt === 4) throw error;
+      const uniqueViolation = isUniqueViolation(error);
+      if (!uniqueViolation || attempt === 4) throw error;
     }
   }
   throw new Error("Could not generate a unique username");

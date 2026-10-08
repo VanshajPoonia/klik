@@ -276,6 +276,11 @@ export const events = pgTable(
     developsAt: timestamp("develops_at", { withTimezone: true }),
     // GRW-7: gallery page loads by anyone but the event's team, for insights.
     galleryOpens: integer("gallery_opens").notNull().default(0),
+    // ORG-4: the owner has offered this event to a member of its team, who has
+    // not answered yet. No foreign key in this file because users is declared
+    // first; it is in drizzle/0026_team.sql.
+    transferToUserId: text("transfer_to_user_id"),
+    transferOfferedAt: timestamp("transfer_offered_at", { withTimezone: true }),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -757,6 +762,28 @@ export const auditLog = pgTable(
 );
 
 export type AuditEntry = typeof auditLog.$inferSelect;
+
+/**
+ * ORG-3: an invitation to an event's team for an email address that may not
+ * have an account yet. The token is in the email; only its hash is stored.
+ */
+export const eventInvites = pgTable("event_invites", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role").$type<AssignableRole>().notNull().default("manager"),
+  tokenHash: text("token_hash").notNull().unique(),
+  invitedByUserId: text("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  acceptedByUserId: text("accepted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
+export type EventInvite = typeof eventInvites.$inferSelect;
 
 export const JOB_STATUSES = ["queued", "running", "succeeded", "dead"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];

@@ -1,7 +1,5 @@
 "use client";
 
-import type { AssignableRole } from "@/lib/permissions";
-
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Download, X, MonitorPlay } from "lucide-react";
@@ -12,7 +10,10 @@ import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
 import { LicenseBanner, type EventLicenseSummary } from "@/components/dashboard/license-banner";
 import { AlbumManager } from "@/components/dashboard/album-manager";
-import { CoHostManager } from "@/components/dashboard/co-host-manager";
+import { CoHostManager, type CoHost, type PendingInvite } from "@/components/dashboard/co-host-manager";
+import { TeamActivity } from "@/components/dashboard/team-activity";
+import { TransferOffer } from "@/components/dashboard/transfer-offer";
+import type { ActivityEntry } from "@/lib/activity";
 import { ShareSheet } from "@/components/dashboard/share-sheet";
 import { ShareLinksPanel } from "@/components/dashboard/share-links-panel";
 import { Lightbox } from "@/components/guest/lightbox";
@@ -49,6 +50,9 @@ export function EventDashboard({
   license = { state: "live", canGoLive: false, requestedAt: null },
   albums = [],
   coHosts = [],
+  team = null,
+  activity = null,
+  transferOffer = null,
   clients = [],
 }: {
   event: OrganizerEvent;
@@ -70,13 +74,12 @@ export function EventDashboard({
   addressing?: { origin: string; formerSlugs: string[] } | null;
   license?: EventLicenseSummary;
   albums?: Album[];
-  coHosts?: Array<{
-    id: string;
-    name: string | null;
-    email: string | null;
-    username: string | null;
-    role: AssignableRole;
-  }>;
+  coHosts?: CoHost[];
+  /** ORG-3/4: what the team card needs beyond its members. */
+  team?: { isOwner: boolean; invites: PendingInvite[]; transferTo: string | null } | null;
+  activity?: ActivityEntry[] | null;
+  /** ORG-4: set when this event has been offered to the person viewing it. */
+  transferOffer?: { fromName: string } | null;
   clients?: VenueClient[];
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
@@ -423,6 +426,7 @@ export function EventDashboard({
           </div>
         </header>
 
+        {transferOffer && <TransferOffer eventId={event.id} fromName={transferOffer.fromName} />}
         <LicenseBanner eventId={event.id} license={license} />
         {usage && license.state !== "draft" && <UsageMeter usage={usage} />}
 
@@ -593,7 +597,7 @@ export function EventDashboard({
               clients={clients}
               addressing={addressing}
             />
-            {(canManageAlbums || canManageCoHosts) && (
+            {(canManageAlbums || canManageCoHosts || activity) && (
               <div className="space-y-5">
                 {canManageAlbums && (
                   <AlbumManager
@@ -609,8 +613,15 @@ export function EventDashboard({
                   />
                 )}
                 {canManageCoHosts && (
-                  <CoHostManager eventId={event.id} initialCoHosts={coHosts} />
+                  <CoHostManager
+                    eventId={event.id}
+                    isOwner={team?.isOwner ?? false}
+                    initialCoHosts={coHosts}
+                    initialInvites={team?.invites ?? []}
+                    initialTransferTo={team?.transferTo ?? null}
+                  />
                 )}
+                {activity && <TeamActivity entries={activity} />}
               </div>
             )}
           </div>

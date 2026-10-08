@@ -40,7 +40,7 @@ Three kinds of people use it, and they authenticate in three completely differen
 
 ---
 
-## 3. Seven constraints that will bite you
+## 3. Eight constraints that will bite you
 
 These are not style preferences. Each one has already caused a bug or came within one commit of causing one.
 
@@ -60,13 +60,15 @@ The fix is all three: the linux binaries are explicit `optionalDependencies`, `n
 
 **7. A signed URL is a bearer token for its whole window.** Since 2026-10-08 a gallery page signs its tiles in the request that ran the access rule (section 8), and those URLs live 15 to 30 minutes. Hiding or deleting a photo stops new URLs being issued for it at once and removes the tile from every phone within one poll, but a URL already handed out keeps working until it expires. Anything that must stop **instantly**, which today means share-link revocation, must not be batched this way; `/s/[token]` still authorizes per request.
 
+**8. Drizzle wraps every database error, so `error.code` is always undefined.** Since 0.45 a failed query throws a `DrizzleQueryError` whose message is the SQL text and whose `cause` is the driver's error, which is where the SQLSTATE and a trigger's `RAISE` message actually are. Found 2026-10-08: four "someone got there first" branches checked `error.code === "23505"` or `error.message.includes(...)` directly and had never once matched, so signup's username retry, the admin quick-create retry, the featured-event race and the Venue live-limit refusal all surfaced as 500s. Use `pgErrorCode`, `isUniqueViolation` and `raisedBy` from `lib/db-errors.ts`, which walk the cause chain.
+
 ---
 
 ## 4. Identity: three kinds, never interchangeable
 
 **Superadmin.** `users.role = 'superadmin'`. Full access to every event through `requireSuperadmin` and the `role === "superadmin"` branches in `lib/roles.ts`. Provisions accounts, sets plans, resets passwords, and in the v1 model **activates events**.
 
-**Organizer.** A `users` row. Owns events (`events.owner_id`) or is a co-host (`event_co_hosts`). Authenticated by Auth.js. Co-hosts are capped by plan and are Premium-only.
+**Organizer.** A `users` row. Owns events (`events.owner_id`) or is a co-host (`event_co_hosts`). Authenticated by Auth.js. Co-hosts are capped by plan (`maxCoHosts`: Premium 5, Venue 10), with open invitations counted against the cap. Since ORG-3 someone without an account is invited by email (`event_invites`, `lib/team.ts`); the invitation itself grants nothing, and only becomes an `event_co_hosts` row when accepted by an account signed in with that address. Since ORG-4 an owner can hand an event to a manager on its team, who must accept; the event's licence stays where it was.
 
 **Guest.** **No `users` row, ever.** A guest gets a row in `guests` plus a JWT cookie named `klik_g_{eventId}`, signed with `AUTH_SECRET`, valid 30 days, scoped to one event. There is no server-side session record, so **the cookie is the identity**: anyone holding it is that guest, and it cannot be revoked individually. Treat it as a bearer token, because it is one.
 
@@ -283,6 +285,8 @@ Guest accounts and guest event history. Nested folders. Any AI. The canvas print
 **Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
 
 **The activation loop, 2026-10-07.** Assigning a plan through `PATCH /api/admin/clients/[userId]/plan` is the single action that grants capability: it sets `activated_at`, sends the organizer their dashboard link and the steps through `lib/activation-notice.ts`, and stamps `users.activation_email_sent_at` only once the provider has accepted. Every outcome, including a refusal, is appended to `account_timeline` (`drizzle/0015_account_timeline.sql`), which is history rather than current state. `lib/timeline.ts` derives a seven-step chain from it for `/admin` and stores none of it. The table has no `CHECK` on `kind` on purpose, because a rejected insert loses the record this table exists to keep.
+
+**Teams, 2026-10-08 (ORG-3, ORG-4).** Invitations by email with 14-day links, ownership handover with acceptance, and a team activity feed on the event page read from `audit_log` through an allowlist in `lib/activity.ts`. Single-photo approve, reject and hide are not in the audit log, so the feed shows deletions and bulk actions but not those.
 
 `ROADMAP.md` has all of it with task IDs and an order.
 

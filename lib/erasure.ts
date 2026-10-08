@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "./db";
-import { erasureLog, events, guests, media, users } from "./schema";
+import { erasureLog, events, guests, media, users, eventInvites } from "./schema";
 import { deleteBlobs } from "./storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys, type MediaObjectRow } from "./media-objects";
 import { deleteEventExports, deleteExportsContaining } from "./exports";
@@ -201,6 +201,14 @@ export async function eraseUser(
     // Before the cascade takes the export rows, which are the only record of
     // where the ZIPs are.
     await deleteEventExports(ownedEvents.map((event) => event.id));
+  }
+
+  // ORG-3: invitations are addressed to an email, not an account, so no foreign
+  // key takes them. One sent to this person is their address in somebody
+  // else's table.
+  const [account] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+  if (account?.email) {
+    await db.delete(eventInvites).where(eq(eventInvites.email, account.email.trim().toLowerCase()));
   }
 
   await db.delete(users).where(eq(users.id, userId));

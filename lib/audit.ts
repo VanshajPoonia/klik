@@ -28,7 +28,10 @@ export type AuditAction =
   | "event.went_live"
   | "media.deleted"
   | "media.bulk"
-  | "team.changed";
+  | "team.changed"
+  | "event.transfer_offered"
+  | "event.transfer_withdrawn"
+  | "event.transferred";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;

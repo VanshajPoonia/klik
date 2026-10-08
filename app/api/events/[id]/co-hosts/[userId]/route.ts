@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { eventCoHosts, events } from "@/lib/schema";
 import { requireOwnerSession } from "@/lib/roles";
+import { cancelTransfer } from "@/lib/team";
 
 export async function DELETE(
   _request: Request,
@@ -29,6 +30,8 @@ export async function DELETE(
         isNull(eventCoHosts.deletedAt),
       ),
     );
+  // ORG-4: an offer of the event to somebody no longer on the team goes too.
+  await cancelTransfer(event.id, userId);
   await recordAudit({ actor: session, action: "team.changed", targetType: "user", targetId: userId, eventId: event.id, detail: "Removed." });
   return NextResponse.json({ ok: true });
 }
