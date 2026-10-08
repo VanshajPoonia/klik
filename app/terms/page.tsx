@@ -138,8 +138,8 @@ export default function TermsPage() {
       <h2>Deletion and how long things last</h2>
       <div className="legal-key">
         <p>
-          A gallery stays available for the period your plan sets, counted from when you created the
-          event.
+          A gallery stays available for the period your plan sets, counted from when the event goes
+          live.
         </p>
         <p>
           Deleted items are recoverable for {SOFT_DELETE_DAYS} days, then permanently removed, and

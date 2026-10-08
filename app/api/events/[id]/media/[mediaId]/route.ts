@@ -6,6 +6,7 @@ import { albums, events, media, MEDIA_STATUSES, MEDIA_VISIBILITIES } from "@/lib
 import { requireEventCapability } from "@/lib/roles";
 import type { EventCapability } from "@/lib/permissions";
 import { eventPlan } from "@/lib/license";
+import { resolveReports } from "@/lib/reports";
 import { canUseAlbums } from "@/lib/plans";
 
 const patchSchema = z
@@ -45,6 +46,15 @@ export async function PATCH(
   const { id, mediaId } = await params;
   const { item, session, event } = await getOwnedEventMedia(id, mediaId, "media.moderate");
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // TRS-1: a photo under a legal hold is hidden pending Klik's review, and
+  // approving it from the dashboard would put it straight back in front of
+  // every guest. Only /admin may change it.
+  if (item.legalHoldAt) {
+    return NextResponse.json(
+      { error: "The Klik team is reviewing this one. It stays hidden until they have." },
+      { status: 403 },
+    );
+  }
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => null);
@@ -98,6 +108,11 @@ export async function DELETE(
     .update(events)
     .set({ coverMediaId: null, updatedAt: new Date() })
     .where(and(eq(events.id, id), eq(events.coverMediaId, mediaId)));
+  // A host deleting a reported photo is their answer to the report (TRS-1).
+  // Not for a held one: that report is Klik's, and stays open until Klik acts.
+  if (!item.legalHoldAt) {
+    await resolveReports(mediaId, { byUserId: session.user.id, resolution: "Removed by the host" });
+  }
 
   return NextResponse.json({ ok: true });
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { auth, signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { eventCoHosts, events, users, venueClients } from "@/lib/schema";
@@ -18,6 +18,7 @@ import { VenueClientsPanel } from "@/components/dashboard/venue-clients-panel";
 import { VenueQrPanel } from "@/components/dashboard/venue-qr-panel";
 import { SupportCard } from "@/components/dashboard/support-card";
 import { AwaitingActivation } from "@/components/dashboard/awaiting-activation";
+import { DeletedEvents } from "@/components/dashboard/deleted-events";
 import { getAppUrl } from "@/lib/env";
 
 export const metadata: Metadata = {
@@ -29,7 +30,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const [ownedRows, coHostedRows, held, account, clientRows] = await Promise.all([
+  const [ownedRows, coHostedRows, held, account, clientRows, deletedRows] = await Promise.all([
     db
       .select()
       .from(events)
@@ -63,6 +64,12 @@ export default async function DashboardPage() {
       .from(venueClients)
       .where(and(eq(venueClients.ownerId, session.user.id), isNull(venueClients.deletedAt)))
       .orderBy(venueClients.name),
+    // Still in their 30-day trash: the purge removes the row when it is over.
+    db
+      .select({ id: events.id, name: events.name, deletedAt: events.deletedAt })
+      .from(events)
+      .where(and(eq(events.ownerId, session.user.id), isNotNull(events.deletedAt)))
+      .orderBy(desc(events.deletedAt)),
   ]);
   const rows = [
     ...ownedRows,
@@ -219,6 +226,17 @@ export default async function DashboardPage() {
             </Link>
           ))}
         </div>
+
+        <DeletedEvents
+          events={deletedRows.map((row) => ({
+            id: row.id,
+            name: row.name,
+            purgesOn: new Date(row.deletedAt!.getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(
+              "en-US",
+              { month: "short", day: "numeric" },
+            ),
+          }))}
+        />
 
         <div className="mt-10">
           <SupportCard />

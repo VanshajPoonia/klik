@@ -22,8 +22,9 @@ import type { MediaStatus, MediaVisibility } from "@/lib/schema";
 import { formatFileSize } from "@/lib/plans";
 import { INLINE_ZIP_LIMIT_BYTES, buildDownloadBatches } from "@/lib/download-batches";
 import { ExportsPanel } from "@/components/dashboard/exports-panel";
+import { TrashPanel } from "@/components/dashboard/trash-panel";
 
-type Tab = "gallery" | "links" | "settings" | "qr";
+type Tab = "gallery" | "links" | "settings" | "qr" | "trash";
 
 export function EventDashboard({
   event,
@@ -40,6 +41,7 @@ export function EventDashboard({
   canDownloadQrSign = false,
   canUseVenueHub = false,
   canDeleteEvent = false,
+  canManageTrash = false,
   license = { state: "live", canGoLive: false, requestedAt: null },
   albums = [],
   coHosts = [],
@@ -59,6 +61,7 @@ export function EventDashboard({
   canDownloadQrSign?: boolean;
   canUseVenueHub?: boolean;
   canDeleteEvent?: boolean;
+  canManageTrash?: boolean;
   license?: EventLicenseSummary;
   albums?: Album[];
   coHosts?: Array<{
@@ -222,7 +225,9 @@ export function EventDashboard({
   async function deleteMedia(mediaId: string) {
     const item = mediaItems.find((candidate) => candidate.id === mediaId);
     if (!item) return;
-    if (!window.confirm(`Delete this ${item.kind}? This cannot be undone.`)) return;
+    // It goes to the trash, not away: say so, because "cannot be undone" was
+    // false and made people afraid to tidy their own gallery.
+    if (!window.confirm(`Move this ${item.kind} to the trash? You can restore it for 30 days.`)) return;
 
     setMediaError(null);
     setBusy(mediaId, true);
@@ -244,6 +249,31 @@ export function EventDashboard({
       if (lightboxId === mediaId) setLightboxId(null);
     } catch (error) {
       setMediaError(error instanceof Error ? error.message : "Could not delete this item.");
+    } finally {
+      setBusy(mediaId, false);
+    }
+  }
+
+  /** TRS-1: the host looked at a reported photo and is keeping it. Reports on
+   *  something they delete are closed by the delete itself being the answer. */
+  async function clearReports(mediaId: string) {
+    setMediaError(null);
+    setBusy(mediaId, true);
+    try {
+      const response = await fetch(`/api/events/${event.id}/reports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId, resolution: "dismissed" }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? "Could not clear the reports.");
+      }
+      setMediaItems((items) =>
+        items.map((item) => (item.id === mediaId ? { ...item, openReports: 0 } : item)),
+      );
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "Could not clear the reports.");
     } finally {
       setBusy(mediaId, false);
     }
@@ -324,9 +354,13 @@ export function EventDashboard({
 
         <nav className="mb-8 flex gap-1 border-b border-canvas-line" aria-label="Event sections">
           {(
-            canManageShares
-              ? (["gallery", "links", "settings", "qr"] as Tab[])
-              : (["gallery", "settings", "qr"] as Tab[])
+            [
+              "gallery",
+              ...(canManageShares ? ["links"] : []),
+              "settings",
+              "qr",
+              ...(canManageTrash ? ["trash"] : []),
+            ] as Tab[]
           ).map((t) => (
             <button
               key={t}
@@ -369,6 +403,7 @@ export function EventDashboard({
                   onApprove={(id) => void setStatus(id, "approved")}
                   onReject={(id) => void setStatus(id, "rejected")}
                   onDelete={deleteMedia}
+                  onClearReports={clearReports}
                   onOpen={setLightboxId}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
@@ -429,6 +464,7 @@ export function EventDashboard({
                 <MediaGrid
                   items={approved}
                   onDelete={deleteMedia}
+                  onClearReports={clearReports}
                   onOpen={setLightboxId}
                   selectionMode={selectionMode}
                   selectedIds={selectedIds}
@@ -451,6 +487,7 @@ export function EventDashboard({
                   items={rejected}
                   onApprove={(id) => void setStatus(id, "approved")}
                   onDelete={deleteMedia}
+                  onClearReports={clearReports}
                   onOpen={setLightboxId}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
@@ -502,6 +539,7 @@ export function EventDashboard({
             )}
           </div>
         )}
+        {tab === "trash" && canManageTrash && <TrashPanel eventId={event.id} />}
         {tab === "qr" &&
           (license.state === "draft" ? (
             // ACT-3: no QR code before the event is live. One printed now

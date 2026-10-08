@@ -118,6 +118,21 @@ this category of failure exists and that no test suite catches it.
 
 - [ ] Walked end to end on a real device
 
+### 8. Register with NCMEC's CyberTipline
+
+Guests can now report a photo as child sexual abuse material. When they do, Klik
+hides it, freezes it under a legal hold, and emails `ALERT_EMAIL` as urgent. US law
+(18 U.S.C. 2258A) then requires the provider to report it to NCMEC, and the Terms
+promise exactly that. You cannot file as a provider until you are registered.
+
+1. Go to report.cybertip.org and register **Kreativ Vantage** as an electronic
+   service provider. Use the same legal name and contact as the DMCA filing.
+2. When a report arrives: review it on `/admin` under **Reports**, file it with the
+   CyberTipline if it is what was reported, and press **Reported to NCMEC, keep
+   held** with the report number. Do not download, copy or forward the image.
+
+- [ ] Registered as an ESP
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them
@@ -164,3 +179,5 @@ early if you would rather not be asked mid-task.
 | 2026-10-08 | **ACT-1 to ACT-4**: plans granted through a ledger with a reason. A $39 pass now licenses one event, not one a month for ever. Events start as drafts, organizers can ask for activation, and you get an email when they do |
 | 2026-10-08 | Gallery password guessing rate limited |
 | 2026-10-08 | **MED-7**: galleries over 400 MB download as ZIPs built in the background, with an email when ready, instead of timing out |
+| 2026-10-08 | Guests can delete their own uploads, as the Privacy Policy already promised, and report a photo. Child-safety reports hide and preserve the photo and alert you |
+| 2026-10-08 | Trash and restore are on screen, for photos, folders and whole events. Deleting an event takes typing its name |

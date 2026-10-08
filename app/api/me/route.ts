@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/schema";
-import { eraseUser } from "@/lib/erasure";
+import { eraseUser, LegalHoldError } from "@/lib/erasure";
 
 const eraseSchema = z.object({
   /** The account's own username or email, typed back. */
@@ -58,6 +58,16 @@ export async function DELETE(request: Request) {
     );
   }
 
-  const result = await eraseUser(account.id, account.id, "account_self_erasure");
+  let result;
+  try {
+    result = await eraseUser(account.id, account.id, "account_self_erasure");
+  } catch (error) {
+    // TRS-1: something in scope is under a legal hold, which an erasure
+    // request does not override. Klik resolves these by hand.
+    if (error instanceof LegalHoldError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
   return NextResponse.json({ ok: true, ...result });
 }

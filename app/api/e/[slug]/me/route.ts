@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
 import { guestCookieName, verifyGuestSession } from "@/lib/guest";
-import { eraseGuest } from "@/lib/erasure";
+import { eraseGuest, LegalHoldError } from "@/lib/erasure";
 
 /**
  * A guest erasing their own contribution: every photo and video they uploaded,
@@ -32,7 +32,17 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "No guest session for this gallery" }, { status: 401 });
   }
 
-  const result = await eraseGuest(guestSession.guestId, event.id, null, "guest_self_erasure");
+  let result;
+  try {
+    result = await eraseGuest(guestSession.guestId, event.id, null, "guest_self_erasure");
+  } catch (error) {
+    // TRS-1: something in scope is under a legal hold, which an erasure
+    // request does not override. Klik resolves these by hand.
+    if (error instanceof LegalHoldError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
 
   // The cookie now points at a guest row that no longer exists, so clear it
   // rather than leaving the browser to present a dangling session.

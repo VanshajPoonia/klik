@@ -60,6 +60,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       purgesAt: item.deletedAt ? expiresAt(item.deletedAt) : null,
       // Trashed items still preview, or the organizer is restoring blind.
       blobUrl: mediaContentPath(event.slug, item.id),
+      // The content route lets managers see trashed media, thumbnails included.
+      thumbUrl: `${mediaContentPath(event.slug, item.id)}?thumb=1`,
       posterUrl: item.posterPathname ? mediaPosterPath(event.slug, item.id) : null,
     })),
     albums: deletedAlbums.map((album) => ({

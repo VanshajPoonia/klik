@@ -518,6 +518,56 @@ export function GuestGallery({
     return () => observer.disconnect();
   }, [hasMore, loadMore]);
 
+  /** MED-6: a guest deletes one of their own uploads. Erased on the server,
+   *  so it is gone from every phone at the next poll as well as this one. */
+  const deleteOwn = useCallback(
+    async (mediaId: string): Promise<string | null> => {
+      const res = await fetch(`/api/e/${event.slug}/media/${mediaId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return body.error ?? "Could not delete it. Try again.";
+      }
+      setItems((current) => current.filter((item) => item.id !== mediaId));
+      setLightboxId(null);
+      return null;
+    },
+    [event.slug],
+  );
+
+  /** TRS-1: reports one photo. If the report hid it, the next poll takes it off
+   *  this phone like every other, after the reporter has seen the thank-you. */
+  const reportItem = useCallback(
+    async (mediaId: string, reason: string, note: string): Promise<string | null> => {
+      const res = await fetch(`/api/e/${event.slug}/media/${mediaId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, note: note || undefined }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return body.error ?? "Could not send the report. Try again.";
+      return null;
+    },
+    [event.slug],
+  );
+
+  const [leaving, setLeaving] = useState<"idle" | "confirm" | "working">("idle");
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  /** Everything this guest added, and their name, erased in one go. The Privacy
+   *  Policy promises it; the cookie is cleared, so the page returns to the
+   *  entry sheet as a stranger would see it. */
+  const removeEverythingMine = useCallback(async () => {
+    setLeaving("working");
+    setLeaveError(null);
+    const res = await fetch(`/api/e/${event.slug}/me`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setLeaveError(body.error ?? "Could not remove them. Try again.");
+      setLeaving("confirm");
+      return;
+    }
+    window.location.reload();
+  }, [event.slug]);
+
   const visibleItems =
     activeAlbumId === "all"
       ? items
@@ -778,6 +828,45 @@ export function GuestGallery({
           </div>
         )}
 
+        {!isOwner && (
+          <div className="mt-12 text-center text-xs text-muted">
+            {leaving === "idle" ? (
+              <button
+                type="button"
+                onClick={() => setLeaving("confirm")}
+                className="underline underline-offset-2 transition-colors hover:text-paper"
+              >
+                Remove everything I added
+              </button>
+            ) : (
+              <div className="mx-auto max-w-sm space-y-3 rounded-2xl border border-canvas-line bg-canvas-raised p-4 text-left">
+                <p className="text-sm text-paper">
+                  Remove every photo and video you added, and your name, from this gallery? This is
+                  permanent and cannot be undone by you or the host.
+                </p>
+                {leaveError && (
+                  <p className="text-xs text-red-400" role="alert">
+                    {leaveError}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={leaving === "working"}
+                    onClick={() => void removeEverythingMine()}
+                  >
+                    {leaving === "working" ? "Removing…" : "Remove everything"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setLeaving("idle")}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {showBranding && (
           <p className="mt-12 text-center text-xs text-muted">
             Shared with <span className="font-medium text-paper">klik</span>
@@ -811,6 +900,8 @@ export function GuestGallery({
           slug={event.slug}
           enhanced={enhanced}
           onEnhancedChange={setEnhancePreference}
+          onDeleteOwn={isOwner ? undefined : deleteOwn}
+          onReport={isOwner ? undefined : reportItem}
         />
       )}
     </div>

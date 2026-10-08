@@ -385,6 +385,10 @@ export const media = pgTable(
     // new route that moderates media cannot forget it. The changes endpoint
     // reads it to send a phone only what moved since it last asked.
     changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+    // TRS-1: set by a child-safety report. While set, nothing in the app may
+    // delete this row or its bytes: not the purge, not erasure, not the guest
+    // who uploaded it. See lib/reports.ts. Only a superadmin clears it.
+    legalHoldAt: timestamp("legal_hold_at", { withTimezone: true }),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),
@@ -652,6 +656,40 @@ export const mediaExports = pgTable(
 );
 
 export type MediaExport = typeof mediaExports.$inferSelect;
+
+export const REPORT_REASONS = [
+  "child_safety",
+  "nudity",
+  "violence",
+  "harassment",
+  "privacy",
+  "copyright",
+  "spam",
+  "other",
+] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+/** TRS-1: a guest or organizer flagging a photo. See lib/reports.ts. */
+export const mediaReports = pgTable("media_reports", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  mediaId: text("media_id")
+    .notNull()
+    .references(() => media.id, { onDelete: "cascade" }),
+  reporterGuestId: text("reporter_guest_id").references(() => guests.id, { onDelete: "set null" }),
+  reporterUserId: text("reporter_user_id").references(() => users.id, { onDelete: "set null" }),
+  reporterKey: text("reporter_key").notNull(),
+  reason: text("reason").$type<ReportReason>().notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolvedByUserId: text("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  resolution: text("resolution"),
+});
+
+export type MediaReport = typeof mediaReports.$inferSelect;
 
 export const JOB_STATUSES = ["queued", "running", "succeeded", "dead"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];

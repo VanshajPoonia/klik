@@ -173,6 +173,10 @@ Three safety properties, all deliberate:
 
 Two properties to keep when adding a job kind. Declare the payload in `JOB_PAYLOADS`, so a malformed job is refused at enqueue rather than dying unseen. And make the handler idempotent: a job can run twice, because a reclaimed stale job may have done some of its work before it was killed.
 
+### Legal holds override everything above
+
+A child-safety report (TRS-1, `lib/reports.ts`) sets `media.legal_hold_at`. While it is set, the purge skips the row and any deleted event containing it, every erasure function throws `LegalHoldError` (routes answer 409), a guest cannot delete it, and the organizer cannot approve or change it. Only `/admin` clears it. The law requires a provider that reports such material to preserve it, and an erasure request does not override that.
+
 ### Exports, which are copies and are treated as copies
 
 `exports/<eventId>/<exportId>/part-N.zip`, built by the job queue for galleries over 400 MB (MED-7). They are deleted after 7 days, by row and also by age under the prefix, so a ZIP whose event cascaded away is still caught. Erasure deletes an event's exports straight away, and the backup sweep copies only `events/`, so an export is never kept longer than its week anywhere. Downloads go through `GET /api/events/[id]/exports/[exportId]/parts/[n]`, which checks `media.exportAll` and then redirects to an hour-long signed URL.

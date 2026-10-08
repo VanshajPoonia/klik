@@ -144,7 +144,7 @@ Two things this surfaced that were not obvious:
 
 **Restore now exists.** `GET /api/events/[id]/trash` lists what is in the bin with previews and purge dates, `POST` to the same route restores media and albums, and `POST /api/events/[id]/restore` brings back a deleted event. Restoring an event leaves uploads disabled, since re-opening a gallery to guests should be a deliberate act rather than a side effect of undoing a delete. Trashed media previews for event managers only; guests get the same 404 they would for a row that was genuinely gone.
 
-**Still outstanding:** UI for the trash screen, typed confirmation naming the event, and an audit entry (ADM-4). The API is there; nothing in the dashboard calls it yet.
+**UI DONE 2026-10-08.** A Trash tab on each event (managers only) shows deleted photos and folders with their purge dates and restores a selection; the main dashboard lists recently deleted events with Restore; deleting an event takes typing its name; and the photo delete dialog no longer claims "this cannot be undone", which was false and made people afraid to tidy their galleries. **Still outstanding:** the audit entry (ADM-4).
 
 ### SEC-5. The purge cron will time out and leave galleries half-deleted
 **Size:** S. **Severity: medium.**
@@ -565,6 +565,8 @@ Evolve `albums` rather than adding a parallel concept. Rename the user-facing la
 Selection mode already partially exists in the dashboard grid. Extend to: set visibility, move to folder, approve or reject, delete, create one share link for the selection (as an ad-hoc album), download selection as ZIP. Operate in batches server-side with a progress response, and make delete undoable for 30 seconds before the R2 objects are actually removed.
 
 ### MED-6. Uploader self-service
+**DONE 2026-10-08**, without waiting on ACC-5: the per-event guest cookie already proves who uploaded what. A guest's own uploads carry a delete control in the lightbox, and the gallery footer offers "Remove everything I added". Both **erase** rather than soft-delete, because a soft delete would land in the host's trash where the host could restore it, turning "delete my photo" into a request. Prepared ZIPs containing the photo go with it. This was also a live mismatch with the Privacy Policy, which already promised guests they could delete their own uploads.
+
 **Size:** S. **Depends on:** ACC-5.
 A guest can delete or hide their own upload from the guest gallery. Non-negotiable for consent, currently impossible.
 
@@ -881,6 +883,8 @@ Steps: create `klik-media-us` with a US jurisdiction; ~~create `klik-media-backu
 ## Phase TRS: Trust, safety, and compliance
 
 ### TRS-1. Guest reporting
+**DONE 2026-10-08** (`drizzle/0020_reports.sql`, `lib/reports.ts`, `test/reports.dbtest.ts`). A flag in the lightbox, eight reasons, one report per person per photo. Three different reporters hide a photo until the host looks. A **child-safety** report hides it from everyone, sets `media.legal_hold_at`, and emails `ALERT_EMAIL` as urgent; while held, the purge, erasure and the uploader's own delete all leave it alone, because 18 U.S.C. 2258A requires a provider that reports such material to preserve it, and the Terms promise it is "reported rather than merely removed". Hosts see reported tiles and can keep a photo or delete it, but cannot touch a held one. `/admin` has the queue (the start of ADM-5) with keep, remove, release, and "reported to NCMEC, keep held". Copyright reports point to the DMCA notice process, which a button cannot stand in for.
+
 **Size:** S. A "report this photo" action on every item, feeding ADM-5. Required for a public-facing UGC product and currently absent.
 
 ### TRS-2. GDPR data export and deletion

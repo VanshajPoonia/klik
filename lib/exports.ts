@@ -150,6 +150,24 @@ export async function deleteEventExports(eventIds: string[]): Promise<number> {
 }
 
 /**
+ * Removes the exports of one event that contain any of these media ids. Used
+ * when a guest erases their own upload: the ZIPs that never held it can stay,
+ * and the ones that did go, because a deleted photo surviving in a download is
+ * not deleted.
+ */
+export async function deleteExportsContaining(eventId: string, mediaIds: string[]): Promise<number> {
+  if (mediaIds.length === 0) return 0;
+  const wanted = new Set(mediaIds);
+  const rows = (await db.select().from(mediaExports).where(eq(mediaExports.eventId, eventId))).filter((row) =>
+    row.parts.some((part) => part.items.some((id) => wanted.has(id))),
+  );
+  if (rows.length === 0) return 0;
+  await deleteBlobs(builtKeys(rows));
+  await db.delete(mediaExports).where(inArray(mediaExports.id, rows.map((row) => row.id)));
+  return rows.length;
+}
+
+/**
  * The daily tidy, in three passes that each cover a different way an export
  * outlives its welcome:
  *

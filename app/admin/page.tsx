@@ -12,6 +12,8 @@ import { CtaLink } from "@/components/marketing/cta-link";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
 import { GrantControl } from "@/components/admin/grant-control";
 import { ActivationRequests } from "@/components/admin/activation-requests";
+import { ReportsQueue } from "@/components/admin/reports-queue";
+import { REPORT_REASON_LABELS, listOpenReports } from "@/lib/reports";
 import { EntitlementList, type EntitlementRow } from "@/components/admin/entitlement-list";
 import { eventLicenseState, type LicenseState } from "@/lib/license";
 import { ActivationEmailControl } from "@/components/admin/activation-email-control";
@@ -55,7 +57,7 @@ export default async function AdminPage() {
   if (!session?.user) redirect("/login");
   if (session.user.role !== "superadmin") redirect("/dashboard");
 
-  const [pending, signups, requests] = await Promise.all([
+  const [pending, signups, requests, reports] = await Promise.all([
     getPendingActivations(),
     getPendingSignups(),
     // ACT-4: drafts their organizer asked to have activated, soonest event first.
@@ -82,6 +84,7 @@ export default async function AdminPage() {
         ),
       )
       .orderBy(sql`${events.eventDate} ASC NULLS LAST`, asc(events.activationRequestedAt)),
+    listOpenReports(),
   ]);
   const shortDate = (date: Date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
@@ -226,6 +229,20 @@ export default async function AdminPage() {
         {/* Above the paid-and-waiting panel because it is the one with rows in
             it. That panel reads `purchases`, which only the webhook writes, and
             the hosted Payment Links the site sells through reach no webhook. */}
+        {/* First on the page: a held report may be evidence of a crime, and
+            every other queue here is about money. */}
+        <ReportsQueue
+          rows={reports.map((row) => ({
+            mediaId: row.mediaId,
+            eventName: row.eventName,
+            eventSlug: row.eventSlug,
+            held: row.held,
+            reasons: row.reasons.map((reason) => REPORT_REASON_LABELS[reason]),
+            notes: row.notes,
+            count: row.count,
+            latest: shortDate(row.latest),
+          }))}
+        />
         <ActivationRequests
           rows={requests.map((row) => ({
             eventId: row.eventId,

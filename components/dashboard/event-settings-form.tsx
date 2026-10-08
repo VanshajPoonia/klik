@@ -168,8 +168,15 @@ export function EventSettingsForm({
     }
   }
 
+  // SEC-4: typing the event's name, rather than clicking OK on a dialog. An
+  // admin acting on the wrong row is the exact accident this guards against,
+  // and a dialog is dismissed by muscle memory where a name is not.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [typedName, setTypedName] = useState("");
+  const nameMatches = typedName.trim() === event.name.trim();
+
   async function handleDelete() {
-    if (!confirm(`Delete "${event.name}" and all its photos? This can't be undone.`)) return;
+    if (!nameMatches) return;
     setDeleting(true);
     setError(null);
 
@@ -390,10 +397,45 @@ export function EventSettingsForm({
       </div>
 
       {canDeleteEvent && (
-        <div className="border-t border-canvas-line pt-5">
-          <Button variant="danger" onClick={handleDelete} disabled={saving || deleting}>
-            {deleting ? "Deleting…" : "Delete event"}
-          </Button>
+        <div className="space-y-3 border-t border-canvas-line pt-5">
+          {confirmingDelete ? (
+            <>
+              <p className="text-sm text-muted">
+                This takes the gallery down for everyone. Every photo and video stays recoverable
+                for 30 days from your dashboard, then is permanently removed. Type{" "}
+                <span className="font-medium text-paper">{event.name}</span> to confirm.
+              </p>
+              <input
+                aria-label="Type the event name to confirm"
+                className={inputClass}
+                value={typedName}
+                onChange={(change) => setTypedName(change.target.value)}
+                autoComplete="off"
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="danger"
+                  onClick={handleDelete}
+                  disabled={saving || deleting || !nameMatches}
+                >
+                  {deleting ? "Deleting…" : "Delete event"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                    setTypedName("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button variant="danger" onClick={() => setConfirmingDelete(true)} disabled={saving || deleting}>
+              Delete event
+            </Button>
+          )}
         </div>
       )}
     </Card>

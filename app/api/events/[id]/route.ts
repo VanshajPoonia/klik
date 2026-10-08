@@ -10,7 +10,7 @@ import {
   QR_TEMPLATES,
 } from "@/lib/schema";
 import { toOrganizerEvent, hashGalleryPassword } from "@/lib/events";
-import { eraseEvent } from "@/lib/erasure";
+import { eraseEvent, LegalHoldError } from "@/lib/erasure";
 import { requireEventCapability, requireEventManagerSession, requireOwnerSession } from "@/lib/roles";
 import type { EventCapability } from "@/lib/permissions";
 import { describeLicenseRefusal, eventPlan } from "@/lib/license";
@@ -263,7 +263,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   // an answer to that. It is opt-in because it is the only delete here that
   // cannot be walked back.
   if (new URL(request.url).searchParams.get("erase") === "true") {
-    const result = await eraseEvent(event.id, session.user?.id ?? null, "event_erasure_request");
+    let result;
+    try {
+      result = await eraseEvent(event.id, session.user?.id ?? null, "event_erasure_request");
+    } catch (error) {
+      // TRS-1: something in scope is under a legal hold, which an erasure
+      // request does not override. Klik resolves these by hand.
+      if (error instanceof LegalHoldError) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
+      throw error;
+    }
     return NextResponse.json({ ok: true, erased: true, ...result });
   }
 

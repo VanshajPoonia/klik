@@ -1,10 +1,23 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { erasureLog, events, guests, media, users } from "./schema";
 import { deleteBlobs } from "./storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys, type MediaObjectRow } from "./media-objects";
-import { deleteEventExports } from "./exports";
+import { deleteEventExports, deleteExportsContaining } from "./exports";
+import { hasLegalHold } from "./reports";
+
+/**
+ * Thrown instead of erasing anything under a legal hold (TRS-1). A child-safety
+ * report freezes the material because the law requires it be preserved, and an
+ * erasure request does not override that. A superadmin resolves it by hand.
+ */
+export class LegalHoldError extends Error {
+  constructor() {
+    super("Some of this is under a legal hold and cannot be erased until it is resolved.");
+    this.name = "LegalHoldError";
+  }
+}
 
 /**
  * Hard deletion, as distinct from the soft delete in the DELETE routes.
@@ -91,6 +104,7 @@ export async function eraseEvent(
   requestedBy: string | null,
   reason = "event_erasure",
 ): Promise<ErasureResult> {
+  if (await hasLegalHold({ eventIds: [eventId] })) throw new LegalHoldError();
   const rows = await db
     .select({
       id: media.id,
@@ -128,11 +142,12 @@ export async function eraseGuest(
     })
     .from(media)
     .where(and(eq(media.guestId, guestId), eq(media.eventId, eventId)));
+  if (await hasLegalHold({ mediaIds: rows.map((row) => row.id) })) throw new LegalHoldError();
 
   const result = await eraseMediaRows(rows);
-  // Any export of this event may contain their uploads. Rebuilding one is a
-  // click; leaving their photos in a ZIP for a week is not an erasure.
-  if (rows.length > 0) await deleteEventExports([eventId]);
+  // Any export holding one of their uploads goes too: leaving their photos in a
+  // ZIP for a week is not an erasure. Exports that never held them stay.
+  await deleteExportsContaining(eventId, rows.map((row) => row.id));
   await db.delete(guests).where(and(eq(guests.id, guestId), eq(guests.eventId, eventId)));
 
   // A deleted guest's uploads are gone, so any event still pointing at one of
@@ -162,6 +177,7 @@ export async function eraseUser(
     .select({ id: events.id })
     .from(events)
     .where(eq(events.ownerId, userId));
+  if (await hasLegalHold({ eventIds: ownedEvents.map((event) => event.id) })) throw new LegalHoldError();
 
   const total: ErasureResult = { mediaDeleted: 0, bytesDeleted: 0 };
 
@@ -190,4 +206,45 @@ export async function eraseUser(
   await db.delete(users).where(eq(users.id, userId));
   await recordErasure("user", userId, total, requestedBy, reason);
   return total;
+}
+
+/**
+ * MED-6: a guest removes one thing they uploaded.
+ *
+ * Erased, not soft-deleted. A soft delete would put it in the organizer's trash,
+ * and the organizer could restore it, which would turn "delete my photo" into
+ * "ask the host whether my photo may stay". The Privacy Policy promises guests
+ * they can delete their own uploads, and this is that promise kept.
+ *
+ * Returns null when the photo is not theirs, so the caller can answer 404
+ * without saying whether it exists.
+ */
+export async function eraseGuestUpload(
+  guestId: string,
+  eventId: string,
+  mediaId: string,
+): Promise<ErasureResult | null> {
+  const rows = await db
+    .select({ id: media.id, ...MEDIA_OBJECT_COLUMNS, sizeBytes: media.sizeBytes })
+    .from(media)
+    .where(
+      and(
+        eq(media.id, mediaId),
+        eq(media.eventId, eventId),
+        eq(media.guestId, guestId),
+        // Under a legal hold it stays, whoever asks. See LegalHoldError.
+        isNull(media.legalHoldAt),
+      ),
+    )
+    .limit(1);
+  if (rows.length === 0) return null;
+
+  const result = await eraseMediaRows(rows);
+  await deleteExportsContaining(eventId, [mediaId]);
+  await db
+    .update(events)
+    .set({ coverMediaId: null, updatedAt: new Date() })
+    .where(and(eq(events.id, eventId), eq(events.coverMediaId, mediaId)));
+  await recordErasure("guest", guestId, result, null, "guest_removed_upload");
+  return result;
 }

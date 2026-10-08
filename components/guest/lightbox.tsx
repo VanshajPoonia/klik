@@ -6,10 +6,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Flag,
   Pause,
   Play,
   Share2,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
@@ -24,9 +26,34 @@ export interface LightboxItem {
   src?: string | null;
   posterSrc?: string | null;
   posterUrl?: string | null;
+  /** The guest's own upload, which they may delete (MED-6). */
+  mine?: boolean;
 }
 
 const SWIPE_THRESHOLD = 50;
+
+type ReportReason =
+  | "child_safety"
+  | "nudity"
+  | "violence"
+  | "harassment"
+  | "privacy"
+  | "copyright"
+  | "spam"
+  | "other";
+
+/** Mirrors REPORT_REASON_LABELS in lib/reports.ts, which is server-only. The
+ *  most serious first, because that is the one that must not be missed. */
+const REPORT_OPTIONS: Array<[ReportReason, string]> = [
+  ["child_safety", "Involves a child in a sexual or abusive way"],
+  ["nudity", "Nudity or sexual content"],
+  ["violence", "Violence or something disturbing"],
+  ["harassment", "Bullying, harassment or hate"],
+  ["privacy", "It's me, and I don't want it here"],
+  ["copyright", "It's my work and was shared without permission"],
+  ["spam", "Spam or nothing to do with this event"],
+  ["other", "Something else"],
+];
 
 /** Fullscreen viewer for the gallery. Deliberately dependency-free: the whole
  * surface is a photo, a counter, and two arrows. */
@@ -42,6 +69,8 @@ export function Lightbox({
   enhanced = false,
   onEnhancedChange,
   onShare,
+  onDeleteOwn,
+  onReport,
 }: {
   items: LightboxItem[];
   index: number;
@@ -56,6 +85,12 @@ export function Lightbox({
   /** Organizer-only: opens the share sheet for the photo on screen. Absent on
    *  the guest side, where nobody may create links. */
   onShare?: (id: string) => void;
+  /** Guest side: deletes one of their own uploads. Resolves to an error
+   *  message, or null when it worked. Offered only on items marked `mine`. */
+  onDeleteOwn?: (id: string) => Promise<string | null>;
+  /** Guest side: reports something they did not upload (TRS-1). Resolves to an
+   *  error message, or null when the report was taken. */
+  onReport?: (id: string, reason: ReportReason, note: string) => Promise<string | null>;
 }) {
   const touchStartX = useRef<number | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -69,6 +104,16 @@ export function Lightbox({
   // Ids whose signed URL failed, so the viewer falls back to the route that
   // re-authorizes. Keyed by id like the enhancement above.
   const [expiredIds, setExpiredIds] = useState<ReadonlySet<string>>(() => new Set());
+  // Which item the delete confirmation is open for. Keyed by id so swiping to
+  // another photo closes it rather than aiming it at the wrong one.
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [reportingId, setReportingId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason | null>(null);
+  const [reportNote, setReportNote] = useState("");
+  const [reportState, setReportState] = useState<"idle" | "sending" | "sent">("idle");
+  const [reportError, setReportError] = useState<string | null>(null);
   const photoUrl = item
     ? item.src && !expiredIds.has(item.id)
       ? item.src
@@ -201,6 +246,35 @@ export function Lightbox({
               <Sparkles className="h-5 w-5" aria-hidden="true" />
             </button>
           )}
+          {onReport && !item.mine && (
+            <button
+              type="button"
+              onClick={() => {
+                setReportingId(item.id);
+                setReportReason(null);
+                setReportNote("");
+                setReportState("idle");
+                setReportError(null);
+              }}
+              aria-label={`Report this ${item.kind}`}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+            >
+              <Flag className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
+          {onDeleteOwn && item.mine && (
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteError(null);
+                setConfirmingDelete(item.id);
+              }}
+              aria-label={`Delete your ${item.kind}`}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+            >
+              <Trash2 className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
           {onShare && (
             <button
               type="button"
@@ -269,6 +343,137 @@ export function Lightbox({
             className="object-contain"
             priority
           />
+        )}
+
+        {onReport && reportingId === item.id && (
+          <div
+            role="dialog"
+            aria-label="Report this"
+            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[80%] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+          >
+            {reportState === "sent" ? (
+              <>
+                <p className="text-sm text-paper">Thanks. The host and the Klik team will look at it.</p>
+                {reportReason === "copyright" && (
+                  <p className="text-xs leading-relaxed text-muted">
+                    To have your work taken down under the DMCA, send a notice as described in our{" "}
+                    <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline">
+                      Terms
+                    </a>
+                    . A report alone is not a legal notice.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setReportingId(null)}
+                  className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
+                >
+                  Close
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-paper">What is wrong with it?</p>
+                <div className="space-y-1.5">
+                  {REPORT_OPTIONS.map(([value, label]) => (
+                    <label key={value} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-2 text-sm text-paper hover:bg-white/5">
+                      <input
+                        type="radio"
+                        name="report-reason"
+                        value={value}
+                        checked={reportReason === value}
+                        onChange={() => setReportReason(value)}
+                        className="accent-[var(--color-volt)]"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <textarea
+                  aria-label="Anything else we should know (optional)"
+                  placeholder="Anything else we should know (optional)"
+                  value={reportNote}
+                  onChange={(change) => setReportNote(change.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  className="w-full rounded-xl border border-white/15 bg-transparent px-3 py-2 text-sm text-paper placeholder:text-muted"
+                />
+                {reportError && (
+                  <p className="text-xs text-red-400" role="alert">
+                    {reportError}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={!reportReason || reportState === "sending"}
+                    onClick={async () => {
+                      if (!reportReason) return;
+                      setReportState("sending");
+                      const error = await onReport(item.id, reportReason, reportNote);
+                      if (error) {
+                        setReportError(error);
+                        setReportState("idle");
+                      } else {
+                        setReportState("sent");
+                      }
+                    }}
+                    className="min-h-11 rounded-full bg-volt px-4 text-sm font-medium text-on-volt disabled:opacity-50"
+                  >
+                    {reportState === "sending" ? "Sending…" : "Report"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportingId(null)}
+                    className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {onDeleteOwn && confirmingDelete === item.id && (
+          <div
+            role="alertdialog"
+            aria-label="Delete your upload"
+            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+          >
+            <p className="text-sm text-paper">
+              Delete this {item.kind}? It is removed for everyone, permanently, including from the
+              host&apos;s copy.
+            </p>
+            {deleteError && (
+              <p className="text-xs text-red-400" role="alert">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  const error = await onDeleteOwn(item.id);
+                  setDeleting(false);
+                  if (error) setDeleteError(error);
+                  else setConfirmingDelete(null);
+                }}
+                className="min-h-11 rounded-full border border-red-500/30 bg-red-500/10 px-4 text-sm font-medium text-red-300 disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(null)}
+                className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
+              >
+                Keep it
+              </button>
+            </div>
+          </div>
         )}
 
         {index > 0 && (

@@ -132,7 +132,7 @@ export default function PrivacyPage() {
         <p>
           <strong>Galleries</strong> stay available for {GALLERY_ACCESS_DAYS.event} days on the
           Event plan and {GALLERY_ACCESS_DAYS.premium} days on Premium and Venue, counted from when
-          the event was created. Extending a plan extends the window; downgrading never shortens one
+          the event went live. Extending a plan extends the window; downgrading never shortens one
           that was already granted.
         </p>
         <p>

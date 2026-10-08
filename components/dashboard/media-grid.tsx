@@ -1,11 +1,14 @@
 import Image from "next/image";
-import { Check, Download, EyeOff, Link2, Play, Share2, Trash2, X } from "lucide-react";
+import { Check, Download, EyeOff, Flag, Link2, Play, Share2, ShieldAlert, Trash2, X } from "lucide-react";
 import type { Media, MediaVisibility } from "@/lib/schema";
 import type { SignedMediaUrls } from "@/lib/media-urls";
 
 /** A media row as the dashboard holds it: the row, plus the signed URLs the
  *  page issued. Optional, so a row updated from an API response still renders. */
-export type DashboardMedia = Media & Partial<SignedMediaUrls>;
+export type DashboardMedia = Media & Partial<SignedMediaUrls> & {
+  /** Open reports from guests (TRS-1). Absent or 0 when there are none. */
+  openReports?: number;
+};
 import { VISIBILITY_OPTIONS } from "@/lib/media-access";
 
 /** Shown on the tile itself, because an organizer scanning a grid of two
@@ -34,6 +37,7 @@ export function MediaGrid({
   onAlbumChange,
   onVisibilityChange,
   onShare,
+  onClearReports,
 }: {
   items: DashboardMedia[];
   onApprove?: (id: string) => void;
@@ -49,6 +53,8 @@ export function MediaGrid({
   onAlbumChange?: (id: string, albumId: string | null) => void;
   onVisibilityChange?: (id: string, visibility: MediaVisibility) => void;
   onShare?: (id: string) => void;
+  /** Closes the open reports on one photo after the host has looked. */
+  onClearReports?: (id: string) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -117,6 +123,21 @@ export function MediaGrid({
                   className="object-cover"
                 />
               )}
+              {/* TRS-1. Above the visibility badge, because a report is the
+                  thing on this tile that wants attention. A legal hold is
+                  Klik's to handle, and says so, so a host does not wonder why
+                  they cannot clear it. */}
+              {!selectionMode && item.legalHoldAt ? (
+                <span className="absolute inset-x-2 bottom-2 flex items-center gap-1 rounded-full bg-red-600/90 px-2 py-1 text-[10px] font-medium text-paper">
+                  <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+                  Held for review by Klik
+                </span>
+              ) : !selectionMode && item.openReports ? (
+                <span className="absolute inset-x-2 bottom-2 flex items-center gap-1 rounded-full bg-red-500/85 px-2 py-1 text-[10px] font-medium text-paper">
+                  <Flag className="h-3 w-3" aria-hidden="true" />
+                  Reported{item.openReports > 1 ? ` by ${item.openReports}` : ""}
+                </span>
+              ) : null}
               {badge && !selectionMode && (
                 <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-paper backdrop-blur">
                   <badge.Icon className="h-3 w-3" aria-hidden="true" />
@@ -180,6 +201,17 @@ export function MediaGrid({
                   ))}
                 </select>
               </label>
+            )}
+            {!selectionMode && onClearReports && Boolean(item.openReports) && !item.legalHoldAt && (
+              <button
+                type="button"
+                onClick={() => onClearReports(item.id)}
+                disabled={busy}
+                className="flex min-h-11 w-full items-center justify-center gap-1.5 border-t border-canvas-line bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas disabled:opacity-50"
+              >
+                <Check className="h-3.5 w-3.5 text-volt" aria-hidden="true" />
+                Looked at it, keep it
+              </button>
             )}
             {!selectionMode && onShare && (
               // Full width rather than another cell in the two-column grid, so

@@ -5,6 +5,7 @@ import { albums, events, guests, media, venueClients } from "@/lib/schema";
 import { deleteBlobs } from "@/lib/storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys } from "@/lib/media-objects";
 import { deleteEventExports } from "@/lib/exports";
+import { hasLegalHold } from "@/lib/reports";
 import { pruneRateLimits } from "@/lib/ratelimit";
 import { log, reportError } from "@/lib/observability";
 import { env } from "@/lib/env";
@@ -47,10 +48,22 @@ export async function GET(request: Request) {
   const expiredTrash = await db
     .select({ id: media.id, ...MEDIA_OBJECT_COLUMNS })
     .from(media)
-    .where(and(isNotNull(media.deletedAt), lte(media.deletedAt, trashCutoff)));
+    .where(
+      and(
+        isNotNull(media.deletedAt),
+        lte(media.deletedAt, trashCutoff),
+        // TRS-1: never purge what is under a legal hold. See lib/reports.ts.
+        isNull(media.legalHoldAt),
+      ),
+    );
 
   if (expiredTrash.length > 0) {
-    await db.delete(media).where(and(isNotNull(media.deletedAt), lte(media.deletedAt, trashCutoff)));
+    await db.delete(media).where(
+      inArray(
+        media.id,
+        expiredTrash.map((row) => row.id),
+      ),
+    );
     await deleteBlobs(mediaObjectKeys(expiredTrash));
   }
 
@@ -85,6 +98,12 @@ export async function GET(request: Request) {
     .where(and(isNotNull(events.deletedAt), lte(events.deletedAt, trashCutoff)));
 
   for (const event of expiredDeletedEvents) {
+    // Deleting the event row would cascade away held media with it, so an
+    // event holding any waits, logged, until a superadmin resolves the hold.
+    if (await hasLegalHold({ eventIds: [event.id] })) {
+      log.warn("purge.skipped_legal_hold", { eventId: event.id });
+      continue;
+    }
     const rows = await db
       .select(MEDIA_OBJECT_COLUMNS)
       .from(media)
