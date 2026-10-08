@@ -167,6 +167,14 @@ Changing the password signs every other device out, which is intended. Do not pr
 
 - [ ] Chose a username and changed a password on a test account
 
+And guest accounts. On your phone, open one of your galleries **signed out**, scroll to
+the bottom and tap "Sign in with your email". You should get a six-digit code by email:
+type it in, and you land back in the gallery. Then open `/me`: the gallery is listed.
+Try a wrong code once to see the message. The code email is new, so check it does not
+land in spam.
+
+- [ ] Signed in from a gallery with an email code, and saw it on `/me`
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

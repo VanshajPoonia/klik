@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { findEventBySlug } from "@/lib/slugs";
-import { albums, events, guests, media } from "@/lib/schema";
+import { albums, guests, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
 import { eventUsage } from "@/lib/usage";
@@ -29,6 +29,8 @@ import {
   removesKlikBranding,
 } from "@/lib/plans";
 import { requireEventManagerSession } from "@/lib/roles";
+import { auth } from "@/lib/auth";
+import { claimGuestCookies } from "@/lib/guest-accounts";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -109,6 +111,15 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   // page has gone, so a guest is never kept waiting on a statistic.
   if (!isOwner) after(() => countGalleryOpen(event.id).catch(() => {}));
 
+  // ACC-3: a signed-in guest's anonymous cookie becomes theirs, so the gallery
+  // is on their account from now on. After the response, and idempotent.
+  const account = isOwner ? null : await auth();
+  const signedInUserId = account?.user?.id ?? null;
+  if (signedInUserId && guestCookie) {
+    const cookie = { name: guestCookieName(event.id), value: guestCookie };
+    after(() => claimGuestCookies(signedInUserId, [cookie]).catch(() => {}));
+  }
+
   // Taken before the query, so anything that changes while it runs is sent
   // again by the first poll rather than falling between the two.
   const syncedAt = new Date().toISOString();
@@ -183,6 +194,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       showBranding={!removesKlikBranding(plan.key)}
       galleryFull={galleryFull && canUpload(event)}
       disposable={disposable}
+      signedIn={Boolean(signedInUserId)}
     />
   );
 }

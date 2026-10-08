@@ -14,12 +14,15 @@ export function noticeEmail({
   paragraphs,
   cta,
   footer,
+  code,
 }: {
   subject: string;
   heading: string;
   paragraphs: string[];
   cta: { label: string; url: string };
   footer: string;
+  /** ACC-2: a one-time code, set large and spaced so it reads off one screen onto another. */
+  code?: string;
 }): Omit<EmailMessage, "to"> {
   const html = `<!doctype html>
 <html lang="en">
@@ -36,6 +39,11 @@ export function noticeEmail({
               `<tr><td style="padding:0 0 14px 0;font:400 15px/1.65 Helvetica,Arial,sans-serif;color:${MUTED};">${escapeHtml(paragraph)}</td></tr>`,
           )
           .join("\n        ")}
+        ${
+          code
+            ? `<tr><td style="padding:6px 0 18px 0;font:700 34px/1 'SFMono-Regular',Menlo,Consolas,monospace;letter-spacing:8px;color:${PAPER};">${escapeHtml(code)}</td></tr>`
+            : ""
+        }
         <tr><td style="padding:12px 0 28px 0;">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
             <td bgcolor="${VOLT}" style="border-radius:999px;"><a href="${cta.url}" style="display:inline-block;padding:13px 26px;font:600 15px/1 Helvetica,Arial,sans-serif;color:${CANVAS};text-decoration:none;">${escapeHtml(cta.label)}</a></td>
@@ -51,6 +59,6 @@ export function noticeEmail({
   </table>
 </body>
 </html>`;
-  const text = [heading, "", ...paragraphs.flatMap((paragraph) => [paragraph, ""]), `${cta.label}: ${cta.url}`, "", `Questions? Call or text ${SUPPORT_PHONE}.`, "", footer].join("\n");
+  const text = [heading, "", ...paragraphs.flatMap((paragraph) => [paragraph, ""]), ...(code ? [code, ""] : []), `${cta.label}: ${cta.url}`, "", `Questions? Call or text ${SUPPORT_PHONE}.`, "", footer].join("\n");
   return { subject, html, text };
 }

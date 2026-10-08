@@ -314,13 +314,27 @@ There are two queues on that page, and only one of them has anything in it.
 | Panel | Reads | State today |
 |---|---|---|
 | "Paid, awaiting activation" | `purchases` | **Always empty.** Only the webhook writes that table, and the hosted Payment Links reach no webhook |
-| "Signed up, not activated" | `users` where `activated_at IS NULL` | The real queue, with the email needed to find the payment in Stripe |
+| "Signed up, not activated" | `users` where `activated_at IS NULL` and (`organizer_intent_at IS NOT NULL` or they own an event) | The real queue, with the email needed to find the payment in Stripe |
 
 The second exists because of what the first cannot see. A Payment Link payment
 appears in the Stripe Dashboard carrying an email and nothing else, and before
 this panel a self-signup appeared nowhere in `/admin` at all: the client list is
 built from accounts that already have an event, and a new signup has neither an
 event nor a plan. Matching money to a person was impossible, not merely manual.
+
+**Since ACC-2 (2026-10-09) not every account without a plan is a customer.** A guest
+can sign in with an email code to keep the galleries they joined, which makes a `users`
+row with no plan and no intention of buying one. Listing those would bury the real
+queue, so the panel reads `users.organizer_intent_at`, which is set by:
+
+- `POST /api/signup`, because that form is for running events;
+- `/signup?plan=<key>` when the visitor is already signed in, **before** the redirect to
+  the Payment Link, so a guest account that buys still lands in the queue.
+
+Every pricing button goes through `/signup?plan=`, so every purchase made through the
+site sets it. A Payment Link opened directly, from a shared URL, does not; that buyer is
+found by email on `/admin/search`. Accounts that existed before this were backfilled
+with their `created_at`.
 
 This is ROADMAP ACT-2: "This is the v1 revenue mechanism: a human decides."
 

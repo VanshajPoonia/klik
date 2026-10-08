@@ -108,6 +108,9 @@ export default async function DashboardPage() {
             <span className="text-lg font-semibold tracking-tight">klik</span>
           </div>
           <div className="flex items-center gap-5">
+            <Link href="/me" className="text-sm text-muted hover:text-paper">
+              Your galleries
+            </Link>
             <Link href="/dashboard/account" className="text-sm text-muted hover:text-paper">
               Account
             </Link>

@@ -35,6 +35,13 @@ export const users = pgTable("users", {
   credentialVersion: integer("credential_version").notNull().default(0),
   username: text("username").unique(), // set only for credential-based accounts
   passwordHash: text("password_hash"), // bcrypt, set only alongside username
+  /**
+   * ACC-2: when this account showed it came to run events, by signing up at
+   * /signup or opening a plan's payment link. Null for an account made by a
+   * guest signing in to keep a gallery, which is why the admin queue of
+   * signups waiting on activation reads this rather than every account.
+   */
+  organizerIntentAt: timestamp("organizer_intent_at", { withTimezone: true }),
   /** ID-1: when the handle was last chosen. One change per 30 days. */
   usernameChangedAt: timestamp("username_changed_at", { withTimezone: true }),
   /**
@@ -373,8 +380,15 @@ export const guests = pgTable(
     consentVersion: text("consent_version"),
     // CAM-4: shots taken on a disposable roll. See events.shots_per_guest.
     shotsUsed: integer("shots_used").notNull().default(0),
+    /**
+     * ACC-1: the account this guest was signed in as, or that later claimed the
+     * guest's cookie. Null is an anonymous guest, which is most of them and
+     * always will be: an account is never required to join or upload.
+     */
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
+  // guests_user_idx is partial and lives in drizzle/0028 (constraint 4).
   (table) => [index("guests_event_idx").on(table.eventId)],
 );
 

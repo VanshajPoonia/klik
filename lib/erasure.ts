@@ -152,10 +152,13 @@ export async function eraseGuest(
 
   // A deleted guest's uploads are gone, so any event still pointing at one of
   // them as its cover needs that pointer cleared or the gallery renders a hole.
-  await db
-    .update(events)
-    .set({ coverMediaId: null, updatedAt: new Date() })
-    .where(and(eq(events.id, eventId), eq(events.coverMediaId, rows[0]?.id ?? "")));
+  // Any of them, not only the first: the cover is whichever one the host chose.
+  if (rows.length > 0) {
+    await db
+      .update(events)
+      .set({ coverMediaId: null, updatedAt: new Date() })
+      .where(and(eq(events.id, eventId), inArray(events.coverMediaId, rows.map((row) => row.id))));
+  }
 
   await recordErasure("guest", guestId, result, requestedBy, reason);
   return result;
@@ -178,6 +181,20 @@ export async function eraseUser(
     .from(events)
     .where(eq(events.ownerId, userId));
   if (await hasLegalHold({ eventIds: ownedEvents.map((event) => event.id) })) throw new LegalHoldError();
+  // ACC-1: what this person shared as a guest at other people's events is
+  // theirs too, and "remove me" covers it. Checked for holds before anything
+  // is deleted, so a hold on one upload cannot leave the erasure half done.
+  const guestRows = await db
+    .select({ id: guests.id, eventId: guests.eventId })
+    .from(guests)
+    .where(eq(guests.userId, userId));
+  if (guestRows.length > 0) {
+    const shared = await db
+      .select({ id: media.id })
+      .from(media)
+      .where(inArray(media.guestId, guestRows.map((row) => row.id)));
+    if (await hasLegalHold({ mediaIds: shared.map((row) => row.id) })) throw new LegalHoldError();
+  }
 
   const total: ErasureResult = { mediaDeleted: 0, bytesDeleted: 0 };
 
@@ -201,6 +218,15 @@ export async function eraseUser(
     // Before the cascade takes the export rows, which are the only record of
     // where the ZIPs are.
     await deleteEventExports(ownedEvents.map((event) => event.id));
+  }
+
+  const ownedIds = new Set(ownedEvents.map((event) => event.id));
+  for (const row of guestRows) {
+    // Owned events went above, guests and all.
+    if (ownedIds.has(row.eventId)) continue;
+    const result = await eraseGuest(row.id, row.eventId, requestedBy, `${reason}:guest`);
+    total.mediaDeleted += result.mediaDeleted;
+    total.bytesDeleted += result.bytesDeleted;
   }
 
   // ORG-3: invitations are addressed to an email, not an account, so no foreign

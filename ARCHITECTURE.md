@@ -70,7 +70,7 @@ The fix is all three: the linux binaries are explicit `optionalDependencies`, `n
 
 **Organizer.** A `users` row. Owns events (`events.owner_id`) or is a co-host (`event_co_hosts`). Authenticated by Auth.js. Co-hosts are capped by plan (`maxCoHosts`: Premium 5, Venue 10), with open invitations counted against the cap. Since ORG-3 someone without an account is invited by email (`event_invites`, `lib/team.ts`); the invitation itself grants nothing, and only becomes an `event_co_hosts` row when accepted by an account signed in with that address. Since ORG-4 an owner can hand an event to a manager on its team, who must accept; the event's licence stays where it was.
 
-**Guest.** **No `users` row, ever.** A guest gets a row in `guests` plus a JWT cookie named `klik_g_{eventId}`, signed with `AUTH_SECRET`, valid 30 days, scoped to one event. There is no server-side session record, so **the cookie is the identity**: anyone holding it is that guest, and it cannot be revoked individually. Treat it as a bearer token, because it is one.
+**Guest.** **Never needs a `users` row.** Since ACC-1 a guest *may* also be signed in, and then `guests.user_id` points at their account; that adds memory across phones and nothing else, and no join or upload path may ever require it. A guest gets a row in `guests` plus a JWT cookie named `klik_g_{eventId}`, signed with `AUTH_SECRET`, valid 30 days, scoped to one event. There is no server-side session record, so **the cookie is the identity**: anyone holding it is that guest, and it cannot be revoked individually. Treat it as a bearer token, because it is one.
 
 A second cookie, `klik_unlock_{eventId}`, proves a password gallery was unlocked. It carries `accessVersion`, so bumping `events.access_version` invalidates every outstanding unlock at once. That is the revocation mechanism for gallery passwords.
 
@@ -289,6 +289,8 @@ Guest accounts and guest event history. Nested folders. Any AI. The canvas print
 **Teams, 2026-10-08 (ORG-3, ORG-4).** Invitations by email with 14-day links, ownership handover with acceptance, and a team activity feed on the event page read from `audit_log` through an allowlist in `lib/activity.ts`. Single-photo approve, reject and hide are not in the audit log, so the feed shows deletions and bulk actions but not those.
 
 **Usernames and the account page, 2026-10-08 (ID-1 to ID-3).** Handles are unique without case (`users_username_lower_idx`), stored lowercase, and follow `lib/username.ts`; older generated ones are grandfathered. A changed handle is parked for 30 days by a trigger in `drizzle/0027_usernames.sql`, and the JWT callback now refreshes `token.username` from the row it already reads. `/dashboard/account` holds name, handle, password and deletion.
+
+**Guest accounts, 2026-10-09 (ACC-1 to ACC-5).** A guest is still a cookie and still needs no account. When they have one, `guests.user_id` links the two: set on join while signed in, claimed from cookies on `/me` and on gallery load, and resumed on a new phone. Email sign-in sends a six-digit code, limited in the Auth.js route wrapper. `users.organizer_intent_at` separates people who came to run events from guests keeping a gallery, and the admin signup queue reads it. Passkeys (ACC-6) are not built.
 
 `ROADMAP.md` has all of it with task IDs and an order.
 

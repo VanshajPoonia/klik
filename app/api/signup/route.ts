@@ -107,6 +107,9 @@ export async function POST(request: Request) {
           // someone will come looking for when they ask why a new signup cannot
           // create an event, and a default is not an answer.
           activatedAt: null,
+          // ACC-2: this form is for running events, so it is what puts the
+          // account in the activation queue. A code sign-in does not.
+          organizerIntentAt: new Date(),
         })
         .returning({ id: users.id, username: users.username });
       break;

@@ -164,6 +164,7 @@ export function GuestGallery({
   maxVideoSeconds,
   galleryFull = false,
   disposable = null,
+  signedIn = false,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -179,6 +180,8 @@ export function GuestGallery({
   galleryFull?: boolean;
   /** CAM-4: this event is a disposable camera, and this is the guest's roll. */
   disposable?: { shotsPerGuest: number; shotsLeft: number; developsAt: string | null; developed: boolean } | null;
+  /** ACC-4: whether this guest is signed in, which only changes one line of copy. */
+  signedIn?: boolean;
 }) {
   const [shotsLeft, setShotsLeft] = useState(disposable?.shotsLeft ?? 0);
   // A disposable is shot in the moment, so guests use the camera and not their
@@ -902,7 +905,32 @@ export function GuestGallery({
         )}
 
         {!isOwner && (
-          <div className="mt-12 text-center text-xs text-muted">
+          <p className="mt-12 text-center text-xs text-muted">
+            {/* ACC-4. Optional, and said once, at the bottom: nobody needs an
+                account to be here, and the upload button never asks for one. */}
+            {signedIn ? (
+              <>
+                This gallery is saved to your account.{" "}
+                <a href="/me" className="underline underline-offset-2 transition-colors hover:text-paper">
+                  Your galleries
+                </a>
+              </>
+            ) : (
+              <>
+                Want to find this gallery again later?{" "}
+                <a
+                  href={`/login?next=${encodeURIComponent(`/e/${event.slug}`)}`}
+                  className="underline underline-offset-2 transition-colors hover:text-paper"
+                >
+                  Sign in with your email
+                </a>
+              </>
+            )}
+          </p>
+        )}
+
+        {!isOwner && (
+          <div className="mt-4 text-center text-xs text-muted">
             {leaving === "idle" ? (
               <button
                 type="button"

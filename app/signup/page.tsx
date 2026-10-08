@@ -8,6 +8,9 @@ import { PAYMENT_LINKS } from "@/lib/billing-plans";
 import { PLAN_KEYS, PLANS, type PlanKey } from "@/lib/plans";
 import { KIT_WAIT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 import { lookupInvite } from "@/lib/team";
+import { eq, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users } from "@/lib/schema";
 
 export const metadata: Metadata = {
   title: "Create your account",
@@ -46,6 +49,14 @@ export default async function SignupPage({
   const payUrl = planKey ? PAYMENT_LINKS[planKey] : null;
 
   const session = await auth();
+  if (session?.user?.id && payUrl) {
+    // ACC-2: a signed-in account on its way to pay. Recorded before it leaves
+    // for Stripe, so the payment has an account in the admin queue to match.
+    await db
+      .update(users)
+      .set({ organizerIntentAt: sql`COALESCE(${users.organizerIntentAt}, now())` })
+      .where(eq(users.id, session.user.id));
+  }
   if (session?.user) {
     // Already signed in and came here from a plan button: send them on rather
     // than showing a signup form to somebody who has an account.

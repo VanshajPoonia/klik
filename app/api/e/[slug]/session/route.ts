@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { findEventBySlug } from "@/lib/slugs";
-import { events, guests } from "@/lib/schema";
+import { guests } from "@/lib/schema";
 import { isExpired } from "@/lib/access";
+import { auth } from "@/lib/auth";
+import { existingGuestFor } from "@/lib/guest-accounts";
 import { CURRENT_CONSENT } from "@/lib/consent";
 import { eventLicenseState } from "@/lib/license";
 import { clientIp, consume } from "@/lib/ratelimit";
@@ -84,16 +86,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     });
   }
 
-  const [guest] = await db
-    .insert(guests)
-    .values({
-      id: nanoid(),
-      eventId: event.id,
-      displayName: parsed.data.name || null,
-      consentedAt: new Date(),
-      consentVersion: CURRENT_CONSENT.id,
-    })
-    .returning();
+  // ACC-5: someone signed in who has joined this gallery before, on any phone,
+  // carries on as that guest, so what they uploaded stays theirs. Consent is
+  // taken again regardless, because this request just gave it and the text
+  // may have changed since.
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+  const returning = userId ? await existingGuestFor(userId, event.id) : null;
+  const [guest] = returning
+    ? await db
+        .update(guests)
+        .set({
+          consentedAt: new Date(),
+          consentVersion: CURRENT_CONSENT.id,
+          ...(parsed.data.name ? { displayName: parsed.data.name } : {}),
+        })
+        .where(eq(guests.id, returning.id))
+        .returning()
+    : await db
+        .insert(guests)
+        .values({
+          id: nanoid(),
+          eventId: event.id,
+          displayName: parsed.data.name || null,
+          consentedAt: new Date(),
+          consentVersion: CURRENT_CONSENT.id,
+          userId,
+        })
+        .returning();
 
   const guestToken = await signGuestSession({ guestId: guest.id, eventId: event.id });
   response.cookies.set(guestCookieName(event.id), guestToken, {

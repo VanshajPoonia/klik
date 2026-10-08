@@ -32,7 +32,7 @@
 - Granting a plan automatically. **Deliberately**, confirmed 2026-10-08: payments keep human approval. The ledger has a `source` column so automating it later is one webhook handler.
 - Any usage measurement. Nothing counts storage, media, or guests, so nothing can warn about limits.
 - Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt. Usernames are still generated at signup, and since ID-2 can be changed on `/dashboard/account`.
-- Guest accounts, guest event history, guest to organizer upgrade.
+- Passkeys (ACC-6). Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09.
 - Nested folders (MED-4). Per-photo visibility, share links and revocable access **are** built: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
 - Any AI beyond client-side CSS filters.
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
@@ -331,11 +331,17 @@ Original plan, for reference:
 Today a guest is a cookie. You want an optional account that is trivial to create, remembers past events, and can become an organizer account without a second identity.
 
 ### ACC-1. One identity, three capacities
+**DONE 2026-10-09** (`drizzle/0028_guest_accounts.sql`, `lib/guest-accounts.ts`). As designed: `guests.user_id`, nullable, `ON DELETE SET NULL`, with a partial index. Erasing an account now erases what it shared as a guest at other people's events too, holds checked first. Added: `users.organizer_intent_at`, because the admin queue of signups awaiting activation listed every account without a plan and would have filled with guests (see `BILLING.md`). `/after-sign-in` sends an account with no intent and no events to `/me` rather than an empty organizer dashboard.
+
+Original design, for reference:
 **Size:** S (design task, affects everything after).
 Decide and document: there is one `users` table. `role` stays `organizer | superadmin`. "Guest" is not a role, it is a state (a `guests` row with `user_id` null). A signed-in person is a guest at events they joined and an organizer at events they own. This avoids a second account system and means the upgrade path is free.
 - Add `guests.user_id` nullable FK to `users`, with an index.
 
 ### ACC-2. Passwordless sign-up
+**DONE 2026-10-09** (`lib/sign-in-code.ts`, `app/api/auth/[...nextauth]/route.ts`). The existing Resend provider now sends a six-digit code with the link as fallback, valid 10 minutes. The login form asks for the email, then the code, in the same tab, and opens on the code form for anyone arriving from a gallery. Wrong guesses are limited to 5 per address per 15 minutes across every code sent to it, plus a per-network limit, and sends to one address to 3 per 10 minutes; Auth.js counts neither. A failed code keeps the address and destination through a 15-minute cookie, since Auth.js's error redirect carries neither. New accounts made by a code or Google get a generated handle like every other account. **Not done:** hiding the password form behind a "venue login" disclosure. Self-serve buyers sign up with a password today, so it stays the default for anyone not coming from a gallery.
+
+Original plan, for reference:
 **Size:** M, reduced. **Depends on:** F-2, F-8.
 
 **Partly overtaken 2026-10-06.** A `/signup` page shipped ahead of this phase because buying needed an account to attach a payment to, and it takes **email plus a password**, not a code. So the page, the route, its rate limits, the welcome email and the Credentials path all exist; what is still open here is the OTP itself and the choices around it. Re-scope before starting rather than building the page again:
@@ -352,14 +358,23 @@ Passwords are the wrong friction for someone standing at a wedding. Ship email O
 - **Recommended addition:** passkeys via `@simplewebauthn` once OTP ships, since returning guests on the same phone then sign in with a thumb. Listed as NEW-1.
 
 ### ACC-3. Claiming anonymous history
+**DONE 2026-10-09.** Not a separate endpoint: `/me` claims every valid `klik_g_*` cookie on load, and a gallery page claims its own when a signed-in guest opens it. A cookie must be named for the event it is signed for, and a guest already on an account never moves to another, so a shared phone cannot hand one person's uploads to the next.
+
+Original design, for reference:
 **Size:** M. **Depends on:** ACC-1, ACC-2. This is the feature that makes accounts worth creating.
 When someone signs in, the browser still holds every `klik_g_<eventId>` cookie from events they joined anonymously. `POST /api/me/claim-guests` reads all of them, verifies each HMAC, and sets `guests.user_id` on the matching rows. Run it automatically on the first authenticated page load after sign-in, and expose it as "Find my past events" in settings. Cookies are per-event and HMAC-signed, so this cannot be used to claim someone else's uploads.
 
 ### ACC-4. The `/me` surface
+**DONE 2026-10-09, narrower than designed.** `/me` lists the galleries joined with your upload count, opens each, and offers "Remove mine", which erases everything the account shared there from every phone (`DELETE /api/me/galleries/[eventId]`). It points organizers at the dashboard and everyone else at the plans. The gallery footer offers sign-in, once, and says when the gallery is saved. **Left out on purpose:** opening a password-protected gallery without its password. The password exists so a host can change it and shut people out, and an account that once knew it is not the same as knowing it now. **Left out for now:** a cross-event "My uploads" grid; the gallery already marks your own.
+
+Original design, for reference:
 **Size:** M. **Depends on:** ACC-3.
 One page, two lists: "Events you joined" (from `guests.user_id`, showing your own uploads per event and a link back to each gallery, including password-protected ones without re-entering the password since the account now proves access) and "Events you host". Plus a primary "Create an event" button that is the entire guest to organizer upgrade path. Since there is no free organizer tier (C-7), that button leads to plan selection and checkout, so the copy has to carry its weight: show what they get, not a price wall with no context. This is the single highest-friction moment in the product and deserves real design attention rather than a link. Also: "My uploads" across all events, and per-event "delete everything I uploaded" which is both decent and a GDPR requirement.
 
 ### ACC-5. Signed-in guest upload identity
+**DONE 2026-10-09**, through the guest row rather than a column on `media`: joining while signed in records the account on the guest, and joining again from another phone resumes that guest, so uploads survive a cleared cookie or a new phone. Nothing about the account reaches a guest-facing payload. Uploading still needs no account.
+
+Original plan, for reference:
 **Size:** S. **Depends on:** ACC-1.
 When a signed-in person uploads, attribute the media to their account as well as the guest row, so the gallery can show a real name and avatar and so contributions survive a cleared cookie. Uploading must still work with no account, unchanged. Guard the response shape so an account email never reaches a guest-facing payload.
 

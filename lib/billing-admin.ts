@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { entitlements, purchases, subscriptions, users } from "@/lib/schema";
+import { entitlements, events, purchases, subscriptions, users } from "@/lib/schema";
 
 /**
  * Subscription states that mean the money is currently arriving. Anything else,
@@ -98,6 +98,17 @@ export async function getPendingSignups() {
       createdAt: users.createdAt,
     })
     .from(users)
-    .where(and(eq(users.role, "organizer"), isNull(users.activatedAt)))
+    .where(
+      and(
+        eq(users.role, "organizer"),
+        isNull(users.activatedAt),
+        // ACC-2: not a guest who signed in to keep a gallery. Someone who came
+        // to run events, or who has made one, whichever way they arrived.
+        or(
+          isNotNull(users.organizerIntentAt),
+          sql`EXISTS (SELECT 1 FROM ${events} WHERE ${events.ownerId} = ${users.id})`,
+        ),
+      ),
+    )
     .orderBy(desc(users.createdAt));
 }

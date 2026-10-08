@@ -9,6 +9,10 @@ import { users, accounts, sessions, verificationTokens, type UserRole } from "./
 import { verifyPassword } from "./credentials";
 import { clientIp, consume } from "./ratelimit";
 import { env } from "./env";
+import { SIGN_IN_CODE_MINUTES, generateSignInCode, sendSignInCode } from "./sign-in-code";
+import { usernameFromEmail } from "./signup";
+import { isUniqueViolation, raisedBy } from "./db-errors";
+import { reportError } from "./observability";
 
 const oauthProviders = [];
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
@@ -24,7 +28,17 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
 // There is no correct address to guess, so the provider is simply not offered
 // until someone names one. Same reasoning as `sender()` in lib/email.ts.
 if (process.env.AUTH_RESEND_KEY && env.AUTH_EMAIL_FROM) {
-  oauthProviders.push(Resend({ from: env.AUTH_EMAIL_FROM }));
+  // ACC-2: the email carries a six-digit code as well as the link, so it can be
+  // typed into the tab that asked for it. Short-lived, because the space is
+  // small; the guesses are counted in the route wrapper.
+  oauthProviders.push(
+    Resend({
+      from: env.AUTH_EMAIL_FROM,
+      maxAge: SIGN_IN_CODE_MINUTES * 60,
+      generateVerificationToken: generateSignInCode,
+      sendVerificationRequest: ({ identifier, url, token }) => sendSignInCode({ to: identifier, code: token, url }),
+    }),
+  );
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -149,5 +163,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: "/login",
+    // A wrong or expired code lands back on the form that can say so, rather
+    // than on Auth.js's own error page, which looks like a different site.
+    error: "/login",
+  },
+  events: {
+    // ACC-2 and ID-1: an account made by a code or by Google gets a handle
+    // like every other account, so nothing downstream asks how it was made.
+    async createUser({ user }) {
+      if (!user.id || !user.email) return;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          await db
+            .update(users)
+            .set({ username: usernameFromEmail(user.email) })
+            .where(sql`${users.id} = ${user.id} AND ${users.username} IS NULL`);
+          return;
+        } catch (error) {
+          if (!isUniqueViolation(error) && !raisedBy(error, "username_reserved")) {
+            reportError("auth.username_on_create_failed", error);
+            return;
+          }
+        }
+      }
+    },
   },
 });
