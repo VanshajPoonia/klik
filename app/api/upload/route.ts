@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { CreateMultipartUploadCommand, PutObjectCommand, UploadPartCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -8,6 +8,7 @@ import { events, media } from "@/lib/schema";
 import { canUpload } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
 import { GALLERY_FULL_MESSAGE, wouldExceedStorage } from "@/lib/usage";
+import { MULTIPART_THRESHOLD, PART_SIZE, partSizes } from "@/lib/upload-parts";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { clientIp, consume } from "@/lib/ratelimit";
 import {
@@ -112,6 +113,41 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const pathname = blobPathnameFor(event.id, mediaId, extensionForMime(mimeType));
+
+  // OPS-2: a large file goes up in parts, so a wifi drop at 90 percent costs one
+  // 8 MB part rather than the whole 200 MB clip. Each part URL binds that part's
+  // exact length, the same way the single PUT binds the whole size, so the
+  // total still cannot exceed what was checked against the plan above. The
+  // URLs live an hour, because a slow venue connection can take most of that
+  // to reach the last part, and R2 checks the signature when a part starts.
+  let multipart: { uploadId: string; partSize: number; urls: string[] } | null = null;
+  if (sizeBytes > MULTIPART_THRESHOLD) {
+    const created = await r2.send(
+      new CreateMultipartUploadCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: pathname,
+        ContentType: mimeType,
+      }),
+    );
+    const uploadId = created.UploadId!;
+    const urls = await Promise.all(
+      partSizes(sizeBytes).map((length, index) =>
+        getSignedUrl(
+          r2,
+          new UploadPartCommand({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Key: pathname,
+            UploadId: uploadId,
+            PartNumber: index + 1,
+            ContentLength: length,
+          }),
+          { expiresIn: 60 * 60 },
+        ),
+      ),
+    );
+    multipart = { uploadId, partSize: PART_SIZE, urls };
+  }
+
   // ContentLength is signed, not advisory: it lands in X-Amz-SignedHeaders, so
   // R2 rejects the PUT outright if the body is not exactly the size we checked
   // against the plan cap above. Without it the signature binds only the key and
@@ -124,7 +160,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     ContentType: mimeType,
     ContentLength: sizeBytes,
   });
-  const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 5 * 60 });
+  const uploadUrl = multipart ? null : await getSignedUrl(r2, command, { expiresIn: 5 * 60 });
 
   // Videos also get a presigned slot for the poster still the client pulled out
   // of the file. Same ContentLength binding as the media object, so a poster
@@ -165,6 +201,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   return NextResponse.json({
     uploadUrl,
+    multipart,
     pathname,
     maxBytes,
     posterUploadUrl,

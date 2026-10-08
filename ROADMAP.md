@@ -838,6 +838,10 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 **Why this split was worth making:** posters and the duration cap remove most of the pain for a fraction of the work, and they hold up on their own. The transcode is the expensive half and it can wait until there is revenue to justify the compute.
 
 ### OPS-2. Resumable uploads
+**DONE 2026-10-08** (`lib/upload-parts.ts`, `lib/multipart-client.ts`, `app/api/upload/complete/route.ts`). Files over 32 MB, which in practice means video, go up as 8 MB parts, three at a time. Each part URL binds its exact length, so the plan's size check still holds (verified against R2: an oversized part is refused with a 403). A failed part retries on its own with backoff, and while the phone reports itself offline it waits up to five minutes for the connection instead of spending its attempts. The server joins the parts using R2's own list of them rather than ETags from the browser, which a browser can read only if the bucket's CORS rule exposes them, and refuses to join unless every part is present at exactly the expected length. An abandoned upload is aborted by R2's default lifecycle rule after seven days.
+
+Not done: resuming across a page reload, which is OPS-3's territory.
+
 **Size:** M. R2 supports S3 multipart. A 200 MB video that fails at 90 percent currently restarts. Chunk and resume.
 
 ### OPS-4. Move the media bucket to a US jurisdiction

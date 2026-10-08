@@ -10,6 +10,7 @@ import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
 import { compressImageForUpload } from "@/lib/image-compress";
 import { makeThumbnail } from "@/lib/image-thumbnail";
+import { uploadInParts } from "@/lib/multipart-client";
 import { formatDuration, probeVideo } from "@/lib/video-poster";
 import { readCaptureTimeFromFile } from "@/lib/exif";
 import {
@@ -378,14 +379,35 @@ export function GuestGallery({
         });
         const signed = await signRes.json().catch(() => ({}));
         if (!signRes.ok) throw new Error(signed.error ?? "Failed to get upload URL");
-        const { uploadUrl, pathname, posterUploadUrl, posterPathname, thumbUploadUrl, thumbPathname } =
+        const { uploadUrl, multipart, pathname, posterUploadUrl, posterPathname, thumbUploadUrl, thumbPathname } =
           signed;
-
-        await putWithRetry(uploadUrl, uploadBody, mimeType, (percentage) =>
+        const onProgress = (percentage: number) =>
           setUploading((current) =>
             current.map((item) => (item.id === mediaId ? { ...item, progress: percentage } : item)),
-          ),
-        );
+          );
+
+        if (multipart) {
+          // OPS-2: large files go up in parts, each retried on its own, so a
+          // wifi drop costs a part rather than the whole video.
+          await uploadInParts(uploadBody, { urls: multipart.urls, partSize: multipart.partSize, onProgress });
+          const completeRes = await fetch("/api/upload/complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              eventId: event.id,
+              mediaId,
+              mimeType,
+              sizeBytes: uploadBody.size,
+              uploadId: multipart.uploadId,
+            }),
+          });
+          if (!completeRes.ok) {
+            const completed = await completeRes.json().catch(() => ({}));
+            throw new Error(completed.error ?? "Upload could not be finished");
+          }
+        } else {
+          await putWithRetry(uploadUrl, uploadBody, mimeType, onProgress);
+        }
 
         // Best effort: a gallery with a missing poster falls back to the old
         // behaviour, which is far better than failing a guest's upload because

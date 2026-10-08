@@ -138,6 +138,8 @@ This is the critical path and the most security-sensitive code in the repo. `POS
    - For server-compressed photos: read capture time, convert HEIC if needed, then `sanitizePhoto`.
    - Insert the row.
 
+**Large files go up in parts (OPS-2).** Over 32 MB, `/api/upload` starts a multipart upload and returns one length-bound URL per 8 MB part; the browser retries parts individually and waits out offline spells; `/api/upload/complete` joins them from R2's own part list after checking every length. Registration then proceeds exactly as for a single PUT.
+
 ### The rule that governs step 4
 
 **We store only bytes we produced.** `sanitizePhoto` tries the normal pass, then retries with `failOn: "none"` and without mozjpeg, which measurably rescues a truncated file the strict pass throws on. If both fail, the upload is **rejected** and the object deleted.
