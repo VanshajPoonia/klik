@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -53,5 +54,12 @@ export async function POST(
     actor: { id: session.user.id, label: session.user.username ?? session.user.name ?? null },
   });
 
+  await recordAudit({
+    actor: session,
+    action: "plan.revoked",
+    targetType: "entitlement",
+    targetId: entitlementId,
+    detail: `${parsed.data.reason}. ${result.lapsedEvents} events lapsed.`,
+  });
   return NextResponse.json({ ok: true, lapsedEvents: result.lapsedEvents });
 }

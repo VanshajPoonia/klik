@@ -44,6 +44,7 @@ export const testDb = drizzle(pool, { schema });
 /** Every table, child-first, so truncation order never depends on cascade. */
 const TABLES = [
   "jobs",
+  "audit_log",
   "event_slugs",
   "slug_reservations",
   "media_reports",

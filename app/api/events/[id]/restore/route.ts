@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
@@ -37,5 +38,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .returning();
   if (!restored) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  await recordAudit({ actor: session, action: "event.restored", targetType: "event", targetId: id, eventId: id });
   return NextResponse.json({ event: toOrganizerEvent(restored) });
 }

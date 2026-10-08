@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { z } from "zod";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -92,5 +93,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // role has to be part of the update and not only the insert.
       set: { deletedAt: null, createdAt: new Date(), role },
     });
+  await recordAudit({
+    actor: actor.session,
+    action: "team.changed",
+    targetType: "user",
+    targetId: account.id,
+    eventId: event.id,
+    detail: `Added as ${role}.`,
+  });
   return NextResponse.json({ coHost: { ...account, role } }, { status: 201 });
 }

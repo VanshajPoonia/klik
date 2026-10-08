@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { z } from "zod";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -117,5 +118,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       break;
   }
 
+  if (changed.length > 0) {
+    await recordAudit({
+      actor: actor.session,
+      action: "media.bulk",
+      targetType: "event",
+      targetId: event.id,
+      eventId: event.id,
+      detail: `${input.action}${"visibility" in input ? ` to ${input.visibility}` : ""} on ${changed.length} items.`,
+    });
+  }
   return NextResponse.json({ ok: true, changed: changed.map((row) => row.id) });
 }

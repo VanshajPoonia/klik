@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { z } from "zod";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -191,6 +192,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 });
     const changed = await changeEventSlug(event.id, check.slug);
     if (!changed.ok) return NextResponse.json({ error: changed.reason }, { status: 409 });
+    await recordAudit({
+      actor: session,
+      action: "event.address_changed",
+      targetType: "event",
+      targetId: event.id,
+      eventId: event.id,
+      detail: `From /e/${event.slug} to /e/${check.slug}. The old address still works.`,
+    });
   }
 
   const { password, ...restInput } = withoutSlug;
@@ -316,5 +325,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     })
     .where(and(eq(events.id, id), isNull(events.deletedAt)));
 
+  await recordAudit({ actor: session, action: "event.deleted", targetType: "event", targetId: id, eventId: id });
   return NextResponse.json({ ok: true });
 }

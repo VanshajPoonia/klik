@@ -936,6 +936,8 @@ Endpoints: `DELETE /api/me` (self-service, requires typing your own username or 
 ## Phase ADM: Admin console
 
 ### ADM-1. Global search and drill-down
+**DONE 2026-10-08** (`app/admin/search/page.tsx`). One box over accounts (name, email, username), events (name, address, former addresses, client), and venue clients. A pasted gallery link is reduced to its address first, because the link on a sign is what a caller reads out. Results link into the client card or the event dashboard, which superadmins can already open.
+
 **Size:** M. **Depends on:** F-3.
 Search across users, usernames, events, slugs, and venue clients from one field. Open any event's dashboard as an admin (already supported by the permission model).
 
@@ -944,10 +946,14 @@ Search across users, usernames, events, slugs, and venue clients from one field.
 MRR, one-time revenue this month, active subscriptions, failed payments needing attention, refunds. Read from local `subscriptions` and `purchases` tables (kept current by the webhook) rather than calling Stripe on page load.
 
 ### ADM-3. Limits and capacity view
+**DONE 2026-10-08** (`app/admin/capacity/page.tsx`), except the per-account override, which ACT-2's grant form already covers. Every live event by storage percent, fullest first, with platform storage and its R2 cost per month and a count of events past 75 percent. Reads the same trigger-kept counters as the usage meter.
+
 **Size:** M. **Depends on:** F-4, PAY-7. This is the "update on admin dashboard" you asked for.
 A table of accounts and events sorted by percentage of plan consumed, with everyone over 75 percent surfaced first, total R2 storage and its cost, and a one-click plan override with a required reason field that writes to the audit log.
 
 ### ADM-4. Audit log and impersonation
+**DONE 2026-10-08 for the audit log** (`drizzle/0025_audit.sql`, `lib/audit.ts`, `app/admin/audit/page.tsx`). Grants, revocations, report decisions, password resets, event delete and restore, address changes, events going live, single and bulk media changes, and team changes are recorded with the actor, the target and a code-written detail. `recordAudit` never throws. Erasures are not duplicated here: `erasure_log` already records them with hashed subjects, and copying plain ids here would undo that. **Impersonation is not built**: a superadmin already acts with owner powers on any event, which covers support, and signing in as somebody under JWT sessions would need a session-version scheme first (architecture note 4).
+
 **Size:** M.
 Table `audit_log` (id, actor_user_id, action, target_type, target_id, metadata jsonb, ip, created_at). Log every admin action, plan override, password reset, ownership transfer, and media deletion. Impersonation is allowed but shows a persistent banner to the impersonating admin and writes an audit entry on entry and exit.
 

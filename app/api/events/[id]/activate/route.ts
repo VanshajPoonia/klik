@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
@@ -40,6 +41,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     kind: "event_went_live",
     detail: `Put "${event.name}" live on ${getPlan(result.planKey).name}.`,
     actor: { id: session.user.id, label: session.user.username ?? session.user.name ?? null },
+  });
+  await recordAudit({
+    actor: session,
+    action: "event.went_live",
+    targetType: "event",
+    targetId: event.id,
+    eventId: event.id,
+    detail: `On ${getPlan(result.planKey).name}, from a plan the account held.`,
   });
   return NextResponse.json({ ok: true, planKey: result.planKey });
 }

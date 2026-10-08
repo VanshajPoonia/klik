@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
 import { GrantControl } from "@/components/admin/grant-control";
+import { AdminNav } from "@/components/admin/admin-nav";
 import { ActivationRequests } from "@/components/admin/activation-requests";
 import { ReportsQueue } from "@/components/admin/reports-queue";
 import { REPORT_REASON_LABELS, listOpenReports } from "@/lib/reports";
@@ -231,6 +232,7 @@ export default async function AdminPage() {
             the hosted Payment Links the site sells through reach no webhook. */}
         {/* First on the page: a held report may be evidence of a crime, and
             every other queue here is about money. */}
+        <AdminNav current="/admin" />
         <ReportsQueue
           rows={reports.map((row) => ({
             mediaId: row.mediaId,

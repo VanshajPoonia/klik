@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -111,6 +112,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
     kind: result.firstActivation ? "plan_assigned" : "plan_changed",
     detail: `Granted ${what}. ${reason}.${where}`.replace("..", "."),
     actor,
+  });
+
+  await recordAudit({
+    actor: session,
+    action: "plan.granted",
+    targetType: "entitlement",
+    targetId: result.entitlement.id,
+    eventId: result.licensed[0] ?? null,
+    detail: `${what} for ${userId}. ${reason}`,
   });
 
   const liveEvents = result.licensed.length

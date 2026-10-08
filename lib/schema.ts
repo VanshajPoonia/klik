@@ -734,6 +734,30 @@ export const mediaReports = pgTable("media_reports", {
 
 export type MediaReport = typeof mediaReports.$inferSelect;
 
+/**
+ * ADM-4: an append-only record of actions that change access, money or data,
+ * and who took them. Written through `recordAudit` in lib/audit.ts, which never
+ * throws. Holds no personal data beyond the actor's name: targets are ids, and
+ * `detail` is written by code, never copied from user input.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorLabel: text("actor_label"),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id"),
+    eventId: text("event_id").references(() => events.id, { onDelete: "set null" }),
+    detail: text("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("audit_log_created_idx").on(table.createdAt)],
+);
+
+export type AuditEntry = typeof auditLog.$inferSelect;
+
 export const JOB_STATUSES = ["queued", "running", "succeeded", "dead"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 

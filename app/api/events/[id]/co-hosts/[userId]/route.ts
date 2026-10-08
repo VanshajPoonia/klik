@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { eventCoHosts, events } from "@/lib/schema";
@@ -28,5 +29,6 @@ export async function DELETE(
         isNull(eventCoHosts.deletedAt),
       ),
     );
+  await recordAudit({ actor: session, action: "team.changed", targetType: "user", targetId: userId, eventId: event.id, detail: "Removed." });
   return NextResponse.json({ ok: true });
 }

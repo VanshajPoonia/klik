@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -108,6 +109,7 @@ export async function DELETE(
     .update(events)
     .set({ coverMediaId: null, updatedAt: new Date() })
     .where(and(eq(events.id, id), eq(events.coverMediaId, mediaId)));
+  await recordAudit({ actor: session, action: "media.deleted", targetType: "media", targetId: mediaId, eventId: id });
   // A host deleting a reported photo is their answer to the report (TRS-1).
   // Not for a held one: that report is Klik's, and stays open until Klik acts.
   if (!item.legalHoldAt) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordAudit } from "@/lib/audit";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -63,5 +64,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ med
   }
 
   log.info("reports.admin_action", { mediaId, action });
+  await recordAudit({
+    actor: session,
+    action: "report.resolved",
+    targetType: "media",
+    targetId: mediaId,
+    eventId: item.eventId,
+    detail: `${action}. ${note}`,
+  });
   return NextResponse.json({ ok: true });
 }
