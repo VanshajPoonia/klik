@@ -7,11 +7,15 @@ make. `ROADMAP.md` is the other half, what gets built, by task ID.
 Keep this file. Tick things off in it rather than in chat, so the next person
 reading the repo can see what was actually done and when.
 
-Launch target: **weekend of 11 October 2026.**
+**No launch date.** On 2026-10-08 the weekend target was dropped in favour of
+finishing the whole of `ROADMAP.md`. Claude works through it in order and adds
+anything that needs you to this file as it comes up.
 
 ---
 
-## Blocking, before you launch
+## Do these now
+
+They make what already exists safe, whatever gets built next.
 
 ### 1. Create the contact mailbox
 
@@ -65,9 +69,26 @@ launch blocker, not a nicety.
 
 - [ ] PITR window confirmed, and the number written here: ______
 
-### 6. Walk the funnel yourself
+### 6. Move Vercel to Pro before the first real customer
 
-**The highest-value hour left before launch.** Every test so far has been
+Klik is on **Hobby**, which Vercel licenses for **non-commercial use only**. A
+product that takes payments is commercial, so this is a terms problem before it
+is a technical one, and Vercel can pause a Hobby project that breaks them.
+
+Pro is $20 a month and also lifts the two limits Claude is working around:
+
+- cron once a day becomes once a minute, so failed background jobs retry
+  within a minute instead of waiting for the next upload or the 04:00 cron
+- functions get up to 800 seconds and 4 GB, which large ZIP exports want
+
+Vercel, **Settings, Billing**, upgrade the team. Then tell Claude, which changes
+one line in `vercel.json`.
+
+- [ ] On Pro
+
+### 7. Walk the funnel yourself
+
+**The highest-value hour you can spend on this.** Every test so far has been
 synthetic: API calls and curl. No human has been through it.
 
 On a real phone, as a stranger would:
@@ -90,12 +111,25 @@ this category of failure exists and that no test suite catches it.
 
 ---
 
-## Soon after launch
+## Keys Claude will ask for, in the order the work needs them
+
+Nothing here is needed today. Each row says what it unblocks, so you can do it
+early if you would rather not be asked mid-task.
+
+| Needed for | What to create | What to give Claude |
+|---|---|---|
+| **OPS-1** video transcoding | Cloudflare dashboard, **Stream**, subscribe (from $5 a month). Then **My Profile, API Tokens, Create Token**, custom token, permission **Account, Stream, Edit**, scoped to this account only | The token, as `CLOUDFLARE_STREAM_API_TOKEN` in `.env.local` and Vercel Production. Claude creates the signing key and the webhook through the API, so you do not have to |
+| **F-9** Sentry | sentry.io, project type **Next.js**, named `klik`. Then **Settings, Auth Tokens** with `project:releases` | `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` |
+| **AI** phase (scene search, duplicates, safety screening) | Cloudflare **API Tokens**, permission **Account, Workers AI, Read** | `CLOUDFLARE_AI_API_TOKEN` |
+| **ACC** sign in with Google, optional | Google Cloud Console OAuth client. Redirect URI `https://klik.kreativvantage.com/api/auth/callback/google` | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` |
+
+---
+
+## Soon
 
 - [ ] **File the DMCA designation.** Brief already sent. $6, renews every three
       years. Not retroactive, so cover starts the day it is filed.
 - [ ] **Diary the DMCA renewal**, three years out
-- [ ] **Create a Sentry account** so F-9 can replace the email-alert stopgap
 - [ ] **Decide sales tax nexus** with an accountant (`ROADMAP.md` LAW-6)
 
 ---
@@ -114,3 +148,5 @@ this category of failure exists and that no test suite catches it.
 | 2026-10-08 | Terms of Service and Privacy Policy published |
 | 2026-10-08 | Error alerting by email, throttled per event |
 | 2026-10-08 | Stripe payment links checked |
+| 2026-10-08 | Decided: Hobby for now, payments keep human approval, video through Cloudflare Stream, no face grouping |
+| 2026-10-08 | **F-5** background job queue live, with the **SEC-2** orphan reaper as its first job |

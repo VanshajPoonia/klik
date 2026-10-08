@@ -10,6 +10,10 @@
     {
       "path": "/api/cron/purge-expired",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/jobs",
+      "schedule": "0 4 * * *"
     }
   ]
 }

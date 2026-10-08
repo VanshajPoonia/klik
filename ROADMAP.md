@@ -33,7 +33,7 @@
 - Nested folders (MED-4). Per-photo visibility, share links and revocable access **are** built: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
 - Any AI beyond client-side CSS filters.
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
-- Error tracking (F-9 shipped structured logging; Sentry is wired but has no DSN) and a background job runner, which SEC-2's orphan reaper and ACT-4's request queue both need. The activation email no longer waits on it: it sends inline from the plan route and records the outcome either way, which is the right trade for one mail a superadmin is watching send.
+- Error tracking (F-9 shipped structured logging and email alerts; Sentry is wired but has no DSN). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
 
 
 ## Contents
@@ -114,7 +114,7 @@ Combined with the complete absence of rate limiting (SEC-3), a script with a pub
 
 **Rate limiting added 2026-09-30:** `/api/upload` now consumes a per-IP bucket (200/hour) before any database work and a per-guest bucket (60/hour) after the viewer resolves. Organizers are exempt from the guest bucket since they legitimately bulk-upload. The two buckets exist because a whole venue shares one NAT address.
 
-**Still outstanding:** an object uploaded at the declared size and then abandoned is still an orphan nothing reaps. It is now bounded (plan cap per object, rate limit per hour) rather than unbounded, but it still needs the reaper job (F-5) listing `events/` and deleting anything with no matching `media` row older than an hour.
+**FIXED 2026-10-08, the reaper.** `lib/job-handlers/reap-orphans.ts` runs daily on the F-5 queue. It lists `events/`, and deletes objects that no media row references, **soft-deleted rows included** so the trash keeps its bytes. The grace is 24 hours rather than the hour first proposed, since a slow 500 MB upload on venue wifi is not abandoned at sixty minutes, and an orphan costs a fraction of a cent a day. It shares the purge's circuit breaker shape (over 25 **and** a majority), walks the bucket a page at a time across runs, and has a `dryRun` mode. Before it shipped, a read-only dry run against production found all 12 objects referenced.
 
 ### SEC-3. No brute-force protection on a login that holds superadmin credentials
 **Size:** M. **Severity: high.** This is F-2, escalated.
@@ -228,6 +228,10 @@ Counting with `COUNT(*)` on every dashboard load will not survive a 3000-photo w
 Treat these as the starting point, not gospel: instrument real usage from day one (ADM-3) and revisit after 20 real events. Two rules that must hold whatever the numbers become. First, **hitting the photo headline is a warning, hitting the storage ceiling is a block**, because a guest at a wedding must never be told "no" over a number the organizer could have raised. Second, a single 4K-video-heavy event can cost more in R2 than a $39 pass earns, so the video size cap plus the storage ceiling are what protect the margin, not the photo count.
 
 ### F-5. Background job runner
+**DONE 2026-10-08** (`drizzle/0016_jobs.sql`, `lib/jobs.ts`, `lib/job-runner.ts`, `test/jobs.dbtest.ts`). Built as designed below with one change forced by the plan: **Vercel Hobby allows cron once a day**, so the per-minute cron cannot be the trigger. The enqueue is instead. `kickJobRunner()` runs in `after()` and posts to `/api/jobs/run`, which answers 202 and drains in its own 300-second function; `/api/cron/jobs` at 04:00 UTC is the backstop and is safe to poll every minute from outside. A drainer also waits in-process for any retry due inside its own budget, so the first two retries do not depend on a second kick. Claims are one `UPDATE ... SKIP LOCKED` statement, proven by firing eight concurrent claimers at one job. Dead jobs alert through `reportError`. ARCHITECTURE.md section 7 has the details.
+
+Writing the tests also fixed the test database itself: `scripts/test-db.sh` now applies every migration over the pushed schema, because three share-link tests had only ever passed on a cluster that happened to have 0011 applied by hand.
+
 **Size:** M. **Blocks:** AI-2, AI-3, AI-7, MED-7, GRW-1, GRW-2, NEW-8, NEW-19.
 AI embeddings, transcoding, large exports, and email all need work that outlives a request. Add table `jobs` (id, kind, payload jsonb, status, attempts, run_after, locked_at, locked_by, last_error, created_at) and `lib/jobs.ts` with `enqueue(kind, payload)` plus a claim query using `FOR UPDATE SKIP LOCKED`. A Vercel cron hits `/api/cron/jobs` every minute and drains up to N jobs within the function time budget, with exponential backoff and a dead-letter status. Do not reach for Redis or a queue service yet; Postgres handles this volume fine and keeps the stack at two services.
 
@@ -601,6 +605,8 @@ Use EXIF `DateTimeOriginal` when present, falling back to `created_at`, since up
 - Auto-label scenes (cake, speech, dance, group, portrait, decor, venue) with a small zero-shot classification pass against a fixed label set, and drive smart folders from labels.
 
 ### AI-3. Face grouping: consent and compliance
+**CUT 2026-10-08.** Decided in Section C: no face grouping. Kept below as the record of why it is expensive, which is what anyone reconsidering it needs to read first.
+
 **Size:** L. **Depends on:** AI-2, NEW-19. **Decision (2026-09-30): approved, with a real consent flow. Build AI-3a before AI-3b. Do not ship AI-3b without a lawyer signing off on AI-3a.**
 
 **The thing to understand before anything else:** the person who uploads a photo is not the data subject for the other faces in it. Guest consent at the entry sheet covers *their own* uploads and *their own* face. It does not and cannot cover the twelve other people in the frame, half of whom never scanned the QR code and have no relationship with Klik at all. Every product that gets sued over this got it wrong in exactly that spot. So the design is not "collect consent once at the door", it is "detect narrowly, retain briefly, and give any person in a photo a real way to say no".
@@ -988,11 +994,26 @@ Media, events, and purges all set `deleted_at` first; a second pass removes the 
 ### Section B triage. ANSWERED
 Four proposals approved and promoted into Section A with real IDs: disposable camera mode (CAM-4), EXIF and GPS stripping (MED-8), duplicate and blur cleanup (AI-7, plus AI-8 for highlight selection), recap email and highlight reel (GRW-1, GRW-2). The remaining Section B items are still unreviewed.
 
+## Answered (2026-10-08)
+
+Asked when the launch deadline was lifted and the goal became finishing the whole plan.
+
+### Vercel plan: Hobby. ANSWERED
+Hobby allows cron once a day and functions of at most 300 seconds on 1 vCPU. F-5 was built so the enqueue triggers the work and the daily cron is only a backstop, which works on either plan. **Worth knowing:** Vercel licenses Hobby for non-commercial use only, so a paid Klik belongs on Pro, and on Pro the job cron becomes per-minute by changing one line in `vercel.json`. Tracked in `LAUNCH.md`.
+
+### Payments keep human approval. ANSWERED
+A Stripe payment records money and grants nothing; a superadmin activates. This keeps `BILLING.md`'s rule exactly as it is. ACT-1 still builds the entitlement ledger, because per-event grants, revocation, and an honest record of who granted what all need it, but no webhook writes a `stripe` grant. The ledger keeps the `source` column so automating it later is one handler, not a redesign.
+
+### Video: Cloudflare Stream. ANSWERED
+OPS-1 transcodes through Stream rather than ffmpeg in a function. Hobby's 300 seconds, one vCPU and 500 MB of `/tmp` are the wrong shape for a 500 MB 4K original, and Stream is in the Cloudflare account that already holds the bucket. Playback uses Stream's signed tokens, which fits the per-request authorization model in ARCHITECTURE.md section 8. The original stays in R2 for download and export.
+
+### Face grouping: skipped. ANSWERED
+AI-3a and AI-3b are cut. Every other AI task stands. AI-4 smart folders and AI-8 highlights fall back to time, scene labels and similarity, which is what AI-3's own note said covers most of the value. Reversible later, but only with counsel, for the BIPA reasons written in AI-3.
+
 ## Still open
 
 Nothing is blocking. The open items below are judgement calls that can wait until the relevant phase starts.
 
-- **AI-3a legal sign-off.** AI-3b cannot start until counsel clears the consent and governance layer. Everything else in Phase AI is unblocked.
 - **GRW-2 music licensing.** Needs a cleared or CC0 audio library before a highlight reel ships publicly.
 
 ---

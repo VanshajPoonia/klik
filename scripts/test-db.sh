@@ -28,5 +28,21 @@ psql -h 127.0.0.1 -p "$PORT" -U postgres -tc \
 export TEST_DATABASE_URL="postgres://postgres@127.0.0.1:$PORT/klik_test"
 npx drizzle-kit push --config=drizzle.test.config.ts --force >/dev/null
 
+# What push cannot express: CHECK constraints, partial indexes and triggers.
+# Every migration is written to be re-runnable, so all of them are laid over
+# the pushed schema in order, and the test database ends up shaped like
+# production rather than like lib/schema.ts. Tests used to pass or fail
+# depending on whether an older cluster happened to have a migration applied.
+for migration in drizzle/0*.sql; do
+  psql "$TEST_DATABASE_URL" -q -v ON_ERROR_STOP=1 -f "$migration" >/dev/null 2>&1 \
+    || { echo "Migration failed against the test schema: $migration" >&2; exit 1; }
+done
+
+# Except the plan-limit triggers from 0003, which cap an owner at one or five
+# live events. Fixtures routinely create fifty events for one owner (the purge
+# circuit breaker needs a crowd), and those triggers read users.plan_key, which
+# ACT-1 retires. Their replacement is tested where it is built.
+psql "$TEST_DATABASE_URL" -q -c 'DROP TRIGGER IF EXISTS "events_plan_limits_trigger" ON "events"; DROP TRIGGER IF EXISTS "users_plan_limits_trigger" ON "users";' >/dev/null
+
 echo "Ready: $TEST_DATABASE_URL"
 echo "Stop it with: pg_ctl -D $DATA_DIR stop"

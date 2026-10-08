@@ -9,6 +9,7 @@ import {
   real,
   index,
   primaryKey,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import type { PlanKey } from "./plans";
 
@@ -506,6 +507,44 @@ export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
   error: text("error"),
 });
 
+export const JOB_STATUSES = ["queued", "running", "succeeded", "dead"] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+
+/**
+ * Work that outlives a request: thumbnails, transcodes, exports, reaping. See
+ * `lib/jobs.ts` for how a row gets here and `lib/job-runner.ts` for how it
+ * leaves.
+ *
+ * Postgres rather than a queue service, on purpose. The volume is small, the
+ * claim is one `FOR UPDATE SKIP LOCKED` statement, and every job sits next to
+ * the rows it is about, so "what happened to this upload" is one query rather
+ * than a trip to a second vendor's dashboard.
+ *
+ * The partial indexes, including the dedupe unique index that `enqueue` relies
+ * on for `ON CONFLICT`, live in drizzle/0016_jobs.sql, for the same reason the
+ * media soft-delete indexes do: drizzle-kit push would recreate them as full
+ * indexes.
+ */
+export const jobs = pgTable("jobs", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  status: text("status").$type<JobStatus>().notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
+  lockedBy: text("locked_by"),
+  lastError: text("last_error"),
+  // Two enqueues with the same key while the first is still waiting or running
+  // collapse into one. Null opts out. Uniqueness is scoped to live jobs, so a
+  // finished job never blocks the next run of the same work.
+  dedupeKey: text("dedupe_key"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
+export type Job = typeof jobs.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Event = typeof events.$inferSelect;

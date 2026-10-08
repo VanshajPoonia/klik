@@ -27,7 +27,7 @@ Three kinds of people use it, and they authenticate in three completely differen
 | Hosting | Vercel. Production branch is `main` and deploys on push |
 | Database | Neon Postgres via `@neondatabase/serverless` **1.1**, `neon-http` driver |
 | ORM | Drizzle **0.45**. Schema in `lib/schema.ts`, raw SQL migrations in `drizzle/` |
-| Media storage | **Cloudflare R2**, via the AWS S3 SDK. Bucket `klik-media`, **EU jurisdiction** |
+| Media storage | **Cloudflare R2**, via the AWS S3 SDK. Bucket `klik-media-us`, unpinned with an ENAM location hint, endpoint from `R2_ENDPOINT`. A locked second bucket, `klik-media-backup`, holds a copy (section 7) |
 | Organizer auth | Auth.js v5 beta, **JWT session strategy**, credentials plus optional Google and Resend |
 | Guest identity | Per-event JWT in a cookie, signed with `AUTH_SECRET` using `jose`. Never a `users` row |
 | Styling | Tailwind **v4**, tokens in `app/globals.css` |
@@ -35,7 +35,8 @@ Three kinds of people use it, and they authenticate in three completely differen
 | Validation | Zod 4, on every API input and on the environment at boot |
 | Live gallery | SWR polling. No websockets |
 | Rate limiting | Postgres counters, `lib/ratelimit.ts` |
-| Tests | Vitest, `npm test`. 66 tests, pure logic only |
+| Background work | Postgres `jobs` table, `lib/jobs.ts` to enqueue, `lib/job-runner.ts` to drain. No queue vendor (section 7, "Background jobs") |
+| Tests | Vitest. `npm test` for pure logic, `npm run test:db` against a throwaway Postgres (section 11) |
 
 ---
 
@@ -162,6 +163,16 @@ Three safety properties, all deliberate:
 
 **Erasure.** `lib/erasure.ts`. A legal data-removal request. Hard, immediate, irreversible, and it deliberately runs **bytes before rows**, the opposite order to the purge, so the system never reports data as erased while it is still sitting in the bucket. It includes soft-deleted rows and deletes video posters explicitly.
 
+**Orphan reaping.** `lib/job-handlers/reap-orphans.ts`, queued once a day. Deletes objects under `events/` that no media row references, which is the one kind of stored byte neither the purge nor erasure can see, since both walk rows. "Referenced" is checked against every row for the event **including soft-deleted ones**, so a photo in the trash keeps its object. Nothing younger than 24 hours is judged, and the same majority-plus-threshold circuit breaker as the purge stops the walk if most of what it sees looks unreferenced. A `dryRun` payload reports instead of deleting.
+
+### Background jobs
+
+`jobs` is a queue in Postgres (`drizzle/0016_jobs.sql`). A job is claimed by one `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED)` statement, which is what makes it safe on `neon-http` with no transactions: the lock and the status change happen inside one statement. Failures retry at 30 seconds, then 2, 8 and 32 minutes, then land in `dead`, which is the state that alerts. A function killed mid-job leaves the row `running`; the next claim takes it back after 15 minutes.
+
+**How jobs run on the Hobby plan, which allows cron once a day.** The enqueue is the trigger. `kickJobRunner()`, called from `after()`, posts to `/api/jobs/run`, which answers 202 and drains in its own function for up to 280 seconds. `/api/cron/jobs` (daily at 04:00 UTC) schedules the daily jobs, prunes old rows and drains whatever a kick missed. It is safe to call every minute, so an external heartbeat can make retries prompt. On Pro, change its schedule to `* * * * *` and nothing else.
+
+Two properties to keep when adding a job kind. Declare the payload in `JOB_PAYLOADS`, so a malformed job is refused at enqueue rather than dying unseen. And make the handler idempotent: a job can run twice, because a reclaimed stale job may have done some of its work before it was killed.
+
 ### The backup, and why it is locked
 
 **`klik-media-backup` holds a second copy of every object for 30 days, and nothing in this codebase can delete from it.** `lib/backup.ts` copies; `app/api/cron/backup-sweep/route.ts` runs nightly at 02:00 UTC.
@@ -237,9 +248,9 @@ Coverage was chosen on one rule: **cover what already went wrong once.** `lib/fi
 
 `/api/health` checks the database, R2 **and** that the server can encode an image, because a native dependency failing only at runtime on one platform is exactly what a health check is for. It returned 200 throughout the outage above while uploads were dead, which is why the third check exists.
 
-`npm run test:db` is the second suite, 30 tests against a real Postgres, covering the three paths that destroy data: the purge circuit breaker, `lib/erasure.ts` and the co-host revocation predicate. These cannot be written any other way, because the predicates *are* the behaviour and a test that mocks the query away tests nothing.
+`npm run test:db` is the second suite, against a real Postgres, covering the paths that destroy data or decide access: the purge circuit breaker, `lib/erasure.ts`, the co-host revocation predicate, the media access rule, share links and the job queue's claim. These cannot be written any other way, because the predicates *are* the behaviour and a test that mocks the query away tests nothing.
 
-Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster under `/tmp` on port 55433, so it is neither a system service nor your development database. `test/harness.ts` refuses to run unless the target is named `klik_test` and is not hosted on Neon, because the suite truncates every table.
+Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster under `/tmp` on port 55433, so it is neither a system service nor your development database. It pushes `lib/schema.ts` and then applies **every migration** on top, because constraints, partial indexes and triggers exist only in the SQL files; every migration must therefore be re-runnable. The 0003 plan-limit triggers are then dropped, since fixtures create many events per owner and ACT-1 replaces them. `test/harness.ts` refuses to run unless the target is named `klik_test` and is not hosted on Neon, because the suite truncates every table.
 
 **One rule for that suite:** production runs `neon-http`, which has no transactions, while the tests run `node-postgres`, which does. Nothing in `test/*.dbtest.ts` may use `db.transaction()`. It would pass there and fail in production, which is worse than no test.
 
@@ -249,7 +260,7 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 > **This section was corrected on 2026-10-06 and again on 2026-10-07, later than the header's last-verified commit.** Four things it listed as missing had in fact shipped: self-serve signup, per-photo visibility, per-photo share links and transactional email. The rest of this file has not been re-read against the code since `0e7fe18`.
 
-Guest accounts and guest event history. Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging, since Sentry is wired but has no DSN. A background job runner. Video transcoding, and video metadata stripping with it.
+Guest accounts and guest event history. Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding, and video metadata stripping with it.
 
 **Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
 
@@ -261,6 +272,5 @@ Guest accounts and guest event history. Nested folders. Any AI. The canvas print
 
 - `AUTH_SECRET` is absent from Vercel's **Preview** scope, so preview deployments fail to boot at module load.
 - Preview `DATABASE_URL` points at **production**. The `R2_*` variables no longer do: `R2_BUCKET_NAME`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` were dropped from the Preview scope during the OPS-4 cutover on 2026-10-07 and deliberately not restored. A preview deployment that could write to the production media bucket was the worse state, and previews cannot boot anyway while `AUTH_SECRET` is missing. Restoring previews means fixing both, plus adding the preview origin to the bucket's CORS rule, or uploads will fail there even once it boots.
-- The bucket is EU-jurisdiction for a US-only product, and jurisdiction cannot be changed after creation. OPS-4 is the migration, and as of 2026-10-07 it is half done: `klik-media-us` exists unpinned in ENAM with every object copied and verified, but Vercel still points at `klik-media`, so production still reads from the EU. `lib/storage.ts` now takes `R2_ENDPOINT` so finishing it is a configuration change.
-- R2 has **no object versioning**. There is no undo for a deletion bug. The planned mitigation is a second bucket the application holds no credentials to delete from, in OPS-4.
-- No staging database. Sixteen migrations have gone straight to the only database that exists.
+- The project is on Vercel's **Hobby** plan, which Vercel licenses for non-commercial use only, and which limits cron to once a day. The job queue is built to work there (section 7), but a paid product belongs on Pro.
+- No staging database. Seventeen migrations have gone straight to the only database that exists.
