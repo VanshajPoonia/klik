@@ -35,6 +35,8 @@ export const users = pgTable("users", {
   credentialVersion: integer("credential_version").notNull().default(0),
   username: text("username").unique(), // set only for credential-based accounts
   passwordHash: text("password_hash"), // bcrypt, set only alongside username
+  /** ID-1: when the handle was last chosen. One change per 30 days. */
+  usernameChangedAt: timestamp("username_changed_at", { withTimezone: true }),
   /**
    * When a superadmin granted this account its plan. Null means the account was
    * created by someone filling in the signup form and is not yet entitled to
@@ -86,6 +88,8 @@ export const TIMELINE_KINDS = [
   "activation_email_sent",
   "activation_email_failed",
   "event_created",
+  "password_changed",
+  "username_changed",
 ] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
@@ -767,6 +771,18 @@ export type AuditEntry = typeof auditLog.$inferSelect;
  * ORG-3: an invitation to an event's team for an email address that may not
  * have an account yet. The token is in the email; only its hash is stored.
  */
+/**
+ * ID-1: a handle given up by a change, parked so nobody else takes it straight
+ * away. Enforced by triggers in drizzle/0027_usernames.sql, not by app code.
+ */
+export const usernameReservations = pgTable("username_reservations", {
+  usernameLower: text("username_lower").primaryKey(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  releasedAt: timestamp("released_at", { withTimezone: true }).notNull(),
+});
+
 export const eventInvites = pgTable("event_invites", {
   id: text("id").primaryKey(),
   eventId: text("event_id")

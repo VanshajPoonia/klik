@@ -217,14 +217,19 @@ export default async function AdminPage() {
               klik <span className="font-normal text-muted">admin</span>
             </span>
           </div>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/login" });
-            }}
-          >
-            <button className="text-sm text-muted hover:text-paper">Sign out</button>
-          </form>
+          <div className="flex items-center gap-5">
+            <Link href="/dashboard/account" className="text-sm text-muted hover:text-paper">
+              Account
+            </Link>
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/login" });
+              }}
+            >
+              <button className="text-sm text-muted hover:text-paper">Sign out</button>
+            </form>
+          </div>
         </header>
 
         {/* Above the paid-and-waiting panel because it is the one with rows in

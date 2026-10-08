@@ -11,7 +11,7 @@ import { onboardingEmail } from "@/lib/emails/onboarding";
 import { getAppUrl } from "@/lib/env";
 import { log, reportError } from "@/lib/observability";
 import { recordAccountEvent } from "@/lib/timeline";
-import { isUniqueViolation } from "@/lib/db-errors";
+import { isUniqueViolation, raisedBy } from "@/lib/db-errors";
 
 /**
  * Creates an organizer account from the public signup form.
@@ -111,7 +111,9 @@ export async function POST(request: Request) {
         .returning({ id: users.id, username: users.username });
       break;
     } catch (error) {
-      if (!isUniqueViolation(error)) throw error;
+      // A generated handle can also land on one somebody parked (ID-1), which
+      // the trigger refuses. Same answer: another attempt, another suffix.
+      if (!isUniqueViolation(error) && !raisedBy(error, "username_reserved")) throw error;
       // Which unique constraint was it? Asked by querying rather than by
       // matching a constraint name, because these indexes were created by
       // drizzle-kit push and their names are not written down in any migration

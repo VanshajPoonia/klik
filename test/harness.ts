@@ -45,6 +45,7 @@ export const testDb = drizzle(pool, { schema });
 const TABLES = [
   "jobs",
   "event_invites",
+  "username_reservations",
   "audit_log",
   "event_slugs",
   "slug_reservations",

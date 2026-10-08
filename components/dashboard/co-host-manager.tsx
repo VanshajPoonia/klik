@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ArrowRightLeft, Mail, Plus, RotateCw, UserRound, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,55 @@ export function CoHostManager({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // ID-3: people found by handle as the owner types one.
+  const [matches, setMatches] = useState<Array<{ username: string; name: string | null }>>([]);
+  const [activeMatch, setActiveMatch] = useState(-1);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const searchTicket = useRef(0);
+  const listId = useId();
+
+  const query = identifier.trim().replace(/^@/, "");
+  const searchable = query.length >= 2 && !query.includes("@");
+
+  useEffect(() => {
+    if (!searchable) return;
+    const ticket = ++searchTicket.current;
+    const timer = setTimeout(async () => {
+      const result = await apiRequest<{ users: Array<{ username: string; name: string | null }> }>(
+        `/api/users/search?q=${encodeURIComponent(query)}`,
+        {},
+        "",
+      );
+      if (ticket !== searchTicket.current || !result.ok) return;
+      setMatches(result.data.users);
+      setActiveMatch(-1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query, searchable]);
+
+  const shownMatches = searchable && pickerOpen ? matches : [];
+
+  function pick(username: string) {
+    setIdentifier(username);
+    setPickerOpen(false);
+    setMatches([]);
+  }
+
+  function onPickerKey(event: KeyboardEvent<HTMLInputElement>) {
+    if (shownMatches.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveMatch((index) => (index + 1) % shownMatches.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveMatch((index) => (index <= 0 ? shownMatches.length - 1 : index - 1));
+    } else if (event.key === "Enter" && activeMatch >= 0) {
+      event.preventDefault();
+      pick(shownMatches[activeMatch].username);
+    } else if (event.key === "Escape") {
+      setPickerOpen(false);
+    }
+  }
 
   async function run<T>(request: Promise<{ ok: true; data: T } | { ok: false; error: string }>) {
     setBusy(true);
@@ -147,18 +196,57 @@ export function CoHostManager({
       </div>
       <form onSubmit={(event) => void addCoHost(event)} className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            className={inputClass}
-            value={identifier}
-            onChange={(event) => setIdentifier(event.target.value)}
-            placeholder="Username or email"
-            aria-label="Username or email"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            maxLength={254}
-            required
-          />
+          <div className="relative w-full">
+            <input
+              className={inputClass}
+              value={identifier}
+              onChange={(event) => {
+                setIdentifier(event.target.value);
+                setPickerOpen(true);
+              }}
+              onKeyDown={onPickerKey}
+              onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+              placeholder="@username or email"
+              aria-label="Username or email"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={shownMatches.length > 0}
+              aria-controls={listId}
+              aria-activedescendant={activeMatch >= 0 ? `${listId}-${activeMatch}` : undefined}
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={254}
+              required
+            />
+            {shownMatches.length > 0 && (
+              <ul
+                id={listId}
+                role="listbox"
+                className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-canvas-line bg-canvas"
+              >
+                {shownMatches.map((match, index) => (
+                  <li
+                    key={match.username}
+                    id={`${listId}-${index}`}
+                    role="option"
+                    aria-selected={index === activeMatch}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      pick(match.username);
+                    }}
+                    className={`flex min-h-11 cursor-pointer items-center gap-2 px-3.5 text-sm ${
+                      index === activeMatch ? "bg-paper/10" : "hover:bg-paper/5"
+                    }`}
+                  >
+                    <span className="truncate text-paper">{match.name ?? match.username}</span>
+                    <span className="truncate text-xs text-muted">@{match.username}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <select
             className={`${selectClass} sm:w-44 sm:shrink-0`}
             value={role}

@@ -31,7 +31,7 @@
 **Not built at all**
 - Granting a plan automatically. **Deliberately**, confirmed 2026-10-08: payments keep human approval. The ledger has a `source` column so automating it later is one webhook handler.
 - Any usage measurement. Nothing counts storage, media, or guests, so nothing can warn about limits.
-- Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt, and usernames are auto-generated at signup rather than claimed (ID-2).
+- Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt. Usernames are still generated at signup, and since ID-2 can be changed on `/dashboard/account`.
 - Guest accounts, guest event history, guest to organizer upgrade.
 - Nested folders (MED-4). Per-photo visibility, share links and revocable access **are** built: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
 - Any AI beyond client-side CSS filters.
@@ -294,6 +294,14 @@ Done without waiting for a vendor, because the useful part never needed one. Ver
 You need usernames before co-host invites and before guests can be referenced by anything other than an email address.
 
 ### ID-1. Username data model and validation
+**DONE 2026-10-08** (`drizzle/0027_usernames.sql`, `lib/username.ts`, `lib/account.ts`, `test/account.dbtest.ts`). Differences from the plan below, each deliberate:
+
+- **A unique index on `lower(username)`, not a `username_lower` column.** Same guarantee, nothing to keep in step. Checked against production first: no two accounts collided once lowercased. Sign-in and the co-host lookup compare without case to match.
+- **Handles are stored lowercase.** There is no display casing to keep; `@Anita` and `@anita` are one person and are shown one way.
+- **Reserved words live in `lib/username.ts`, parked handles in `username_reservations`.** The words are tested in code; the parking is enforced by two triggers on `users`, so the admin console or a script cannot skip it. The person who parked a handle can take it back.
+- **Handles made before the rules are grandfathered** (`daniel.ab12`). Generation now produces rule-following handles (`daniel_ab12`), so nothing new needs it.
+
+Original plan, for reference:
 **Size:** M. **Blocks:** ID-2, ORG-3, ACC-4.
 `users.username` exists but is only ever set by the admin quick-create form, and uniqueness is case-sensitive, so `Anita` and `anita` are both claimable. Fix properly:
 - Add `users.username_lower` with a unique index, written on every save. Keep `username` for display casing.
@@ -303,10 +311,16 @@ You need usernames before co-host invites and before guests can be referenced by
 - Changing a username parks the old one for 30 days and is allowed once per 30 days.
 
 ### ID-2. Claim and availability flow
+**DONE 2026-10-08.** `GET /api/username/available` and a new `/dashboard/account` page with name, username (live availability, three suggestions while still on a generated handle, the 30-day rule stated before you hit it), password change (needs the current one, then bumps `credential_version` so every other session ends) and account deletion, which `DELETE /api/me` had done since SEC-4 with no screen to reach it. **No forced onboarding redirect**: every account already has a working generated handle, and a redirect between signup and the Stripe page would cost sales. The dashboard says "Your username is @x. Choose your own" until one is chosen.
+
+Original plan, for reference:
 **Size:** M. **Depends on:** ID-1, F-2.
 `GET /api/username/available?u=` (rate limited, returns `{ available, reason }` and never leaks whether a taken handle belongs to a real person beyond "taken"). An onboarding step at `/onboarding/username` that any signed-in account without a username is redirected into, with three suggested handles derived from their name. Settings page allows a change with the 30-day rule surfaced clearly.
 
 ### ID-3. Username search endpoint
+**DONE 2026-10-08.** `GET /api/users/search`, signed in and rate limited per account, prefix match with `_` escaped, organizers only, name and handle only. The team card's input is now a combobox over it, with arrow keys and Enter.
+
+Original plan, for reference:
 **Size:** S. **Depends on:** ID-1. **Blocks:** ORG-3.
 `GET /api/users/search?q=` returning at most 5 matches by prefix on `username_lower`, name only, never email. Used by the co-host picker. Rate limited and requires a session.
 

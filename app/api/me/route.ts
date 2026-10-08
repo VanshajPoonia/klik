@@ -5,6 +5,61 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/schema";
 import { eraseUser, LegalHoldError } from "@/lib/erasure";
+import { changeUsername } from "@/lib/account";
+import { recordAccountEvent } from "@/lib/timeline";
+
+const patchSchema = z
+  .object({
+    name: z.string().trim().min(1, "Tell us your name").max(120).optional(),
+    username: z.string().max(40).optional(),
+  })
+  .refine((value) => value.name !== undefined || value.username !== undefined, "Nothing to change");
+
+/**
+ * ID-2: the account's own name and handle. A handle changes at most once per
+ * 30 days and the old one is parked for as long; both rules are enforced in
+ * lib/account.ts and the database, not here.
+ */
+export async function PATCH(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const parsed = patchSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+  }
+
+  let username: string | undefined;
+  if (parsed.data.username !== undefined) {
+    const [before] = await db.select({ username: users.username }).from(users).where(eq(users.id, session.user.id)).limit(1);
+    const changed = await changeUsername(session.user.id, parsed.data.username);
+    if (!changed.ok) {
+      return NextResponse.json(
+        { error: changed.reason, nextChangeAt: changed.nextChangeAt ?? null },
+        { status: changed.status },
+      );
+    }
+    username = changed.username;
+    if (before?.username !== changed.username) {
+      await recordAccountEvent({
+        userId: session.user.id,
+        kind: "username_changed",
+        detail: `From @${before?.username ?? "nothing"} to @${changed.username}.`,
+      });
+    }
+  }
+  if (parsed.data.name !== undefined) {
+    await db.update(users).set({ name: parsed.data.name }).where(eq(users.id, session.user.id));
+  }
+
+  const [account] = await db
+    .select({ name: users.name, username: users.username, usernameChangedAt: users.usernameChangedAt })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+  return NextResponse.json({ account: { ...account, username: username ?? account?.username ?? null } });
+}
 
 const eraseSchema = z.object({
   /** The account's own username or email, typed back. */

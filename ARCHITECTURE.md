@@ -288,6 +288,8 @@ Guest accounts and guest event history. Nested folders. Any AI. The canvas print
 
 **Teams, 2026-10-08 (ORG-3, ORG-4).** Invitations by email with 14-day links, ownership handover with acceptance, and a team activity feed on the event page read from `audit_log` through an allowlist in `lib/activity.ts`. Single-photo approve, reject and hide are not in the audit log, so the feed shows deletions and bulk actions but not those.
 
+**Usernames and the account page, 2026-10-08 (ID-1 to ID-3).** Handles are unique without case (`users_username_lower_idx`), stored lowercase, and follow `lib/username.ts`; older generated ones are grandfathered. A changed handle is parked for 30 days by a trigger in `drizzle/0027_usernames.sql`, and the JWT callback now refreshes `token.username` from the row it already reads. `/dashboard/account` holds name, handle, password and deletion.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

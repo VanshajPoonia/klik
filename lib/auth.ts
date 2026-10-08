@@ -84,7 +84,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .where(
             identifier.includes("@")
               ? sql`lower(${users.email}) = ${identifier.toLowerCase()}`
-              : eq(users.username, identifier),
+              // Without case, as the unique index since 0027 is, so "Anita"
+              // signs in as the account it could not have been created beside.
+              : sql`lower(${users.username}) = ${identifier.toLowerCase()}`,
           )
           .limit(1);
         // No hash means this account has no password to check: an account created
@@ -119,7 +121,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (typeof token.username === "string" && typeof token.id === "string") {
         const [currentUser] = await db
-          .select({ credentialVersion: users.credentialVersion })
+          .select({ credentialVersion: users.credentialVersion, username: users.username })
           .from(users)
           .where(eq(users.id, token.id))
           .limit(1);
@@ -130,6 +132,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ) {
           return null;
         }
+        // ID-2: a handle can change mid-session. The row is read here anyway,
+        // so the token follows it rather than naming the old one until expiry.
+        token.username = currentUser.username;
       }
       return token;
     },

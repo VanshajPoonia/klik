@@ -42,7 +42,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Enter a username or email" }, { status: 400 });
   }
 
-  const { identifier, role } = parsed.data;
+  const { role } = parsed.data;
+  // "@anita" is how a handle is shown everywhere, so it is how people type it.
+  const identifier = parsed.data.identifier.replace(/^@/, "");
   const [account] = await db
     .select({ id: users.id, name: users.name, email: users.email, username: users.username })
     .from(users)
@@ -51,7 +53,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         eq(users.role, "organizer"),
         // Emails are compared without case, as sign-in does, or "Ana@x.com"
         // misses the account "ana@x.com" and gets sent an invitation instead.
-        or(eq(users.username, identifier), sql`lower(${users.email}) = ${identifier.toLowerCase()}`),
+        or(
+          sql`lower(${users.username}) = ${identifier.toLowerCase()}`,
+          sql`lower(${users.email}) = ${identifier.toLowerCase()}`,
+        ),
       ),
     )
     .limit(1);

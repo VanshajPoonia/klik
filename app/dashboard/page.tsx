@@ -54,7 +54,12 @@ export default async function DashboardPage() {
       .then((rows) => rows.map((row) => row.event)),
     getAccountEntitlements(session.user.id),
     db
-      .select({ venueSlug: users.venueSlug, activatedAt: users.activatedAt })
+      .select({
+        venueSlug: users.venueSlug,
+        activatedAt: users.activatedAt,
+        username: users.username,
+        usernameChangedAt: users.usernameChangedAt,
+      })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1)
@@ -102,14 +107,19 @@ export default async function DashboardPage() {
             <Image src="/klik-mark.png" alt="" width={32} height={32} className="rounded-[8px]" />
             <span className="text-lg font-semibold tracking-tight">klik</span>
           </div>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/login" });
-            }}
-          >
-            <button className="text-sm text-muted hover:text-paper">Sign out</button>
-          </form>
+          <div className="flex items-center gap-5">
+            <Link href="/dashboard/account" className="text-sm text-muted hover:text-paper">
+              Account
+            </Link>
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/login" });
+              }}
+            >
+              <button className="text-sm text-muted hover:text-paper">Sign out</button>
+            </form>
+          </div>
         </header>
 
         <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
@@ -118,6 +128,18 @@ export default async function DashboardPage() {
             <p className="mt-2 text-sm text-muted">
               View, moderate, download, and manage every event from here.
             </p>
+            {/* ID-2: still on the handle signup made up. Other organizers add
+                people to their teams by it, so it is worth a sentence here
+                until it has been chosen, and not a redirect. */}
+            {account?.username && !account.usernameChangedAt && (
+              <p className="mt-2 text-xs text-muted">
+                Your username is @{account.username}.{" "}
+                <Link href="/dashboard/account" className="text-volt hover:underline">
+                  Choose your own
+                </Link>{" "}
+                so co-hosts can find you.
+              </p>
+            )}
           </div>
           <div className="rounded-xl border border-volt/30 bg-volt/10 px-4 py-3 sm:text-right">
             {venue ? (

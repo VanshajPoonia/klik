@@ -33,7 +33,7 @@ describe("normalizeEmail", () => {
 
 describe("usernameFromEmail", () => {
   it("builds a username from the local part", () => {
-    expect(usernameFromEmail("daniel@venue.com")).toMatch(/^daniel\.[a-z0-9]{4}$/);
+    expect(usernameFromEmail("daniel@venue.com")).toMatch(/^daniel_[a-z0-9]{4}$/);
   });
 
   it("gives two people at the same address different usernames", () => {
@@ -47,7 +47,7 @@ describe("usernameFromEmail", () => {
   it("never produces an empty username", () => {
     // `generateUsername` falls back to "client" for a local part with nothing
     // sluggable in it. Without that, the username would be a bare suffix.
-    expect(usernameFromEmail("!!!@venue.com")).toMatch(/^client\.[a-z0-9]{4}$/);
+    expect(usernameFromEmail("!!!@venue.com")).toMatch(/^client_[a-z0-9]{4}$/);
   });
 });
 

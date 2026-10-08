@@ -160,6 +160,13 @@ accept it from the other account. Check the **Team activity** card shows all of 
 - [ ] Looked at each
 - [ ] Walked an invitation and a handover with a second email address
 
+And the **Account** page, linked from the top of your dashboard: change your name, choose
+a username (the old generated one is held for you for 30 days), and change your password.
+Changing the password signs every other device out, which is intended. Do not press
+"Delete my account" on an account you want to keep; it is real and immediate.
+
+- [ ] Chose a username and changed a password on a test account
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

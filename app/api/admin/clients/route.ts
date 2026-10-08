@@ -10,7 +10,7 @@ import { requireSuperadmin } from "@/lib/roles";
 import { generateUsername, generatePassword, hashPassword } from "@/lib/credentials";
 import { prepareEventInsert, toPublicEvent, type CreateEventInput } from "@/lib/events";
 import { createVenueSlug } from "@/lib/venue";
-import { isUniqueViolation } from "@/lib/db-errors";
+import { isUniqueViolation, raisedBy } from "@/lib/db-errors";
 
 const createClientSchema = z.object({
   contactName: z.string().trim().min(1).max(120),
@@ -94,7 +94,7 @@ async function createOrganizerUserAndEvent(
       const [[user], [event]] = await db.batch([userQuery, eventQuery]);
       return { user, event, password };
     } catch (error) {
-      const uniqueViolation = isUniqueViolation(error);
+      const uniqueViolation = isUniqueViolation(error) || raisedBy(error, "username_reserved");
       if (!uniqueViolation || attempt === 4) throw error;
     }
   }
