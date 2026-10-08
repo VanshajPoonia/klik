@@ -1395,6 +1395,8 @@ There is no age gate anywhere. Children attend weddings and birthday parties, th
 Carry-through: LAW-1's terms must actually contain the under-13 prohibition and a deletion-on-notice commitment, and TRS-1's report flow is the route by which notice arrives. This also interacts with AI-3a, where excluding minors from face detection is already decided.
 
 ### LAW-4. Guest consent does not cover marketing use
+**Status 2026-10-08:** no showcase exists to curate. `/v/[venueSlug]` only redirects to the venue's featured live event, where the gallery's own access rules apply, which is inside what guests agreed to. The curated `venue_showcase` described below is still the design for the day a venue page shows photos itself, and must ship with that page, not after it.
+
 **Size:** S. **This one is a live mismatch, not a hypothetical.**
 `events.venue_featured` plus `/v/[venueSlug]` publishes an event's gallery on a venue's public page. The consent a guest actually gave says their photos "may be visible to everyone with access to this event gallery". A venue's public marketing page is not that, and using someone's likeness to promote a business is squarely right-of-publicity territory in most US states.
 
@@ -1403,6 +1405,8 @@ Carry-through: LAW-1's terms must actually contain the under-13 prohibition and 
 Build: a `venue_showcase` selection (media ids chosen per event by the organizer) that `/v/[venueSlug]` reads instead of the event's media. The existing `events.venue_featured` boolean is not enough on its own, since it publishes everything. Until this ships, treat public venue galleries as not safe to use with real guest photos.
 
 ### LAW-5. Breach notification readiness
+**DONE 2026-10-08 as a written plan**, `INCIDENTS.md`: who decides, how to contain with this system's real credentials (what rotating each one breaks, including that `AUTH_SECRET` is the only way to end every JWT session), where to find what happened (`audit_log`, `account_timeline`, `erasure_log`, function logs, Neon branches), what Klik holds about whom, the shape of the state notification duties, and the CSAM reporting duty kept separate. F-9's Sentry would strengthen the investigation half; the plan does not wait on it.
+
 **Size:** M. **Depends on:** ADM-4, F-9.
 All fifty states have breach notification statutes, most with deadlines measured in days. Responding to one requires knowing **what** was accessed and **whose** it was, which today is unanswerable: there is no audit log, no error tracking, and no access logging. ADM-4 and F-9 are the prerequisites; the missing piece after those is a written incident response plan naming who decides, who notifies, and within what window.
 

@@ -133,6 +133,26 @@ promise exactly that. You cannot file as a provider until you are registered.
 
 - [ ] Registered as an ESP
 
+### 9. Read the incident plan, and fill its blanks
+
+`INCIDENTS.md` is what to do if data is ever exposed: what to rotate, where to look,
+and who must be told by when. It has a short checklist at the end, the first item
+being a lawyer's number written down before you need it.
+
+- [ ] Read `INCIDENTS.md` and filled in the checklist at the bottom
+
+### 10. Look at the screens built today
+
+The browser extension was not connected, so none of the new screens has been looked
+at by eye. Each works and is tested, but layout bugs only show on a screen. On a
+laptop and a phone, open: an event's **Insights** and **Trash** tabs, the **QR code**
+tab (try each style and the story image), **Settings** (gallery address, disposable
+camera), the selection bar's **Actions**, `/admin` (grants, reports, waiting to go
+live) and `/admin/search`, `/admin/capacity`, `/admin/audit`, and the **live display**
+from a Premium event. Send anything that looks wrong.
+
+- [ ] Looked at each
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them
