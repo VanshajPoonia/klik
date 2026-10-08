@@ -25,6 +25,7 @@ import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
 import { renderThumbnail } from "@/lib/thumbnail";
 import { enqueue, enqueueThumbnail, kickJobRunner } from "@/lib/jobs";
 import { claimUsageWarning } from "@/lib/notices";
+import { spendShot } from "@/lib/disposable";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
 import {
   SIGNATURE_BYTES,
@@ -410,6 +411,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     storedMimeType = "image/jpeg";
     width = sanitized.info.width;
     height = sanitized.info.height;
+  }
+
+  // CAM-4: spend one shot from the guest's roll, or refuse. Conditional, so two
+  // uploads racing for the last frame cannot both have it. Spent here, after
+  // every other check, so a rejected file never costs a shot.
+  if (event.disposableMode && !viewer.ownerSession && viewer.guestId) {
+    const spent = kind === "photo" && (await spendShot(viewer.guestId, event.shotsPerGuest));
+    if (!spent) {
+      await deleteBlobs([input.pathname]).catch(() => {});
+      return NextResponse.json({ error: "Your roll is finished. Every shot has been taken." }, { status: 403 });
+    }
   }
 
   // Stills the client made. Each is checked against the key this media id would

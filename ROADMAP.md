@@ -756,6 +756,8 @@ The in-app camera is already good (six looks, torch, zoom, focus tap, timer, fro
 Per-item: copy share link, Web Share API with the file attached, download original, download web-size, and a 9:16 story export with the event QR in the corner so a guest sharing a photo also advertises the gallery. That last one is a growth loop, not a nicety.
 
 ### CAM-4. Disposable camera mode
+**DONE 2026-10-08** (`drizzle/0022_disposable.sql`, `lib/disposable.ts`, `test/disposable.dbtest.ts`). A setting on any plan: shots per guest (default 24) and a develop time. Decisions on the open questions below: the **host sees everything before developing** (they moderate); a guest sees nothing, their own shots included, until then; **uploads after developing appear immediately**; a guest **cannot pick from their camera roll**, only shoot; top-ups are not built. Development is **compared at read time** in `lib/media-access.ts` (`rollUndeveloped`), not flipped by a job, so it is exact on Hobby, and the changes endpoint tells every phone to start over when the moment passes. A shot is spent by one conditional update at registration, tested with five uploads racing for the last frame. The camera gets a frame counter instead of a review tray, photo mode only, and a synthesized wind-on sound. "Develop now" in settings sets the time to the present.
+
 **Size:** M. **Promoted from NEW-2 on 2026-09-30.** The name of the app, finally doing the thing.
 Two per-event settings and a reveal job, and it changes the entire feel of the product.
 - **A shot limit per guest** (default 24, like a real roll), configurable, with the counter shown prominently in the camera UI. Scarcity makes people compose instead of spraying, and it incidentally caps your storage cost per guest.

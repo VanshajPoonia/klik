@@ -47,6 +47,9 @@ const row: Event = {
   mediaBytes: 1024,
   usageWarnedPercent: 0,
   retentionWarnedDays: null,
+  disposableMode: false,
+  shotsPerGuest: 24,
+  developsAt: null,
 };
 
 /**
@@ -100,6 +103,10 @@ const WITHHELD: Record<string, string> = {
   mediaBytes: "storage use is the organizer's business, not the guests'",
   usageWarnedPercent: "notification bookkeeping",
   retentionWarnedDays: "notification bookkeeping",
+  // CAM-4. Guests are told about the roll by the page, as copy, not as fields.
+  disposableMode: "rendered as copy on the guest page, not sent raw",
+  shotsPerGuest: "rendered as copy on the guest page, not sent raw",
+  developsAt: "rendered as copy on the guest page, not sent raw",
   // Host configuration. The server already filters private media out of a
   // guest's gallery, so the flag buys a guest nothing and telling them about a
   // back room they cannot see is worse than silence.

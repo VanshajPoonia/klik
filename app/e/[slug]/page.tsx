@@ -4,10 +4,11 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { albums, events, media } from "@/lib/schema";
+import { albums, events, guests, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
 import { eventUsage } from "@/lib/usage";
+import { rollUndeveloped } from "@/lib/media-access";
 import {
   guestCookieName,
   verifyGuestSession,
@@ -125,6 +126,25 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   const coverUrl = coverUrls ? (coverUrls.src ?? coverUrls.posterSrc) : null;
 
   const galleryFull = eventUsage(event, plan).full;
+  // CAM-4: the guest's roll, when the event is a disposable camera.
+  const shotsUsed =
+    event.disposableMode && guestSession?.guestId
+      ? ((
+          await db
+            .select({ shotsUsed: guests.shotsUsed })
+            .from(guests)
+            .where(eq(guests.id, guestSession.guestId))
+            .limit(1)
+        )[0]?.shotsUsed ?? 0)
+      : 0;
+  const disposable = event.disposableMode
+    ? {
+        shotsPerGuest: event.shotsPerGuest,
+        shotsLeft: Math.max(0, event.shotsPerGuest - shotsUsed),
+        developsAt: event.developsAt?.toISOString() ?? null,
+        developed: !rollUndeveloped(event),
+      }
+    : null;
   const publicEvent = toPublicEvent({
     ...event,
     coverMediaId: canCustomizeGallery(plan.key) ? event.coverMediaId : null,
@@ -147,6 +167,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       maxVideoSeconds={plan.maxVideoSeconds}
       showBranding={!removesKlikBranding(plan.key)}
       galleryFull={galleryFull && canUpload(event)}
+      disposable={disposable}
     />
   );
 }

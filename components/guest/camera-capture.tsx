@@ -91,15 +91,59 @@ function savePrefs(prefs: CameraPrefs): void {
   }
 }
 
+/**
+ * CAM-4: the sound a disposable camera makes winding on to the next frame,
+ * synthesized rather than shipped as a file: a short ratchet of filtered noise.
+ * Silent wherever audio is unavailable or blocked, which is never a reason for
+ * the shot itself to fail.
+ */
+function windOn(): void {
+  try {
+    const AudioContextClass =
+      window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const clicks = 6;
+    for (let index = 0; index < clicks; index += 1) {
+      const start = context.currentTime + 0.12 + index * 0.045;
+      const buffer = context.createBuffer(1, Math.floor(context.sampleRate * 0.02), context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let sample = 0; sample < data.length; sample += 1) {
+        data[sample] = (Math.random() * 2 - 1) * (1 - sample / data.length);
+      }
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      const filter = context.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.value = 2200;
+      const gain = context.createGain();
+      gain.gain.value = 0.25;
+      source.connect(filter).connect(gain).connect(context.destination);
+      source.start(start);
+    }
+    setTimeout(() => void context.close().catch(() => {}), 800);
+  } catch {
+    // No sound is fine.
+  }
+}
+
 export function CameraCapture({
   onComplete,
   onClose,
-  allowVideo = true,
+  allowVideo: allowVideoProp = true,
+  disposable,
 }: {
   onComplete: (items: CapturedItem[]) => void;
   onClose: () => void;
   allowVideo?: boolean;
+  /**
+   * CAM-4: a disposable roll. Photos only, a counter instead of a review tray,
+   * no looking back at shots taken, and the shutter stops at the last frame.
+   * The point is composing each shot, so the camera behaves like one.
+   */
+  disposable?: { shotsLeft: number };
 }) {
+  const allowVideo = allowVideoProp && !disposable;
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
@@ -390,15 +434,18 @@ export function CameraCapture({
     if (navigator.vibrate) navigator.vibrate(20);
   }, [caps.hasTorch]);
 
+  const rollSpent = Boolean(disposable) && shots.length >= (disposable?.shotsLeft ?? 0);
   const handleShutter = useCallback(() => {
     if (mode === "photo") {
+      if (rollSpent) return;
       takePhoto();
+      if (disposable) windOn();
     } else if (recording) {
       stopRecording();
     } else {
       startRecording();
     }
-  }, [mode, recording, startRecording, stopRecording, takePhoto]);
+  }, [disposable, mode, recording, rollSpent, startRecording, stopRecording, takePhoto]);
 
   const switchCamera = useCallback(() => {
     if (recording) return;
@@ -728,6 +775,20 @@ export function CameraCapture({
 
           <div className="flex items-center justify-between">
             {/* Last shot / tray thumbnail */}
+            {disposable ? (
+              // A frame counter, not a tray: on a disposable you do not get to
+              // look back at what you shot until the roll develops.
+              <div
+                className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border border-canvas-line bg-canvas-raised"
+                aria-live="polite"
+                aria-label={`${Math.max(0, disposable.shotsLeft - shots.length)} shots left`}
+              >
+                <span className="text-lg font-bold tabular-nums leading-none text-paper">
+                  {Math.max(0, disposable.shotsLeft - shots.length)}
+                </span>
+                <span className="mt-0.5 text-[10px] uppercase tracking-wide text-muted">left</span>
+              </div>
+            ) : (
             <button
               onClick={() => shots.length > 0 && setPreview(shots[shots.length - 1])}
               className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised"
@@ -759,12 +820,15 @@ export function CameraCapture({
                 </span>
               )}
             </button>
+            )}
 
             {/* Shutter */}
             <button
               onClick={handleShutter}
-              disabled={busy || countdown !== null || starting}
-              aria-label={mode === "photo" ? "Take photo" : recording ? "Stop recording" : "Record"}
+              disabled={busy || countdown !== null || starting || rollSpent}
+              aria-label={
+                rollSpent ? "Roll finished" : mode === "photo" ? "Take photo" : recording ? "Stop recording" : "Record"
+              }
               className="group relative flex h-20 w-20 items-center justify-center rounded-full disabled:opacity-60"
             >
               <span className="absolute inset-0 rounded-full border-4 border-white" />

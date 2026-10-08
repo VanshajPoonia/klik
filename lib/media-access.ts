@@ -1,4 +1,4 @@
-import { and, eq, or, type SQL } from "drizzle-orm";
+import { and, eq, or, sql, type SQL } from "drizzle-orm";
 import { media, type Media } from "./schema";
 
 /**
@@ -35,6 +35,19 @@ export interface MediaViewer {
 /** The only event fields this decision depends on. */
 export interface MediaAccessEvent {
   uploaderSeesOwnPrivate: boolean;
+  /** CAM-4. While the roll has not developed, no guest sees any photo. */
+  disposableMode: boolean;
+  developsAt: Date | null;
+}
+
+/**
+ * CAM-4: a disposable roll stays dark to every guest, the photographer
+ * included, until it develops. Read at query time against the clock, so the
+ * reveal happens on the second without anything having to run. A disposable
+ * event with no develop time is waiting for the host to press "Develop".
+ */
+export function rollUndeveloped(event: MediaAccessEvent, now = new Date()): boolean {
+  return event.disposableMode && (!event.developsAt || event.developsAt.getTime() > now.getTime());
 }
 
 /**
@@ -49,6 +62,8 @@ export function canViewMedia(
   event: MediaAccessEvent,
 ): boolean {
   if (viewer.isManager) return true;
+  // Hosts see the roll as it fills, because they are moderating it.
+  if (rollUndeveloped(event)) return false;
 
   const isUploader = viewer.guestId != null && item.guestId === viewer.guestId;
 
@@ -90,6 +105,7 @@ export function mediaVisibilityFilter(
   event: MediaAccessEvent,
 ): SQL | undefined {
   if (viewer.isManager) return undefined;
+  if (rollUndeveloped(event)) return sql`false`;
 
   const { guestId } = viewer;
 

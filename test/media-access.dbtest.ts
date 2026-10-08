@@ -27,14 +27,23 @@ afterAll(closeDatabase);
  * visibility, status and ownership, against a real database.
  */
 describe("the SQL filter and the boolean check agree", () => {
+  // CAM-4 added a third axis: a disposable roll that has not developed hides
+  // everything from guests, and one that has developed behaves like any event.
+  const rolls = {
+    normal: { disposableMode: false, developsAt: null },
+    undeveloped: { disposableMode: true, developsAt: new Date(Date.now() + 60 * 60 * 1000) },
+    developed: { disposableMode: true, developsAt: new Date(Date.now() - 60 * 1000) },
+  } as const;
   for (const uploaderSeesOwnPrivate of [true, false]) {
     for (const viewerIsUploader of [true, false]) {
-      it(`for every visibility and status, uploaderSeesOwnPrivate=${uploaderSeesOwnPrivate}, viewerIsUploader=${viewerIsUploader}`, async () => {
+      for (const [rollName, roll] of Object.entries(rolls)) {
+      it(`for every visibility and status, uploaderSeesOwnPrivate=${uploaderSeesOwnPrivate}, viewerIsUploader=${viewerIsUploader}, roll=${rollName}`, async () => {
         const owner = await makeUser();
-        const eventId = await makeEvent(owner, { uploaderSeesOwnPrivate });
+        const eventId = await makeEvent(owner, { uploaderSeesOwnPrivate, ...roll });
         const viewer = await makeGuest(eventId);
         const somebodyElse = await makeGuest(eventId);
         const uploader = viewerIsUploader ? viewer : somebodyElse;
+        const event = { uploaderSeesOwnPrivate, ...roll };
 
         // One row per combination, so a single query exercises the whole matrix.
         const expected = new Map<string, boolean>();
@@ -46,7 +55,7 @@ describe("the SQL filter and the boolean check agree", () => {
               canViewMedia(
                 { visibility, status, guestId: uploader },
                 { isManager: false, guestId: viewer },
-                { uploaderSeesOwnPrivate },
+                event,
               ),
             );
           }
@@ -55,7 +64,7 @@ describe("the SQL filter and the boolean check agree", () => {
         const rows = await fetchGalleryMedia(eventId, {
           isOwner: false,
           guestId: viewer,
-          event: { uploaderSeesOwnPrivate },
+          event,
           limit: 100,
         });
         const returned = new Set(rows.map((row) => row.id));
@@ -66,7 +75,9 @@ describe("the SQL filter and the boolean check agree", () => {
             `${id}: the query ${returned.has(id) ? "returned" : "hid"} it, canViewMedia said ${shouldSee}`,
           ).toBe(shouldSee);
         }
+        if (rollName === "undeveloped") expect(returned.size).toBe(0);
       });
+      }
     }
   }
 });
@@ -74,7 +85,7 @@ describe("the SQL filter and the boolean check agree", () => {
 describe("what a guest actually sees", () => {
   const setup = async (uploaderSeesOwnPrivate = true) => {
     const owner = await makeUser();
-    const eventId = await makeEvent(owner, { uploaderSeesOwnPrivate });
+    const eventId = await makeEvent(owner, { uploaderSeesOwnPrivate, disposableMode: false, developsAt: null });
     const guest = await makeGuest(eventId);
     const other = await makeGuest(eventId);
     return { owner, eventId, guest, other };
@@ -86,7 +97,7 @@ describe("what a guest actually sees", () => {
         await fetchGalleryMedia(eventId, {
           isOwner: false,
           guestId,
-          event: { uploaderSeesOwnPrivate },
+          event: { uploaderSeesOwnPrivate, disposableMode: false, developsAt: null },
           limit: 100,
         })
       ).map((row) => row.id),
@@ -156,7 +167,7 @@ describe("what a guest actually sees", () => {
       canViewMedia(
         { visibility: "gallery", status: "approved", guestId: other },
         { isManager: false, guestId: guest },
-        { uploaderSeesOwnPrivate: true },
+        { uploaderSeesOwnPrivate: true, disposableMode: false, developsAt: null },
       ),
     ).toBe(true);
   });
@@ -178,7 +189,7 @@ describe("managers", () => {
     const rows = await fetchGalleryMedia(eventId, {
       isOwner: true,
       guestId: null,
-      event: { uploaderSeesOwnPrivate: true },
+      event: { uploaderSeesOwnPrivate: true, disposableMode: false, developsAt: null },
       limit: 100,
     });
     const seen = new Set(rows.map((row) => row.id));
@@ -193,7 +204,7 @@ describe("managers", () => {
     const rows = await fetchGalleryMedia(eventId, {
       isOwner: true,
       guestId: null,
-      event: { uploaderSeesOwnPrivate: true },
+      event: { uploaderSeesOwnPrivate: true, disposableMode: false, developsAt: null },
       limit: 100,
     });
     expect(rows.map((row) => row.id)).not.toContain(trashed);
@@ -212,7 +223,7 @@ describe("an unknown visibility", () => {
         // Deliberately not a valid MediaVisibility.
         { visibility: "something-new" as never, status: "approved", guestId: "g1" },
         { isManager: false, guestId: "g1" },
-        { uploaderSeesOwnPrivate: true },
+        { uploaderSeesOwnPrivate: true, disposableMode: false, developsAt: null },
       ),
     ).toBe(false);
   });
@@ -222,7 +233,7 @@ describe("an unknown visibility", () => {
       canViewMedia(
         { visibility: "something-new" as never, status: "approved", guestId: "g1" },
         { isManager: true, guestId: null },
-        { uploaderSeesOwnPrivate: true },
+        { uploaderSeesOwnPrivate: true, disposableMode: false, developsAt: null },
       ),
     ).toBe(true);
   });

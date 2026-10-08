@@ -268,6 +268,12 @@ export const events = pgTable(
     usageWarnedPercent: integer("usage_warned_percent").notNull().default(0),
     // SEC-1: the nearest retention warning sent (30, 7, 1 days). Null for none.
     retentionWarnedDays: integer("retention_warned_days"),
+    // CAM-4: disposable camera mode. Each guest gets `shotsPerGuest` photos, and
+    // no guest sees any photo, their own included, until `developsAt` passes.
+    // Compared at read time in lib/media-access.ts, so no job has to flip it.
+    disposableMode: boolean("disposable_mode").notNull().default(false),
+    shotsPerGuest: integer("shots_per_guest").notNull().default(24),
+    developsAt: timestamp("develops_at", { withTimezone: true }),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -330,6 +336,8 @@ export const guests = pgTable(
     // someone ticked a box, not what the box said, so it cannot answer the only
     // question that matters if they later object. See lib/consent.ts.
     consentVersion: text("consent_version"),
+    // CAM-4: shots taken on a disposable roll. See events.shots_per_guest.
+    shotsUsed: integer("shots_used").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("guests_event_idx").on(table.eventId)],

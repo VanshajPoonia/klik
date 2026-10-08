@@ -116,6 +116,12 @@ export function EventSettingsForm({
   const [backgroundColor, setBackgroundColor] = useState(event.backgroundColor);
   const [qrTemplate, setQrTemplate] = useState(event.qrTemplate);
   const [venueFeatured, setVenueFeatured] = useState(event.venueFeatured);
+  // CAM-4. The develop time is edited in the browser's own time zone, which is
+  // the host's, and sent as an instant.
+  const [disposableMode, setDisposableMode] = useState(event.disposableMode);
+  const [shotsPerGuest, setShotsPerGuest] = useState(event.shotsPerGuest);
+  const [developsAt, setDevelopsAt] = useState(() => toDateTimeLocalValue(event.developsAt));
+  const [developing, setDeveloping] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +129,25 @@ export function EventSettingsForm({
   const needsNewGalleryPassword =
     visibility === "password" && event.visibility !== "password";
   const approvedPhotos = approvedMedia.filter((item) => item.kind === "photo");
+
+  /** Develops the roll now: the same setting, set to this moment. */
+  async function developNow() {
+    setDeveloping(true);
+    setError(null);
+    const res = await fetch(`/api/events/${event.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ developsAt: new Date().toISOString() }),
+    });
+    setDeveloping(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Could not develop the roll");
+      return;
+    }
+    setDevelopsAt(toDateTimeLocalValue(new Date()));
+    router.refresh();
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -150,6 +175,9 @@ export function EventSettingsForm({
           backgroundColor: canCustomizeGallery ? backgroundColor : undefined,
           qrTemplate: canCustomizeQr ? qrTemplate : undefined,
           venueFeatured: canUseVenueHub ? venueFeatured : undefined,
+          disposableMode,
+          shotsPerGuest,
+          developsAt: developsAt ? new Date(developsAt).toISOString() : null,
         }),
       });
 
@@ -379,6 +407,50 @@ export function EventSettingsForm({
         </Checkbox>
       </div>
 
+      <fieldset className="space-y-3 rounded-xl border border-canvas-line p-4">
+        <Checkbox
+          checked={disposableMode}
+          onChange={(change) => setDisposableMode(change.target.checked)}
+          hint="Each guest gets a roll of shots and nobody sees anything until it develops. People compose instead of spraying, and the reveal becomes a moment."
+        >
+          Disposable camera
+        </Checkbox>
+        {disposableMode && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Shots per guest" htmlFor="shots-per-guest">
+              <input
+                id="shots-per-guest"
+                type="number"
+                min={1}
+                max={200}
+                className={inputClass}
+                value={shotsPerGuest}
+                onChange={(change) => setShotsPerGuest(Math.max(1, Math.min(200, Number(change.target.value) || 1)))}
+              />
+            </Field>
+            <Field
+              label="Roll develops"
+              htmlFor="develops-at"
+              hint="Leave empty to develop it yourself. The morning after is a good default."
+            >
+              <input
+                id="develops-at"
+                type="datetime-local"
+                className={inputClass}
+                value={developsAt}
+                onChange={(change) => setDevelopsAt(change.target.value)}
+                suppressHydrationWarning
+              />
+            </Field>
+            <div className="sm:col-span-2">
+              <Button variant="ghost" size="sm" onClick={() => void developNow()} disabled={developing || saving}>
+                {developing ? "Developing…" : "Develop now"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </fieldset>
+
       {error && (
         <p className="text-sm text-red-400" role="alert">
           {error}
@@ -440,4 +512,12 @@ export function EventSettingsForm({
       )}
     </Card>
   );
+}
+
+/** A Date as the value a datetime-local input wants, in the browser's zone. */
+function toDateTimeLocalValue(value: Date | string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

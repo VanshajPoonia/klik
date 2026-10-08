@@ -67,6 +67,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   }
 
   const from = new Date(since.getTime() - OVERLAP_MS);
+  // CAM-4: a roll developing changes what every guest may see without any row
+  // changing, because it is a time passing. When that moment falls inside this
+  // poll's window, the phone starts over and gets the whole reveal at once.
+  if (event.disposableMode && event.developsAt && event.developsAt > from && event.developsAt <= new Date(at)) {
+    return NextResponse.json({ at, resync: true }, { headers: noStore });
+  }
   if (event.mediaChangedAt <= from) {
     return NextResponse.json({ at, upserts: [], removed: [] }, { headers: noStore });
   }

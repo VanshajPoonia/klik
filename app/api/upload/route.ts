@@ -4,7 +4,7 @@ import { CreateMultipartUploadCommand, PutObjectCommand, UploadPartCommand } fro
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { events, media } from "@/lib/schema";
+import { events, guests, media } from "@/lib/schema";
 import { canUpload } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
 import { GALLERY_FULL_MESSAGE, wouldExceedStorage } from "@/lib/usage";
@@ -110,6 +110,24 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!viewer.ownerSession && viewer.guestId) {
     const guestLimit = await consume(`upload:guest:${viewer.guestId}`, 60, 60 * 60);
     if (!guestLimit.allowed) return throttled(guestLimit.retryAfter);
+  }
+
+  // CAM-4: a disposable roll is photos, and a fixed number of them. Checked
+  // here so a spent roll refuses before any bytes move; the shot itself is
+  // spent at registration, by a conditional update that two racing uploads
+  // cannot both pass.
+  if (event.disposableMode && !viewer.ownerSession && viewer.guestId) {
+    if (isVideoMime(mimeType)) {
+      return NextResponse.json({ error: "This event is a disposable camera: photos only." }, { status: 403 });
+    }
+    const [guest] = await db
+      .select({ shotsUsed: guests.shotsUsed })
+      .from(guests)
+      .where(eq(guests.id, viewer.guestId))
+      .limit(1);
+    if (guest && guest.shotsUsed >= event.shotsPerGuest) {
+      return NextResponse.json({ error: "Your roll is finished. Every shot has been taken.", rollFinished: true }, { status: 403 });
+    }
   }
 
   const pathname = blobPathnameFor(event.id, mediaId, extensionForMime(mimeType));

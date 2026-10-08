@@ -163,6 +163,7 @@ export function GuestGallery({
   showBranding = true,
   maxVideoSeconds,
   galleryFull = false,
+  disposable = null,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -176,7 +177,13 @@ export function GuestGallery({
   maxVideoSeconds: number;
   /** PAY-7: storage is used up, so uploads are off and the guest is told why. */
   galleryFull?: boolean;
+  /** CAM-4: this event is a disposable camera, and this is the guest's roll. */
+  disposable?: { shotsPerGuest: number; shotsLeft: number; developsAt: string | null; developed: boolean } | null;
 }) {
+  const [shotsLeft, setShotsLeft] = useState(disposable?.shotsLeft ?? 0);
+  // A disposable is shot in the moment, so guests use the camera and not their
+  // camera roll. The host can still add from anywhere.
+  const cameraOnly = Boolean(disposable) && !isOwner;
   // A single accumulating, always-sorted list: new arrivals are prepended via
   // a `since` cursor (never re-polls a fixed window, so nothing can be pushed
   // out of it by new uploads), older history is appended via loadMore below.
@@ -458,6 +465,7 @@ export function GuestGallery({
         // Shown straight away from the registration response rather than
         // waiting for the next poll, so the uploader sees their own photo land.
         if (registered.media) applyChanges([registered.media], []);
+        if (disposable && !isOwner) setShotsLeft((left) => Math.max(0, left - 1));
         syncNow.current();
       } catch {
         // One file failing shouldn't block the rest of the batch, but it should
@@ -665,13 +673,19 @@ export function GuestGallery({
                   ))}
                 </select>
               )}
-              <Button onClick={() => setCameraOpen(true)} className="gap-2">
+              <Button
+                onClick={() => setCameraOpen(true)}
+                className="gap-2"
+                disabled={cameraOnly && shotsLeft === 0}
+              >
                 <Camera className="h-4 w-4" />
-                Camera
+                {cameraOnly ? (shotsLeft === 0 ? "Roll finished" : `${shotsLeft} shots left`) : "Camera"}
               </Button>
-              <Button variant="ghost" onClick={() => inputRef.current?.click()}>
-                Add media
-              </Button>
+              {!cameraOnly && (
+                <Button variant="ghost" onClick={() => inputRef.current?.click()}>
+                  Add media
+                </Button>
+              )}
               <input
                 ref={inputRef}
                 type="file"
@@ -686,6 +700,31 @@ export function GuestGallery({
             </div>
           )}
         </header>
+
+        {disposable && !isOwner && !disposable.developed && (
+          <div className="mb-6 rounded-2xl border border-volt/30 bg-volt/10 px-4 py-4" role="status">
+            <p className="text-sm font-semibold text-paper">Disposable camera</p>
+            <p className="mt-1 text-sm text-muted">
+              {shotsLeft} of {disposable.shotsPerGuest} shots left. Nobody sees anything until the roll
+              develops
+              {disposable.developsAt ? (
+                <>
+                  {" on "}
+                  <span suppressHydrationWarning>
+                    {new Date(disposable.developsAt).toLocaleString(undefined, {
+                      weekday: "long",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </>
+              ) : (
+                ", when the host says so"
+              )}
+              , not even you. Make every shot count.
+            </p>
+          </div>
+        )}
 
         {galleryFull && (
           <p className="mb-6 rounded-xl border border-canvas-line bg-canvas-raised px-4 py-3 text-sm text-muted" role="status">
@@ -768,7 +807,9 @@ export function GuestGallery({
         {visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-canvas-line bg-canvas-raised px-6 py-16 text-center text-sm text-muted">
             {items.length === 0
-              ? "No photos or videos yet. Be the first to add one."
+              ? disposable && !isOwner && !disposable.developed
+                ? "The roll is still in the camera. Everyone's photos appear here together when it develops."
+                : "No photos or videos yet. Be the first to add one."
               : "No media has been added to this album yet."}
           </div>
         ) : (
@@ -908,6 +949,7 @@ export function GuestGallery({
 
       {cameraOpen && (
         <CameraCapture
+          disposable={cameraOnly ? { shotsLeft } : undefined}
           onComplete={(captured: CapturedItem[]) =>
             uploadFiles(
               captured.map(({ file, width, height }) => ({

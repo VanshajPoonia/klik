@@ -43,6 +43,11 @@ const patchSchema = z.object({
   downloadsEnabled: z.boolean().optional(),
   uploadsEnabled: z.boolean().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
+  // CAM-4. Developing early is `developsAt: <now>`; there is no separate verb,
+  // because "develop now" and "develop at this time" are the same setting.
+  disposableMode: z.boolean().optional(),
+  shotsPerGuest: z.number().int().min(1).max(200).optional(),
+  developsAt: z.coerce.date().nullable().optional(),
 });
 
 /**
