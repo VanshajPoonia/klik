@@ -1,8 +1,17 @@
 import type { ReactNode } from "react";
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Card({
+  children,
+  className = "",
+  id,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** For in-page links, such as the admin queue pointing at a client's card. */
+  id?: string;
+}) {
   return (
-    <div className={`rounded-2xl border border-canvas-line bg-canvas-raised p-6 ${className}`}>
+    <div id={id} className={`rounded-2xl border border-canvas-line bg-canvas-raised p-6 ${className}`}>
       {children}
     </div>
   );

@@ -2,15 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { auth, signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { users, events } from "@/lib/schema";
+import { users, events, entitlements } from "@/lib/schema";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
-import { PlanAssignmentControl } from "@/components/admin/plan-assignment-control";
+import { GrantControl } from "@/components/admin/grant-control";
+import { ActivationRequests } from "@/components/admin/activation-requests";
+import { EntitlementList, type EntitlementRow } from "@/components/admin/entitlement-list";
+import { eventLicenseState, type LicenseState } from "@/lib/license";
 import { ActivationEmailControl } from "@/components/admin/activation-email-control";
 import { PendingActivations } from "@/components/admin/pending-activations";
 import { PendingSignups } from "@/components/admin/pending-signups";
@@ -24,15 +27,63 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
+function toEventSummary(row: {
+  eventId: string | null;
+  eventName: string | null;
+  eventSlug: string | null;
+  eventClientName: string | null;
+  visibility: "public" | "password" | "private" | null;
+  eventEntitlementId: string | null;
+  eventLicensedAt: Date | null;
+  eventPlanKey: Parameters<typeof getPlan>[0];
+  eventDeletedAt: Date | null;
+}) {
+  return {
+    id: row.eventId!,
+    name: row.eventName!,
+    slug: row.eventSlug!,
+    clientName: row.eventClientName,
+    visibility: row.visibility!,
+    license: eventLicenseState({ entitlementId: row.eventEntitlementId, licensedAt: row.eventLicensedAt }),
+    planName: row.eventPlanKey ? getPlan(row.eventPlanKey).name : null,
+    deleted: Boolean(row.eventDeletedAt),
+  };
+}
+
 export default async function AdminPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role !== "superadmin") redirect("/dashboard");
 
-  const [pending, signups] = await Promise.all([
+  const [pending, signups, requests] = await Promise.all([
     getPendingActivations(),
     getPendingSignups(),
+    // ACT-4: drafts their organizer asked to have activated, soonest event first.
+    db
+      .select({
+        eventId: events.id,
+        eventName: events.name,
+        eventDate: events.eventDate,
+        requestedAt: events.activationRequestedAt,
+        // Within three days or already past: the ones to do first. Asked of
+        // the database clock rather than read off Date.now() during render.
+        urgent: sql<boolean>`${events.eventDate} < now() + interval '3 days'`,
+        userId: users.id,
+        ownerName: users.name,
+        ownerEmail: users.email,
+      })
+      .from(events)
+      .innerJoin(users, eq(users.id, events.ownerId))
+      .where(
+        and(
+          isNotNull(events.activationRequestedAt),
+          isNull(events.licensedAt),
+          isNull(events.deletedAt),
+        ),
+      )
+      .orderBy(sql`${events.eventDate} ASC NULLS LAST`, asc(events.activationRequestedAt)),
   ]);
+  const shortDate = (date: Date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   const rows = await db
     .select({
@@ -43,8 +94,11 @@ export default async function AdminPage() {
       activatedAt: users.activatedAt,
       activationEmailSentAt: users.activationEmailSentAt,
       accountCreatedAt: users.createdAt,
-      planKey: users.planKey,
       eventId: events.id,
+      eventEntitlementId: events.entitlementId,
+      eventLicensedAt: events.licensedAt,
+      eventPlanKey: events.planKey,
+      eventDeletedAt: events.deletedAt,
       eventName: events.name,
       eventClientName: events.clientName,
       eventSlug: events.slug,
@@ -66,26 +120,22 @@ export default async function AdminPage() {
       activatedAt: Date | null;
       activationEmailSentAt: Date | null;
       accountCreatedAt: Date;
-      planKey: (typeof rows)[number]["planKey"];
       events: Array<{
         id: string;
         name: string;
         slug: string;
         clientName: string | null;
         visibility: (typeof rows)[number]["visibility"];
+        license: LicenseState;
+        planName: string | null;
+        deleted: boolean;
       }>;
     }>
   >((grouped, row) => {
     const existing = grouped.find((client) => client.userId === row.userId);
     if (existing) {
       if (row.eventId && row.eventName && row.eventSlug && row.visibility) {
-        existing.events.push({
-          id: row.eventId,
-          name: row.eventName,
-          slug: row.eventSlug,
-          clientName: row.eventClientName,
-          visibility: row.visibility,
-        });
+        existing.events.push(toEventSummary(row));
       }
     } else {
       grouped.push({
@@ -96,23 +146,48 @@ export default async function AdminPage() {
         activatedAt: row.activatedAt,
         activationEmailSentAt: row.activationEmailSentAt,
         accountCreatedAt: row.accountCreatedAt,
-        planKey: row.planKey,
         events:
-          row.eventId && row.eventName && row.eventSlug && row.visibility
-            ? [
-                {
-                  id: row.eventId,
-                  name: row.eventName,
-                  slug: row.eventSlug,
-                  clientName: row.eventClientName,
-                  visibility: row.visibility,
-                },
-              ]
-            : [],
+          row.eventId && row.eventName && row.eventSlug && row.visibility ? [toEventSummary(row)] : [],
       });
     }
     return grouped;
   }, []);
+
+  // The ledger for every account on the page, in one query.
+  const grants = clients.length
+    ? await db
+        .select()
+        .from(entitlements)
+        .where(inArray(entitlements.userId, clients.map((client) => client.userId)))
+        .orderBy(desc(entitlements.createdAt))
+    : [];
+  const eventNames = new Map(rows.map((row) => [row.eventId, row.eventName]));
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const grantsByUser = new Map<string, EntitlementRow[]>();
+  for (const grant of grants) {
+    const list = grantsByUser.get(grant.userId) ?? [];
+    list.push({
+      id: grant.id,
+      planName: getPlan(grant.planKey).name,
+      scope: grant.scope,
+      status: grant.status,
+      spent: Boolean(grant.appliedAt),
+      spentOn: grant.appliedEventId ? (eventNames.get(grant.appliedEventId) ?? "a removed event") : grant.appliedAt ? "a removed event" : null,
+      reason: grant.reason,
+      grantedBy: grant.grantedByLabel,
+      createdAt: formatDate(grant.createdAt),
+      endsAt: grant.endsAt ? formatDate(grant.endsAt) : null,
+      revokeReason: grant.revokeReason,
+    });
+    grantsByUser.set(grant.userId, list);
+  }
+  /** What the chain says they are on: the newest grant still in force. */
+  const planSummary = (userId: string) => {
+    const current = grants.find((grant) => grant.userId === userId && grant.status === "active");
+    if (!current) return "No active plan";
+    return current.scope === "account" ? getPlan(current.planKey).name : `${getPlan(current.planKey).name} pass`;
+  };
 
   // One batched pass rather than a query per card. The rows above already carry
   // everything about the account itself; this adds the counts and the history
@@ -124,7 +199,7 @@ export default async function AdminPage() {
       createdAt: client.accountCreatedAt,
       activatedAt: client.activatedAt,
       activationEmailSentAt: client.activationEmailSentAt,
-      planName: getPlan(client.planKey).name,
+      planName: planSummary(client.userId),
     })),
   );
 
@@ -151,6 +226,18 @@ export default async function AdminPage() {
         {/* Above the paid-and-waiting panel because it is the one with rows in
             it. That panel reads `purchases`, which only the webhook writes, and
             the hosted Payment Links the site sells through reach no webhook. */}
+        <ActivationRequests
+          rows={requests.map((row) => ({
+            eventId: row.eventId,
+            eventName: row.eventName,
+            userId: row.userId,
+            ownerName: row.ownerName,
+            ownerEmail: row.ownerEmail,
+            eventDate: row.eventDate ? shortDate(row.eventDate) : null,
+            requestedAt: row.requestedAt ? shortDate(row.requestedAt) : "",
+            urgent: Boolean(row.urgent),
+          }))}
+        />
         <PendingSignups signups={signups} />
         <PendingActivations pending={pending} />
 
@@ -166,7 +253,7 @@ export default async function AdminPage() {
             </Card>
           )}
           {clients.map((client) => (
-            <Card key={client.userId} className="space-y-5">
+            <Card key={client.userId} id={`client-${client.userId}`} className="scroll-mt-6 space-y-5">
               <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                 <div className="min-w-0">
                   <p className="truncate font-medium text-paper">{client.contactName}</p>
@@ -186,10 +273,13 @@ export default async function AdminPage() {
                 </div>
               </div>
 
-              <PlanAssignmentControl
+              <GrantControl
                 userId={client.userId}
-                initialPlanKey={client.planKey}
+                events={client.events
+                  .filter((event) => !event.deleted)
+                  .map((event) => ({ id: event.id, name: event.name, state: event.license }))}
               />
+              <EntitlementList rows={grantsByUser.get(client.userId) ?? []} />
 
               <ActivationEmailControl
                 userId={client.userId}
@@ -230,9 +320,18 @@ export default async function AdminPage() {
                         )}
                         <p className="truncate text-xs text-muted">/e/{event.slug}</p>
                       </div>
-                      <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>
-                        {event.visibility}
-                      </Badge>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {event.deleted ? (
+                          <Badge tone="danger">deleted</Badge>
+                        ) : event.license === "draft" ? (
+                          <Badge tone="warning">draft</Badge>
+                        ) : event.license === "lapsed" ? (
+                          <Badge tone="danger">lapsed</Badge>
+                        ) : (
+                          <Badge tone="volt">{event.planName ?? "live"}</Badge>
+                        )}
+                        <Badge tone="neutral">{event.visibility}</Badge>
+                      </div>
                     </Link>
                   ))}
                 </div>

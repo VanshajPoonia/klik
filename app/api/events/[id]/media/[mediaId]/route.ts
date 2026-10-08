@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { albums, events, media, MEDIA_STATUSES, MEDIA_VISIBILITIES } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
 import type { EventCapability } from "@/lib/permissions";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventPlan } from "@/lib/license";
 import { canUseAlbums } from "@/lib/plans";
 
 const patchSchema = z
@@ -53,7 +53,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid media update" }, { status: 400 });
   }
   if (parsed.data.albumId) {
-    const plan = await getAccountPlan(event!.ownerId);
+    const plan = eventPlan(event!);
     if (!canUseAlbums(plan.key)) {
       return NextResponse.json(
         { error: "Multiple albums are available on the Klik Premium plan" },

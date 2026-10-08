@@ -48,7 +48,7 @@ These are not style preferences. Each one has already caused a bug or came withi
 
 **2. Sessions are JWTs, and that is forced.** The Credentials provider does not work with database sessions in Auth.js v5. The consequence is that **a login cannot be revoked**. Changing a password or demoting a user does not invalidate their existing token; it stays valid until it expires. Anything that needs immediate revocation has to check state in the database on each request, which is exactly what `requireEventManagerSession` does.
 
-**3. Plan limits live in two places and they are not derived from each other.** `lib/plans.ts` holds static TypeScript definitions. Migration `0002_plan_capabilities.sql` holds **plpgsql triggers** that enforce limits in the database by reading `users.plan_key` directly. They agree today by coincidence. ACT-1 retires `users.plan_key`, so it has to resolve this, not work around it.
+**3. What an event may do comes from the event, and what an account holds comes from the ledger.** Since ACT-1 (`drizzle/0018_entitlements.sql`) each event carries `plan_key`, `entitlement_id` and `licensed_at`: use `eventPlan(event)` and `eventLicenseState(event)` from `lib/license.ts`, which need no query. Account-level questions (the venue hub, client records) use `hasVenueGrant`. **`users.plan_key` is retired**: it defaults to `'event'`, so reading it again would make every account look like it bought the $39 plan. Limits are enforced by one trigger that reads its numbers from the grant row; the 0002/0003 triggers that hard-coded a second copy of `lib/plans.ts` are gone. Draft, live and lapsed are three different states, and only a live event takes uploads.
 
 **4. Soft delete is everywhere, and the filters are load-bearing.** Almost nothing hard-deletes. Rows carry `deleted_at` and every read path filters on it. Miss the filter and you show deleted content; miss it on `event_co_hosts` and you grant access to someone who was removed. The soft-delete indexes are **partial** (`WHERE deleted_at IS NULL`) and live in `drizzle/0007_soft_delete_indexes.sql`, deliberately not declared in `lib/schema.ts`, because `drizzle-kit push` would recreate them as full indexes and silently undo that.
 
@@ -265,6 +265,8 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 ## 12. What is not built
 
 > **This section was corrected on 2026-10-06 and again on 2026-10-07, later than the header's last-verified commit.** Four things it listed as missing had in fact shipped: self-serve signup, per-photo visibility, per-photo share links and transactional email. The rest of this file has not been re-read against the code since `0e7fe18`.
+
+**The entitlement ledger, 2026-10-08.** See constraint 3 and `BILLING.md`. Grants are made on `/admin` with a reason; payments never grant anything themselves.
 
 Guest accounts and guest event history. Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding, and video metadata stripping with it.
 

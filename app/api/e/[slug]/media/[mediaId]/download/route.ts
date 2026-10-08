@@ -4,7 +4,6 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
-import { getAccountPlan } from "@/lib/account-plans";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { extensionForMime, r2 } from "@/lib/storage";
 import { canViewMedia } from "@/lib/media-access";
@@ -21,7 +20,6 @@ export async function GET(
   const { slug, mediaId } = await params;
   const [event] = await db.select().from(events).where(and(eq(events.slug, slug), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const plan = await getAccountPlan(event.ownerId);
 
   const [item] = await db
     .select()
@@ -30,7 +28,7 @@ export async function GET(
     .limit(1);
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  const viewer = await resolveEventViewer(event);
 
   if (!viewer.access.allowed) {
     return NextResponse.json({ error: "Not authorized to download this item" }, { status: 403 });

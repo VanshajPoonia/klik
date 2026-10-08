@@ -10,13 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { MediaGrid, type DashboardMedia } from "@/components/dashboard/media-grid";
 import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
+import { LicenseBanner, type EventLicenseSummary } from "@/components/dashboard/license-banner";
 import { AlbumManager } from "@/components/dashboard/album-manager";
 import { CoHostManager } from "@/components/dashboard/co-host-manager";
 import { ShareSheet } from "@/components/dashboard/share-sheet";
 import { ShareLinksPanel } from "@/components/dashboard/share-links-panel";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { OrganizerEvent } from "@/lib/events";
-import type { Album, Media, VenueClient } from "@/lib/schema";
+import type { Album, VenueClient } from "@/lib/schema";
 import type { MediaStatus, MediaVisibility } from "@/lib/schema";
 import { formatFileSize } from "@/lib/plans";
 import { buildDownloadBatches } from "@/lib/download-batches";
@@ -38,6 +39,7 @@ export function EventDashboard({
   canDownloadQrSign = false,
   canUseVenueHub = false,
   canDeleteEvent = false,
+  license = { state: "live", canGoLive: false, requestedAt: null },
   albums = [],
   coHosts = [],
   clients = [],
@@ -56,6 +58,7 @@ export function EventDashboard({
   canDownloadQrSign?: boolean;
   canUseVenueHub?: boolean;
   canDeleteEvent?: boolean;
+  license?: EventLicenseSummary;
   albums?: Album[];
   coHosts?: Array<{
     id: string;
@@ -296,6 +299,8 @@ export function EventDashboard({
           </div>
         </header>
 
+        <LicenseBanner eventId={event.id} license={license} />
+
         <nav className="mb-8 flex gap-1 border-b border-canvas-line" aria-label="Event sections">
           {(
             canManageShares
@@ -489,14 +494,24 @@ export function EventDashboard({
             )}
           </div>
         )}
-        {tab === "qr" && (
-          <QrPanel
-            eventId={event.id}
-            slug={event.slug}
-            guestUrl={guestUrl}
-            canDownloadSign={canDownloadQrSign}
-          />
-        )}
+        {tab === "qr" &&
+          (license.state === "draft" ? (
+            // ACT-3: no QR code before the event is live. One printed now
+            // would either fail for every guest or start working unannounced.
+            <div className="max-w-md rounded-2xl border border-dashed border-canvas-line px-6 py-10 text-center">
+              <p className="font-medium text-paper">Your QR code is made when the event goes live</p>
+              <p className="mt-2 text-sm text-muted">
+                It is permanent once printed, so it is not created for a draft.
+              </p>
+            </div>
+          ) : (
+            <QrPanel
+              eventId={event.id}
+              slug={event.slug}
+              guestUrl={guestUrl}
+              canDownloadSign={canDownloadQrSign}
+            />
+          ))}
       </div>
 
       {tab === "gallery" && selectionMode && selectedItems.length > 0 && (

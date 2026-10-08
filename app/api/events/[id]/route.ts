@@ -13,14 +13,13 @@ import { toOrganizerEvent, hashGalleryPassword } from "@/lib/events";
 import { eraseEvent } from "@/lib/erasure";
 import { requireEventCapability, requireEventManagerSession, requireOwnerSession } from "@/lib/roles";
 import type { EventCapability } from "@/lib/permissions";
-import { getAccountPlan } from "@/lib/account-plans";
+import { describeLicenseRefusal, eventPlan } from "@/lib/license";
 import {
   canCustomizeGallery,
   canCustomizeQr,
   canManageEventClients,
   canUseVenueHub,
 } from "@/lib/plans";
-import { isEventActive } from "@/lib/access";
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
@@ -89,7 +88,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     "clientName" in parsed.data ||
     "clientEmail" in parsed.data ||
     "clientPhone" in parsed.data;
-  const plan = await getAccountPlan(event.ownerId);
+  // The event's own plan since ACT-1. An event licensed by a Venue grant runs on
+  // Venue; a Venue account's extra Event pass runs on Event, features and all.
+  const plan = eventPlan(event);
   if (clientFieldsRequested) {
     if (!canManageEventClients(plan.key)) {
       return NextResponse.json(
@@ -167,20 +168,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  if (parsed.data.isActive && !isEventActive(event)) {
-    const ownerEvents = await db
-      .select({ isActive: events.isActive, expiresAt: events.expiresAt })
-      .from(events)
-      .where(and(eq(events.ownerId, event.ownerId), isNull(events.deletedAt)));
-    const activeCount = ownerEvents.filter((candidate) => isEventActive(candidate)).length;
-    if (activeCount >= plan.maxActiveEvents) {
-      return NextResponse.json(
-        { error: `${plan.name} already has its maximum number of active events` },
-        { status: 409 },
-      );
-    }
-  }
-
   const { password, ...restInput } = parsed.data;
   const rest = selectedClient
     ? {
@@ -243,9 +230,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   } catch (error) {
     const errorCode = (error as { code?: string })?.code;
-    if (error instanceof Error && error.message.includes("event_active_limit")) {
+    // Re-opening an event under a Venue grant that is already at its live-event
+    // limit. The trigger in drizzle/0018 decides, from the grant's own numbers.
+    if (error instanceof Error && error.message.includes("entitlement_active_limit")) {
       return NextResponse.json(
-        { error: "The plan active-event limit has been reached" },
+        { error: describeLicenseRefusal("entitlement_active_limit", plan) },
         { status: 409 },
       );
     }

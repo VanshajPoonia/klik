@@ -4,7 +4,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
-import { getAccountPlan } from "@/lib/account-plans";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { r2 } from "@/lib/storage";
 import { canViewMedia } from "@/lib/media-access";
@@ -24,8 +23,7 @@ export async function GET(
     .limit(1);
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const plan = await getAccountPlan(event.ownerId);
-  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {
     return NextResponse.json({ error: "Not authorized to view this item" }, { status: 403 });
   }

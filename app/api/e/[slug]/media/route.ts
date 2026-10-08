@@ -6,7 +6,7 @@ import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/
 import { db } from "@/lib/db";
 import { albums, events, media } from "@/lib/schema";
 import { canUpload } from "@/lib/access";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventPlan } from "@/lib/license";
 import { fetchGalleryMedia } from "@/lib/media";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import {
@@ -138,9 +138,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const { slug } = await params;
   const event = await loadEvent(slug);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const plan = await getAccountPlan(event.ownerId);
 
-  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {
     return NextResponse.json({ error: viewer.access.reason }, { status: 403 });
   }
@@ -171,8 +170,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const { slug } = await params;
   const event = await loadEvent(slug);
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const plan = await getAccountPlan(event.ownerId);
-  if (!canUpload(event, plan.uploadWindowDays)) {
+  const plan = eventPlan(event);
+  if (!canUpload(event)) {
     return NextResponse.json({ error: "Uploads are closed for this event" }, { status: 403 });
   }
 
@@ -197,7 +196,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: "Invalid upload path" }, { status: 400 });
   }
 
-  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {
     return NextResponse.json({ error: "Gallery access is required to upload" }, { status: 403 });
   }

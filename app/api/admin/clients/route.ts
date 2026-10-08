@@ -4,7 +4,8 @@ import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { users, events, EVENT_VISIBILITIES } from "@/lib/schema";
-import { PLAN_KEYS, getPlan, type PlanKey } from "@/lib/plans";
+import { PLAN_KEYS, type PlanKey } from "@/lib/plans";
+import { grantEntitlement } from "@/lib/entitlements";
 import { requireSuperadmin } from "@/lib/roles";
 import { generateUsername, generatePassword, hashPassword } from "@/lib/credentials";
 import { prepareEventInsert, toPublicEvent, type CreateEventInput } from "@/lib/events";
@@ -30,7 +31,7 @@ export async function GET() {
       userId: users.id,
       username: users.username,
       contactName: users.name,
-      planKey: users.planKey,
+      planKey: events.planKey,
       eventId: events.id,
       eventName: events.name,
       eventSlug: events.slug,
@@ -80,10 +81,12 @@ async function createOrganizerUserAndEvent(
         activatedAt: new Date(),
       })
       .returning();
+    // A draft in the batch, licensed by the grant below. The grant is what sets
+    // retention now, from the moment the event goes live.
     const { query: eventQuery } = await prepareEventInsert({
       ownerId: userId,
       ...eventInput,
-      retentionDays: getPlan(planKey).galleryAccessDays,
+      retentionDays: null,
     });
 
     try {
@@ -128,7 +131,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { user, event, password } = await createOrganizerUserAndEvent(
+  const { user, event: draft, password } = await createOrganizerUserAndEvent(
     contactName,
     planKey,
     {
@@ -140,6 +143,19 @@ export async function POST(request: Request) {
       password: galleryPassword,
     },
   );
+
+  // The plan is a ledger grant like any other, licensing the event created
+  // with the account. Reaching this route is the superadmin's decision, which
+  // is the reason the ledger asks for.
+  await grantEntitlement({
+    userId: user.id,
+    planKey,
+    source: "admin",
+    reason: "Provisioned with the account at /admin/new",
+    grantedBy: { id: session.user.id, label: session.user.username ?? session.user.name ?? null },
+    applyToEventId: draft.id,
+  });
+  const [event] = await db.select().from(events).where(eq(events.id, draft.id)).limit(1);
 
   return NextResponse.json(
     {

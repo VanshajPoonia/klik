@@ -5,6 +5,7 @@ import { users } from "@/lib/schema";
 import { requireSuperadmin } from "@/lib/roles";
 import { consume } from "@/lib/ratelimit";
 import { describeActivationNotice, sendActivationNotice } from "@/lib/activation-notice";
+import { getAccountEntitlements } from "@/lib/entitlements";
 
 /**
  * Send the access email again.
@@ -45,7 +46,6 @@ export async function POST(
       name: users.name,
       email: users.email,
       username: users.username,
-      planKey: users.planKey,
       activatedAt: users.activatedAt,
     })
     .from(users)
@@ -69,7 +69,11 @@ export async function POST(
     );
   }
 
-  const notice = await sendActivationNotice(account, {
+  // Named after what they actually hold, newest grant first, since the email
+  // says which plan their access is on.
+  const { all } = await getAccountEntitlements(account.id);
+  const current = all.find((grant) => grant.status === "active");
+  const notice = await sendActivationNotice({ ...account, planKey: current?.planKey ?? "event" }, {
     id: session.user.id,
     label: session.user.username ?? session.user.name ?? null,
   });

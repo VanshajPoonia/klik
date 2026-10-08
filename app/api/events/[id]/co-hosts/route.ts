@@ -4,7 +4,7 @@ import { and, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { eventCoHosts, events, users } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventPlan } from "@/lib/license";
 import { canUseCoHosts } from "@/lib/plans";
 import { ASSIGNABLE_ROLES, DEFAULT_CO_HOST_ROLE } from "@/lib/permissions";
 
@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const actor = await requireEventCapability(event.id, event.ownerId, "cohosts.manage");
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const plan = await getAccountPlan(event.ownerId);
+  const plan = eventPlan(event);
   if (!canUseCoHosts(plan.key)) {
     return NextResponse.json(
       { error: "Co-hosts are not included in this plan" },

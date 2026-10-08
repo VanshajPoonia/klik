@@ -2,7 +2,7 @@ import { auth } from "./auth";
 import type { Session } from "next-auth";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "./db";
-import { eventCoHosts, users } from "./schema";
+import { eventCoHosts, events } from "./schema";
 import { can, type EventCapability, type EventRole } from "./permissions";
 import { canUseCoHosts } from "./plans";
 
@@ -53,9 +53,9 @@ export async function resolveEventActor(
   }
 
   const [membership] = await db
-    .select({ role: eventCoHosts.role, ownerPlan: users.planKey })
+    .select({ role: eventCoHosts.role, eventPlan: events.planKey })
     .from(eventCoHosts)
-    .innerJoin(users, eq(users.id, eventOwnerId))
+    .innerJoin(events, eq(events.id, eventCoHosts.eventId))
     .where(
       and(
         eq(eventCoHosts.eventId, eventId),
@@ -71,7 +71,9 @@ export async function resolveEventActor(
 
   // Gated on the capability rather than on `planKey === "premium"`, so a Venue
   // account does not silently lose every co-host the day it is introduced.
-  if (!canUseCoHosts(membership.ownerPlan)) return null;
+  // The event's plan since ACT-1: co-hosts are a feature of the event someone
+  // paid for, not of the account. A draft has no plan and so no co-hosts yet.
+  if (!membership.eventPlan || !canUseCoHosts(membership.eventPlan)) return null;
 
   return { session, role: membership.role };
 }

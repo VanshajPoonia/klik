@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
-import { getAccountPlan } from "@/lib/account-plans";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { canViewMedia } from "@/lib/media-access";
 import { toGalleryMedia } from "@/lib/gallery-media";
@@ -52,8 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const { event } = row;
   const at = new Date(row.dbNow).toISOString();
 
-  const plan = await getAccountPlan(event.ownerId);
-  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {
     return NextResponse.json({ error: viewer.access.reason }, { status: 403, headers: noStore });
   }

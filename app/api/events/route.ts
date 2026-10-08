@@ -5,10 +5,8 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { events, venueClients, EVENT_VISIBILITIES } from "@/lib/schema";
 import { createEvent, toOrganizerEvent } from "@/lib/events";
-import { getAccountPlan, isAccountActivated } from "@/lib/account-plans";
-import { isEventActive } from "@/lib/access";
-import { canManageEventClients } from "@/lib/plans";
-import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
+import { hasVenueGrant, licenseWithAvailableGrant } from "@/lib/entitlements";
+import { getPlan } from "@/lib/plans";
 import { SUPPORT_PHONE } from "@/lib/support";
 import { recordAccountEvent } from "@/lib/timeline";
 
@@ -39,6 +37,13 @@ export async function GET() {
 
   return NextResponse.json({ events: rows.map(toOrganizerEvent) });
 }
+
+/**
+ * How many drafts an account may hold before it must activate one. Drafts cost
+ * nothing to store and cannot be seen or uploaded to, so this is not a revenue
+ * control; it only stops a free account turning into an unbounded list.
+ */
+const MAX_DRAFTS = 5;
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -74,60 +79,35 @@ export async function POST(request: Request) {
     );
   }
 
-  const [plan, activated, existingEvents] = await Promise.all([
-    getAccountPlan(session.user.id),
-    isAccountActivated(session.user.id),
+  // ACT-3. Creating an event no longer needs an activated account: anyone
+  // signed in can make a draft, name it, date it and design its sign while
+  // they wait. What a draft cannot do is be seen, take an upload, or have a QR
+  // code, and those are enforced where they happen (lib/access.ts, the QR
+  // route), not here. The old refusal turned the wait into a dead page.
+  const [drafts, venue] = await Promise.all([
     db
-      .select({
-        isActive: events.isActive,
-        expiresAt: events.expiresAt,
-        createdAt: events.createdAt,
-      })
+      .select({ id: events.id })
       .from(events)
-      .where(and(eq(events.ownerId, session.user.id), isNull(events.deletedAt))),
+      .where(
+        and(
+          eq(events.ownerId, session.user.id),
+          isNull(events.licensedAt),
+          isNull(events.deletedAt),
+        ),
+      ),
+    hasVenueGrant(session.user.id),
   ]);
-  // Checked before the plan limits, because an account that signed itself up
-  // has a plan it was never granted: `users.plan_key` defaults to 'event', so
-  // the limit checks below would happily let it create the $39 product. This is
-  // the only thing standing between the public signup form and free access.
-  if (!activated) {
+  if (drafts.length >= MAX_DRAFTS) {
     return NextResponse.json(
       {
-        error:
-          "Your account is not active yet. Choose a plan and complete payment, and the Klik team will activate it. Call or text " +
-          `${SUPPORT_PHONE} if you have already paid.`,
+        error: `You have ${drafts.length} events waiting to go live. Activate or delete one first, or call ${SUPPORT_PHONE} and the Klik team will help.`,
       },
-      { status: 403 },
-    );
-  }
-
-  const activeEventCount = existingEvents.filter((event) => isEventActive(event)).length;
-  const monthlyEventCount = existingEvents.filter((event) =>
-    wasCreatedThisUtcMonth(event.createdAt),
-  ).length;
-  if (activeEventCount >= plan.maxActiveEvents) {
-    return NextResponse.json(
-      {
-        error: `${plan.name} supports ${plan.maxActiveEvents} active ${
-          plan.maxActiveEvents === 1 ? "event" : "events"
-        }. Ask an administrator to change your plan or wait for an event to end.`,
-      },
-      { status: 403 },
-    );
-  }
-  if (monthlyEventCount >= plan.maxEventsPerMonth) {
-    return NextResponse.json(
-      {
-        error: `${plan.name} supports ${plan.maxEventsPerMonth} new ${
-          plan.maxEventsPerMonth === 1 ? "event" : "events"
-        } per calendar month. Your monthly allowance resets on the first day of the next UTC month.`,
-      },
-      { status: 403 },
+      { status: 409 },
     );
   }
 
   const hasClientDetails = Boolean(clientId || clientName || clientEmail || clientPhone);
-  if (hasClientDetails && !canManageEventClients(plan.key)) {
+  if (hasClientDetails && !venue) {
     return NextResponse.json(
       { error: "Client details are available on the Klik Venue plan" },
       { status: 403 },
@@ -158,32 +138,25 @@ export async function POST(request: Request) {
     }
   }
 
-  let event;
-  try {
-    event = await createEvent({
-      ownerId: session.user.id,
-      name,
-      eventDate,
-      clientId: selectedClient?.id ?? null,
-      clientName: selectedClient?.name ?? clientName ?? null,
-      clientEmail: selectedClient?.email ?? clientEmail ?? null,
-      clientPhone: selectedClient?.phone ?? clientPhone ?? null,
-      visibility,
-      password,
-      moderation,
-      expiresAt,
-      retentionDays: plan.galleryAccessDays,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("event_active_limit") || message.includes("event_monthly_limit")) {
-      return NextResponse.json(
-        { error: "Your plan limit was reached while this event was being created. Refresh and try again." },
-        { status: 409 },
-      );
-    }
-    throw error;
-  }
+  const draft = await createEvent({
+    ownerId: session.user.id,
+    name,
+    eventDate,
+    clientId: selectedClient?.id ?? null,
+    clientName: selectedClient?.name ?? clientName ?? null,
+    clientEmail: selectedClient?.email ?? clientEmail ?? null,
+    clientPhone: selectedClient?.phone ?? clientPhone ?? null,
+    visibility,
+    password,
+    moderation,
+    expiresAt,
+    retentionDays: null,
+  });
+
+  // Live straight away when the account has something to spend: a Venue grant
+  // with room, or an unused pass. Otherwise it stays a draft, which is normal.
+  const license = await licenseWithAvailableGrant(draft);
+  const [event] = await db.select().from(events).where(eq(events.id, draft.id)).limit(1);
 
   // The step that turns an activated account into a working one. Recorded here
   // rather than derived from a row count, because the count says how many they
@@ -192,8 +165,18 @@ export async function POST(request: Request) {
   await recordAccountEvent({
     userId: session.user.id,
     kind: "event_created",
-    detail: `Created "${event.name}".`,
+    detail: license.licensed
+      ? `Created "${event.name}", live on ${getPlan(license.planKey).name}.`
+      : `Created "${event.name}" as a draft, waiting for activation.`,
   });
 
-  return NextResponse.json({ event: toOrganizerEvent(event) }, { status: 201 });
+  return NextResponse.json(
+    {
+      event: toOrganizerEvent(event),
+      license: license.licensed
+        ? { state: "live", planKey: license.planKey }
+        : { state: "draft", reason: license.reason },
+    },
+    { status: 201 },
+  );
 }

@@ -26,6 +26,7 @@ export function activationEmail({
   planName,
   username,
   appUrl,
+  liveEventName = null,
 }: {
   name: string | null;
   /** The plan just granted, named as the customer saw it on the pricing page. */
@@ -38,6 +39,12 @@ export function activationEmail({
   username: string | null;
   /** Absolute, no trailing slash. Links in email cannot be relative. */
   appUrl: string;
+  /**
+   * Set when the grant also put a waiting draft live (ACT-3). Then the event
+   * already exists, and telling them to create one would send them looking for
+   * a button they no longer need.
+   */
+  liveEventName?: string | null;
 }): Omit<EmailMessage, "to"> {
   const greeting = name?.trim() ? `Hi ${name.trim()}` : "Hi";
   const dashboardUrl = `${appUrl}/dashboard`;
@@ -50,10 +57,15 @@ export function activationEmail({
         ? `Sign in with the username ${username} at ${loginUrl.replace(/^https?:\/\//, "")}. Everything below happens there.`
         : `Sign in with this email address at ${loginUrl.replace(/^https?:\/\//, "")}. Everything below happens there.`,
     ],
-    [
-      "Create your event",
-      "Name it, set the date, and pick your colors. It takes about a minute, and you can change any of it later.",
-    ],
+    liveEventName
+      ? [
+          `Open ${liveEventName}`,
+          "It is live now: guests can join, and everything you set up while it was a draft is kept.",
+        ]
+      : [
+          "Create your event",
+          "Name it, set the date, and pick your colors. It takes about a minute, and you can change any of it later.",
+        ],
     [
       "Collect your QR code and printable sign",
       "Both are generated the moment your event exists. Download the sign as it is, or send the file to a print shop. Three templates, and the QR in the middle is yours permanently.",
@@ -95,8 +107,11 @@ export function activationEmail({
           </tr>
           <tr>
             <td style="padding:0 0 26px 0;font:400 15px/1.65 Helvetica,Arial,sans-serif;color:${MUTED};">
-              Create your event and your gallery, your QR code and your printable sign are all
-              generated on the spot. Nothing else to wait for.
+              ${
+                liveEventName
+                  ? `<strong style="color:${PAPER};font-weight:600;">${escapeHtml(liveEventName)}</strong> is live, and its QR code and printable sign are ready in your dashboard.`
+                  : "Create your event and your gallery, your QR code and your printable sign are all generated on the spot."
+              } Nothing else to wait for.
             </td>
           </tr>
           <tr>
@@ -154,8 +169,10 @@ export function activationEmail({
     `Your payment is confirmed and ${planName} is active on your account.`,
     "Your dashboard is open from right now.",
     "",
-    "Create your event and your gallery, your QR code and your printable sign are",
-    "all generated on the spot. Nothing else to wait for.",
+    liveEventName
+      ? `${liveEventName} is live, and its QR code and printable sign are ready in your dashboard.`
+      : "Create your event and your gallery, your QR code and your printable sign are all generated on the spot.",
+    "Nothing else to wait for.",
     "",
     `Open your dashboard: ${dashboardUrl}`,
     "",

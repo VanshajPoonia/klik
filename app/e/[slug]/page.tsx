@@ -6,7 +6,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventPlan } from "@/lib/license";
 import {
   guestCookieName,
   verifyGuestSession,
@@ -47,7 +47,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   const { slug } = await params;
   const event = await getEventBySlug(slug);
   if (!event) notFound();
-  const plan = await getAccountPlan(event.ownerId);
+  const plan = eventPlan(event);
 
   const managerSession = await requireEventManagerSession(event.id, event.ownerId);
   const isOwner = Boolean(managerSession);
@@ -58,11 +58,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     ? await verifyEventUnlock(unlockCookie, event.id, event.accessVersion)
     : false;
 
-  const access = canViewGallery(event, {
-    isOwner,
-    hasUnlockCookie,
-    galleryAccessDays: plan.galleryAccessDays,
-  });
+  const access = canViewGallery(event, { isOwner, hasUnlockCookie });
 
   if (!access.allowed) {
     if (access.reason === "password_required") {
@@ -71,12 +67,18 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
         <h1 className="font-display text-2xl text-paper">
-          {access.reason === "expired" ? "This event has ended." : "This gallery is private."}
+          {access.reason === "expired"
+            ? "This event has ended."
+            : access.reason === "not_open"
+              ? "This gallery is not open yet."
+              : "This gallery is private."}
         </h1>
         <p className="mt-3 max-w-sm text-sm text-muted">
           {access.reason === "expired"
             ? "Uploads are closed, but the organizer can still view and download everything."
-            : "Ask the organizer for access."}
+            : access.reason === "not_open"
+              ? "The host is still setting it up. Check back closer to the event."
+              : "Ask the organizer for access."}
         </p>
       </div>
     );
@@ -126,7 +128,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     coverMediaId: canCustomizeGallery(plan.key) ? event.coverMediaId : null,
     accentColor: canCustomizeGallery(plan.key) ? event.accentColor : "#edee00",
     backgroundColor: canCustomizeGallery(plan.key) ? event.backgroundColor : "#050505",
-    uploadsEnabled: canUpload(event, plan.uploadWindowDays),
+    uploadsEnabled: canUpload(event),
   });
 
   return (

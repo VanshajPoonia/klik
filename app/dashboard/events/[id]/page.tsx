@@ -6,7 +6,8 @@ import { db } from "@/lib/db";
 import { albums, eventCoHosts, events, media, users, venueClients } from "@/lib/schema";
 import { toOrganizerEvent } from "@/lib/events";
 import { getAppUrl } from "@/lib/env";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventLicenseState, eventPlan } from "@/lib/license";
+import { getAccountEntitlements } from "@/lib/entitlements";
 import {
   canCustomizeGallery,
   canCustomizeQr,
@@ -43,7 +44,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const actor = await resolveEventActor(event.id, event.ownerId);
   if (!actor) notFound();
 
-  const [mediaRows, plan, albumRows, coHostRows, clientRows] = await Promise.all([
+  const plan = eventPlan(event);
+  const licenseState = eventLicenseState(event);
+  const [mediaRows, albumRows, coHostRows, clientRows, held] = await Promise.all([
     db
       .select()
       .from(media)
@@ -59,7 +62,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           })),
         ),
       ),
-    getAccountPlan(event.ownerId),
     db.select().from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt))).orderBy(albums.createdAt),
     db
       .select({
@@ -78,6 +80,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       .from(venueClients)
       .where(and(eq(venueClients.ownerId, event.ownerId), isNull(venueClients.deletedAt)))
       .orderBy(venueClients.name),
+    // Only needed to offer "go live" on a draft or lapsed event.
+    licenseState === "live" ? null : getAccountEntitlements(event.ownerId),
   ]);
 
   const guestUrl = `${getAppUrl()}/e/${event.slug}`;
@@ -102,6 +106,13 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canCustomizeQr={canCustomizeQr(plan.key)}
         canDownloadQrSign={canDownloadQrSign(plan.key)}
         canUseVenueHub={canUseVenueHub(plan.key)}
+        license={{
+          state: licenseState,
+          canGoLive: Boolean(held && (held.unusedPasses.length > 0 || held.accountGrants.length > 0)),
+          requestedAt: event.activationRequestedAt
+            ? event.activationRequestedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+            : null,
+        }}
         canDeleteEvent={
           session.user.id === event.ownerId || session.user.role === "superadmin"
         }

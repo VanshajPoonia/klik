@@ -9,7 +9,7 @@ import {
 import { requireEventManagerSession } from "./roles";
 import type { Event } from "./schema";
 
-export async function resolveEventViewer(event: Event, galleryAccessDays: number) {
+export async function resolveEventViewer(event: Event) {
   const ownerSession = await requireEventManagerSession(event.id, event.ownerId);
   const cookieStore = await cookies();
   const unlockCookie = cookieStore.get(eventUnlockCookieName(event.id))?.value;
@@ -22,7 +22,6 @@ export async function resolveEventViewer(event: Event, galleryAccessDays: number
   const access = canViewGallery(event, {
     isOwner: Boolean(ownerSession),
     hasUnlockCookie,
-    galleryAccessDays,
   });
 
   return {

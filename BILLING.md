@@ -18,7 +18,8 @@ deliberately not automated, and what to do next.
 | Production Stripe keys | Not set. Only the embedded path needs them |
 | Dashboard webhook endpoint | Not created. Only the embedded path needs it |
 | A payment granting a plan | **Never automatic.** True of both paths. See "The grant is manual" |
-| A new account's capability | **None.** `users.activated_at` is null until a superadmin grants the plan |
+| What grants capability | **The `entitlements` ledger** (ACT-1, 2026-10-08). A pass licenses one event; Venue licenses up to its limits. `users.plan_key` is retired and read nowhere |
+| A new account's capability | **Drafts only.** It can create events and set them up; none goes live, shows a QR code or takes a guest until a superadmin grants something |
 
 ## The two Stripe accounts
 
@@ -115,13 +116,17 @@ visitor clicks a plan on /#pricing
   -> signed in, then window.location.replace(PAYMENT_LINKS.event)
   -> Stripe's hosted page takes the money
 
+meanwhile:
+organizer signs in, creates their event as a draft, sets it up
+  -> optionally presses "Ask Klik to activate it", which emails ALERT_EMAIL
+     and puts the draft at the top of /admin under "Waiting to go live"
+
 later:
 superadmin -> Stripe Dashboard, find the payment by email
-           -> /admin, "Signed up, not activated"
-           -> assign the plan, which sets activated_at
-           -> access email goes out automatically, with the dashboard link
-  -> organizer signs in, creates the event
-  -> gallery, QR code and printable sign are generated on the spot
+           -> /admin, grant a pass with a reason
+           -> the pass lands on their waiting draft, which goes live
+           -> access email goes out automatically, naming that event
+  -> gallery, QR code and printable sign exist from that moment
 ```
 
 ### Nothing about activation is silent
@@ -227,36 +232,39 @@ page, not in the client bundle, and `PAYMENT_LINKS` is imported only by server
 components. Buying therefore cannot happen without an email address attached to
 an account, which is the only thing that later joins the payment to the buyer.
 
-### The accounts this creates cannot do anything yet
+### What grants capability: the entitlement ledger
 
-`users.plan_key` is `NOT NULL DEFAULT 'event'`. That was harmless while the only
-way to get a row in `users` was a superadmin at `/admin/new`. A public signup
-form makes it a hole: the plan limit checks are satisfied for a brand new
-account, so it could create one event with a 30-day upload window and a 6-month
-gallery, which is Klik Event, the $39 product, for free.
+**Rewritten 2026-10-08 for ACT-1.** This section used to say `users.activated_at`
+gates event creation. It no longer does, and `users.plan_key` is read nowhere.
 
-`users.activated_at` is the fix, from
-[drizzle/0013_self_signup.sql](drizzle/0013_self_signup.sql). Null means the
-account exists, can sign in, and can see its dashboard, and cannot create an
-event. It is checked in two places that must agree:
+`users.plan_key` was `NOT NULL DEFAULT 'event'`, so every account looked like it
+owned the $39 plan, and because the plan sat on the account, one $39 pass meant
+one new event every month for ever. The ledger replaces it
+([drizzle/0018_entitlements.sql](drizzle/0018_entitlements.sql),
+[lib/entitlements.ts](lib/entitlements.ts)):
 
-| Where | What it does when null |
-|---|---|
-| [app/api/events/route.ts](app/api/events/route.ts) | 403 before the plan limits are even read |
-| [app/dashboard/page.tsx](app/dashboard/page.tsx) | Shows `AwaitingActivation` instead of the create form, and "No plan yet" instead of a plan name |
+| Grant | Shape | Licenses |
+|---|---|---|
+| Klik Event, Klik Premium | A **pass**, `scope = 'event'` | Exactly one event, once. `applied_at` marks it spent permanently, so a purged event never hands its pass back |
+| Klik Venue | An **account grant**, `scope = 'account'` | Any of the owner's events, up to `max_active_events` and `max_events_per_month` copied onto the grant when it was made |
 
-It is set in two places, both of them a superadmin deciding:
+An event is a **draft** until something licenses it (`events.licensed_at` null):
+the organizer can name it, date it and design it, and nobody else can see it, upload
+to it, or get a QR code for it. **Live** when `events.entitlement_id` is set.
+**Lapsed** when a licence is revoked or a grant ends: guests keep the gallery for the
+rest of its window and uploads stop. Upload and gallery windows run from going live,
+not from creation, so a draft made months ahead does not arrive already closed.
 
-| Where | When |
-|---|---|
-| [app/api/admin/clients/[userId]/plan/route.ts](app/api/admin/clients/%5BuserId%5D/plan/route.ts) | Assigning a plan. `COALESCE`, so re-assigning later does not move the date |
-| [app/api/admin/clients/route.ts](app/api/admin/clients/route.ts) | Creating a client at `/admin/new`, which is already a decision |
+Limits are enforced by the trigger in 0018, which locks the grant row first, so two
+events racing for the last Venue slot or for the same pass cannot both win. The old
+plpgsql triggers that hard-coded "venue is 5, everything else is 1" are gone; the
+numbers now come from the grant, which got them from `lib/plans.ts`.
 
-Deliberately **not** a change to `plan_key`. Two plpgsql triggers read that
-column directly ([0002](drizzle/0002_plan_capabilities.sql),
-[0003](drizzle/0003_soft_delete_and_retention.sql)) and ROADMAP ACT-1 is the task
-that retires it. A nullable column alongside is additive, so ACT-1 can absorb or
-drop it without unpicking anything.
+`users.activated_at` still exists and still means "this account has been granted
+something at least once". It decides whether the dashboard says "No plan yet" and
+whether a grant sends the access email, and nothing else.
+
+Every grant carries `source`. Today every row is `admin`, because of the rule below.
 
 ### The Payment Links are what the site actually uses
 
@@ -293,8 +301,13 @@ A Payment Link grants nothing on its own. Nothing does: see below.
 
 ## The grant is manual, on purpose
 
-**The webhook never touches `users.planKey`.** A payment is recorded and then
-waits for a superadmin, who grants the plan with the control on `/admin`.
+**The webhook never writes an entitlement.** A payment is recorded and then waits
+for a superadmin, who grants a pass or Venue with the control on each client's card on
+`/admin`, with a required reason. `POST /api/admin/clients/[userId]/entitlements`
+does the grant; `POST /api/admin/entitlements/[id]/revoke` takes one back, also with a
+reason, lapsing what it licensed and deleting nothing. Confirmed on 2026-10-08: payments
+keep human approval. Automating it would be one handler writing `source = 'stripe'`
+rows, and nothing else would change.
 
 There are two queues on that page, and only one of them has anything in it.
 
@@ -311,15 +324,9 @@ event nor a plan. Matching money to a person was impossible, not merely manual.
 
 This is ROADMAP ACT-2: "This is the v1 revenue mechanism: a human decides."
 
-Automating it means ACT-1, the entitlement ledger, which retires
-`users.plan_key`, resolves the plpgsql triggers that read that column directly,
-and moves every `canX(plan.key)` call site. ROADMAP sequences that behind the
-F-7 test harness, and [ROADMAP.md:984](ROADMAP.md#L984) explains why: doing it
-without tests "is how an authorization bug ships quietly".
-
-Nothing built here is wasted when ACT-1 lands. The ledger reads these tables
-rather than replacing them, and `source = 'stripe'` rows come from the same
-handlers.
+ACT-1 shipped on 2026-10-08, tested against a real Postgres including the trigger,
+concurrent spends of one pass, and the migration's backfill run straight out of the
+SQL file (`test/entitlements.dbtest.ts`).
 
 The buyer is told this before paying, on the checkout page. Someone who is not
 told reads the delay as a failure and asks for their money back.
@@ -375,7 +382,11 @@ no build error to say why.
 | [lib/email.ts](lib/email.ts) | Resend wrapper. Reports instead of throwing, because an account must survive a failed send |
 | [lib/emails/onboarding.ts](lib/emails/onboarding.ts) | The welcome email, HTML and text |
 | [lib/support.ts](lib/support.ts) | The support number and the stated wait, in one place |
-| [lib/account-plans.ts](lib/account-plans.ts) | `isAccountActivated`, the gate on event creation |
+| [lib/entitlements.ts](lib/entitlements.ts) | The ledger: grant, spend a pass, license, revoke, reconcile |
+| [lib/license.ts](lib/license.ts) | Pure: is an event a draft, live or lapsed, and which plan governs it. Read from the event row, no query |
+| [components/admin/grant-control.tsx](components/admin/grant-control.tsx) | Grant a pass or Venue, with a reason, to the next event or a named one |
+| [components/admin/entitlement-list.tsx](components/admin/entitlement-list.tsx) | Every grant an account has had, with revoke |
+| [components/dashboard/license-banner.tsx](components/dashboard/license-banner.tsx) | What a draft or lapsed event is waiting for, and the button that moves it on |
 | [components/admin/pending-signups.tsx](components/admin/pending-signups.tsx) | The queue that actually has rows in it |
 | [components/dashboard/awaiting-activation.tsx](components/dashboard/awaiting-activation.tsx) | What a signed-up, unactivated account sees |
 | [components/dashboard/support-card.tsx](components/dashboard/support-card.tsx) | The support number on every organizer's dashboard |

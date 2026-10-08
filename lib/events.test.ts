@@ -39,6 +39,10 @@ const row: Event = {
   createdAt: new Date("2026-07-01T00:00:00Z"),
   updatedAt: new Date("2026-07-01T00:00:00Z"),
   mediaChangedAt: new Date("2026-07-01T00:00:00Z"),
+  entitlementId: "ent_1",
+  planKey: "premium",
+  licensedAt: new Date("2026-07-01T00:00:00Z"),
+  activationRequestedAt: null,
 };
 
 /**
@@ -81,6 +85,13 @@ const WITHHELD: Record<string, string> = {
   deletedAt: "internal soft-delete state",
   updatedAt: "reveals organizer activity to guests",
   mediaChangedAt: "sync bookkeeping, read by the changes endpoint and never sent",
+  // ACT-1. Whether and how an event is paid for is between the organizer and
+  // Klik. A guest never sees a plan name (ROADMAP.md C-1), and the server
+  // already decides everything these columns imply.
+  entitlementId: "internal ledger id",
+  planKey: "what the organizer bought, never shown to guests",
+  licensedAt: "billing state, enforced server side",
+  activationRequestedAt: "the organizer's conversation with Klik",
   // Host configuration. The server already filters private media out of a
   // guest's gallery, so the flag buys a guest nothing and telling them about a
   // back room they cannot see is worse than silence.

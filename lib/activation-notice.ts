@@ -3,6 +3,7 @@ import { db } from "./db";
 import { users } from "./schema";
 import { sendEmail } from "./email";
 import { activationEmail } from "./emails/activation";
+import { eventLiveEmail } from "./emails/event-live";
 import { getAppUrl } from "./env";
 import { getPlan } from "./plans";
 import type { PlanKey } from "./plans";
@@ -39,6 +40,8 @@ export async function sendActivationNotice(
     email: string | null;
     username: string | null;
     planKey: PlanKey;
+    /** A draft this grant just put live, named in place of "create your event". */
+    liveEventName?: string | null;
   },
   /**
    * Who triggered it, recorded against the history entry. Omitted when nobody
@@ -66,6 +69,7 @@ export async function sendActivationNotice(
       planName: getPlan(account.planKey).name,
       username: account.username,
       appUrl: getAppUrl(),
+      liveEventName: account.liveEventName ?? null,
     });
     const result = await sendEmail({ ...message, to: account.email });
 
@@ -126,5 +130,42 @@ export function describeActivationNotice(result: ActivationNoticeResult): string
       return "Activated, but the email was refused. Check the address and send it again.";
     case "failed":
       return "Activated, but sending the email failed. Try sending it again.";
+  }
+}
+
+/**
+ * Tells an organizer that one specific event went live, when the account was
+ * already active and so gets no access email (ACT-3). Never throws, like the
+ * access email: a grant that happened must not be undone by a failed send, and
+ * the outcome lands in the account history either way.
+ */
+export async function sendEventLiveNotice(
+  account: { id: string; name: string | null; email: string | null },
+  event: { id: string; name: string; planKey: PlanKey },
+  actor?: { id: string; label: string | null } | null,
+): Promise<{ sent: boolean }> {
+  if (!account.email) return { sent: false };
+  try {
+    const appUrl = getAppUrl();
+    const message = eventLiveEmail({
+      name: account.name,
+      eventName: event.name,
+      planName: getPlan(event.planKey).name,
+      eventUrl: `${appUrl}/dashboard/events/${event.id}`,
+      appUrl,
+    });
+    const result = await sendEmail({ ...message, to: account.email });
+    await recordAccountEvent({
+      userId: account.id,
+      kind: result.sent ? "activation_email_sent" : "activation_email_failed",
+      detail: result.sent
+        ? `Told them "${event.name}" is live.`
+        : `Could not tell them "${event.name}" is live: ${result.reason}.`,
+      actor,
+    });
+    return { sent: result.sent };
+  } catch (error) {
+    reportError("activation.event_live_email_failed", error, { userId: account.id });
+    return { sent: false };
   }
 }

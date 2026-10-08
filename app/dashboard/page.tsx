@@ -9,10 +9,11 @@ import { eventCoHosts, events, users, venueClients } from "@/lib/schema";
 import { CreateEventForm } from "@/components/dashboard/create-event-form";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getAccountPlan } from "@/lib/account-plans";
 import { isEventActive } from "@/lib/access";
-import { canManageEventClients, formatFileSize } from "@/lib/plans";
-import { wasCreatedThisUtcMonth } from "@/lib/plan-limits";
+import { getPlan } from "@/lib/plans";
+import { getUtcMonthStart } from "@/lib/plan-limits";
+import { getAccountEntitlements } from "@/lib/entitlements";
+import { eventLicenseState } from "@/lib/license";
 import { VenueClientsPanel } from "@/components/dashboard/venue-clients-panel";
 import { VenueQrPanel } from "@/components/dashboard/venue-qr-panel";
 import { SupportCard } from "@/components/dashboard/support-card";
@@ -28,7 +29,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const [ownedRows, coHostedRows, plan, account, clientRows] = await Promise.all([
+  const [ownedRows, coHostedRows, held, account, clientRows] = await Promise.all([
     db
       .select()
       .from(events)
@@ -50,7 +51,7 @@ export default async function DashboardPage() {
       )
       .orderBy(events.createdAt)
       .then((rows) => rows.map((row) => row.event)),
-    getAccountPlan(session.user.id),
+    getAccountEntitlements(session.user.id),
     db
       .select({ venueSlug: users.venueSlug, activatedAt: users.activatedAt })
       .from(users)
@@ -69,19 +70,22 @@ export default async function DashboardPage() {
       (coHosted) => !ownedRows.some((owned) => owned.id === coHosted.id),
     ),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  const activeEventCount = ownedRows.filter((event) => isEventActive(event)).length;
-  const monthlyEventCount = ownedRows.filter((event) =>
-    wasCreatedThisUtcMonth(event.createdAt),
+  // ACT-1: what this account holds, from the ledger. `users.plan_key` is no
+  // longer read anywhere; it defaulted to 'event' and so described a plan nobody
+  // had granted.
+  const venue = held.accountGrants.find((grant) => grant.planKey === "venue") ?? null;
+  const venueEvents = venue ? ownedRows.filter((event) => event.entitlementId === venue.id) : [];
+  const venueLive = venueEvents.filter((event) => isEventActive(event)).length;
+  const monthStart = getUtcMonthStart();
+  const venueThisMonth = venueEvents.filter(
+    (event) => event.licensedAt && event.licensedAt >= monthStart,
   ).length;
-  // `users.plan_key` defaults to 'event', so the two limits below are already
-  // satisfied for an account that signed itself up and was never granted
-  // anything. Activation is the real gate, and this has to agree with
-  // app/api/events/route.ts or the form becomes a button that returns a 403.
+  const drafts = ownedRows.filter((event) => eventLicenseState(event) === "draft").length;
+  const hasSomethingToSpend = Boolean(venue) || held.unusedPasses.length > 0;
   const activated = Boolean(account?.activatedAt);
-  const canCreateEvent =
-    activated &&
-    activeEventCount < plan.maxActiveEvents &&
-    monthlyEventCount < plan.maxEventsPerMonth;
+  // Drafts are always allowed, up to the cap the API enforces. Has to agree
+  // with app/api/events/route.ts, or the form becomes a button that 409s.
+  const canCreateEvent = drafts < 5;
 
   return (
     <div className="min-h-screen px-6 py-10 md:px-10">
@@ -109,27 +113,37 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="rounded-xl border border-volt/30 bg-volt/10 px-4 py-3 sm:text-right">
-            {activated ? (
+            {venue ? (
               <>
-                <p className="text-xs font-medium text-volt">{plan.name}</p>
+                <p className="text-xs font-medium text-volt">Klik Venue</p>
                 <p className="mt-1 text-sm text-paper">
-                  {activeEventCount} of {plan.maxActiveEvents} active{" "}
-                  {plan.maxActiveEvents === 1 ? "event" : "events"}
+                  {venueLive} of {venue.maxActiveEvents} live events
                 </p>
                 <p className="mt-1 text-xs text-muted">
-                  {monthlyEventCount} of {plan.maxEventsPerMonth} created this month
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  {plan.uploadWindowDays}-day uploads · {formatFileSize(plan.maxVideoBytes)} videos
+                  {venueThisMonth} of {venue.maxEventsPerMonth} started this month
                 </p>
               </>
+            ) : held.unusedPasses.length > 0 ? (
+              <>
+                <p className="text-xs font-medium text-volt">
+                  {held.unusedPasses.length} unused {held.unusedPasses.length === 1 ? "pass" : "passes"}
+                </p>
+                <p className="mt-1 text-sm text-paper">
+                  {[...new Set(held.unusedPasses.map((pass) => getPlan(pass.planKey).name))].join(", ")}
+                </p>
+                <p className="mt-1 text-xs text-muted">Your next event goes live straight away</p>
+              </>
+            ) : activated ? (
+              <>
+                <p className="text-xs font-medium text-volt">Every pass is in use</p>
+                <p className="mt-1 text-sm text-paper">A new event saves as a draft</p>
+                <p className="mt-1 text-xs text-muted">It goes live once a pass is added</p>
+              </>
             ) : (
-              // Naming a plan here would be a lie with a number attached. The
-              // column reads 'event' because that is its default, not because
-              // anybody decided to grant it.
+              // Naming a plan here would be a lie with a number attached.
               <>
                 <p className="text-xs font-medium text-volt">No plan yet</p>
-                <p className="mt-1 text-sm text-paper">Choose one to get started</p>
+                <p className="mt-1 text-sm text-paper">Set up your event while you wait</p>
               </>
             )}
           </div>
@@ -142,28 +156,28 @@ export default async function DashboardPage() {
               venueUrl={`${getAppUrl()}/v/${account.venueSlug}`}
             />
           )}
-          {canManageEventClients(plan.key) && (
-            <VenueClientsPanel initialClients={clientRows} />
-          )}
+          {venue && <VenueClientsPanel initialClients={clientRows} />}
           {/* The form, or the reason it is absent. Rendering it disabled was the
               other option, and a dead control reads as a broken page rather
               than as a step that has not happened yet. */}
-          {activated ? (
-            <CreateEventForm
-              canCreate={canCreateEvent}
-              canManageClients={canManageEventClients(plan.key)}
-              clients={clientRows}
-              limitMessage={
-                canCreateEvent
-                  ? undefined
-                  : monthlyEventCount >= plan.maxEventsPerMonth
-                    ? `${plan.name} has reached its monthly event limit. The allowance resets on the first day of the next UTC month.`
-                    : `${plan.name} has reached its active event limit. Ask an administrator to change the plan or wait for an event to end.`
-              }
-            />
-          ) : (
-            <AwaitingActivation />
+          {/* The waiting card explains a draft before anyone makes one, so a
+              new event that does not go live straight away is expected rather
+              than a surprise. Shown whenever there is nothing to spend. */}
+          {!hasSomethingToSpend && (
+            <div className="mb-5">
+              <AwaitingActivation activated={activated} />
+            </div>
           )}
+          <CreateEventForm
+            canCreate={canCreateEvent}
+            canManageClients={Boolean(venue)}
+            clients={clientRows}
+            limitMessage={
+              canCreateEvent
+                ? undefined
+                : "You have 5 events waiting to go live. Delete one, or call us and we will activate them."
+            }
+          />
         </div>
 
         <div className="space-y-3">
@@ -190,7 +204,13 @@ export default async function DashboardPage() {
                   )}
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                  {!isEventActive(event) && <Badge>ended</Badge>}
+                  {eventLicenseState(event) === "draft" ? (
+                    <Badge tone="warning">draft</Badge>
+                  ) : eventLicenseState(event) === "lapsed" ? (
+                    <Badge tone="danger">lapsed</Badge>
+                  ) : (
+                    !isEventActive(event) && <Badge>ended</Badge>
+                  )}
                   <Badge tone={event.visibility === "public" ? "volt" : "neutral"}>
                     {event.visibility}
                   </Badge>

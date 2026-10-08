@@ -41,6 +41,9 @@ const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   "uploads.reap_orphans": async () => (await import("./job-handlers/reap-orphans")).reapOrphans,
   "media.thumbnail": async () => (await import("./job-handlers/thumbnail")).generateThumbnail,
   "media.backfill_thumbnails": async () => (await import("./job-handlers/thumbnail")).backfillThumbnails,
+  "entitlements.reconcile": async () => async () => {
+    await (await import("./entitlements")).reconcileLicenses();
+  },
 };
 
 /** How long a job may sit in `running` before it is presumed killed. */

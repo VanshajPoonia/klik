@@ -5,7 +5,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventPlan } from "@/lib/license";
 import { canUseAlbums } from "@/lib/plans";
 
 const createAlbumSchema = z.object({
@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const plan = await getAccountPlan(event.ownerId);
+  const plan = eventPlan(event);
   if (!canUseAlbums(plan.key)) {
     return NextResponse.json(
       { error: "Multiple albums are available on the Klik Premium plan" },

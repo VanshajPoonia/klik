@@ -25,6 +25,11 @@ export const users = pgTable("users", {
   emailVerified: timestamp("emailVerified", { withTimezone: true }),
   image: text("image"),
   role: text("role").$type<UserRole>().notNull().default("organizer"),
+  // RETIRED by ACT-1, 2026-10-08. Nothing reads it: what an account holds is
+  // the `entitlements` ledger, and what an event runs on is `events.plan_key`.
+  // It defaulted to 'event', so it described a $39 plan for every account
+  // whether or not anyone had granted it. Kept only until a migration drops it;
+  // do not start reading it again.
   planKey: text("plan_key").$type<PlanKey>().notNull().default("event"),
   venueSlug: text("venue_slug").unique(),
   credentialVersion: integer("credential_version").notNull().default(0),
@@ -75,6 +80,9 @@ export const TIMELINE_KINDS = [
   "welcome_email_failed",
   "plan_assigned",
   "plan_changed",
+  "plan_revoked",
+  "activation_requested",
+  "event_went_live",
   "activation_email_sent",
   "activation_email_failed",
   "event_created",
@@ -235,6 +243,22 @@ export const events = pgTable(
     // to read anyway, without touching the media table at all, which is what
     // makes two hundred phones polling one wedding cheap.
     mediaChangedAt: timestamp("media_changed_at", { withTimezone: true }).notNull().defaultNow(),
+    // What licenses this event: a pass bound to it, or an account grant such as
+    // Venue. Null means not currently licensed. See lib/entitlements.ts.
+    entitlementId: text("entitlement_id"),
+    // The plan this event runs on, copied from its entitlement when licensed so
+    // the hot paths read one column on a row they already have instead of
+    // walking the ledger. Kept after a licence lapses, so a lapsed gallery can
+    // still answer how long it stays viewable.
+    planKey: text("plan_key").$type<PlanKey>(),
+    // When it first went live. Null is a draft: the organizer can set it up,
+    // nobody else can see it, and no QR code exists for it yet. Upload and
+    // access windows run from here rather than from created_at, so a draft made
+    // months before the wedding does not spend its 30 days sitting unused.
+    licensedAt: timestamp("licensed_at", { withTimezone: true }),
+    // ACT-4: when the organizer asked for this draft to go live. Cleared by
+    // nothing: once licensed, licensed_at is what the queue reads instead.
+    activationRequestedAt: timestamp("activation_requested_at", { withTimezone: true }),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -526,6 +550,60 @@ export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
   processedAt: timestamp("processed_at", { withTimezone: true }),
   error: text("error"),
 });
+
+export const ENTITLEMENT_SCOPES = ["event", "account"] as const;
+export type EntitlementScope = (typeof ENTITLEMENT_SCOPES)[number];
+export const ENTITLEMENT_SOURCES = ["admin", "stripe", "promo"] as const;
+export type EntitlementSource = (typeof ENTITLEMENT_SOURCES)[number];
+export const ENTITLEMENT_STATUSES = ["active", "revoked"] as const;
+export type EntitlementStatus = (typeof ENTITLEMENT_STATUSES)[number];
+
+/**
+ * ACT-1: the ledger of what an account has been granted. Replaces reading the
+ * plan off `users.plan_key`, which put a per-event product on the account and
+ * let one $39 pass create an event every month indefinitely.
+ *
+ * Two shapes. A **pass** (`scope = 'event'`, Klik Event and Premium) licenses
+ * exactly one event: `applied_at` marks it spent, permanently, even if that
+ * event is later purged, so a pass can never come back to life. An **account
+ * grant** (`scope = 'account'`, Klik Venue) licenses any number of the owner's
+ * events up to limits snapshotted onto the row when it was granted, the same
+ * way retention is pinned, so editing lib/plans.ts never retroactively changes
+ * what someone was given.
+ *
+ * Rows are revoked, never deleted, so the record of a grant outlives it.
+ * Constraints and the limit trigger are in drizzle/0018_entitlements.sql.
+ */
+export const entitlements = pgTable(
+  "entitlements",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planKey: text("plan_key").$type<PlanKey>().notNull(),
+    scope: text("scope").$type<EntitlementScope>().notNull(),
+    source: text("source").$type<EntitlementSource>().notNull(),
+    status: text("status").$type<EntitlementStatus>().notNull().default("active"),
+    appliedEventId: text("applied_event_id").references(() => events.id, { onDelete: "set null" }),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull().defaultNow(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    maxActiveEvents: integer("max_active_events"),
+    maxEventsPerMonth: integer("max_events_per_month"),
+    reason: text("reason"),
+    grantedByUserId: text("granted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    grantedByLabel: text("granted_by_label"),
+    stripeRef: text("stripe_ref"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedByUserId: text("revoked_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    revokeReason: text("revoke_reason"),
+  },
+  (table) => [index("entitlements_user_idx").on(table.userId, table.createdAt)],
+);
+
+export type Entitlement = typeof entitlements.$inferSelect;
 
 export const JOB_STATUSES = ["queued", "running", "succeeded", "dead"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];

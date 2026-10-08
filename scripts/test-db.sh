@@ -38,11 +38,10 @@ for migration in drizzle/0*.sql; do
     || { echo "Migration failed against the test schema: $migration" >&2; exit 1; }
 done
 
-# Except the plan-limit triggers from 0003, which cap an owner at one or five
-# live events. Fixtures routinely create fifty events for one owner (the purge
-# circuit breaker needs a crowd), and those triggers read users.plan_key, which
-# ACT-1 retires. Their replacement is tested where it is built.
-psql "$TEST_DATABASE_URL" -q -c 'DROP TRIGGER IF EXISTS "events_plan_limits_trigger" ON "events"; DROP TRIGGER IF EXISTS "users_plan_limits_trigger" ON "users";' >/dev/null
+# The old plan-limit triggers from 0003 are dropped by 0018 itself (ACT-1), and
+# their replacement, events_entitlement_limits, stays: it only acts on events
+# that point at an entitlement, so fixtures that create many plain events per
+# owner are unaffected, and test/entitlements.dbtest.ts tests it directly.
 
 echo "Ready: $TEST_DATABASE_URL"
 echo "Stop it with: pg_ctl -D $DATA_DIR stop"

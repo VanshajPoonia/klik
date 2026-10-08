@@ -6,7 +6,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
 import { canUpload } from "@/lib/access";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventPlan } from "@/lib/license";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { clientIp, consume } from "@/lib/ratelimit";
 import {
@@ -58,8 +58,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const [event] = await db.select().from(events).where(and(eq(events.id, eventId), isNull(events.deletedAt))).limit(1);
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-  const plan = await getAccountPlan(event.ownerId);
-  if (!canUpload(event, plan.uploadWindowDays)) {
+  const plan = eventPlan(event);
+  if (!canUpload(event)) {
     return NextResponse.json({ error: "Uploads are closed for this event" }, { status: 403 });
   }
   if (!isAllowedMime(mimeType)) {
@@ -86,7 +86,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Upload identifier is already in use" }, { status: 409 });
   }
 
-  const viewer = await resolveEventViewer(event, plan.galleryAccessDays);
+  const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {
     return NextResponse.json({ error: "Gallery access is required to upload" }, { status: 403 });
   }

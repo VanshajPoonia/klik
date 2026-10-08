@@ -52,9 +52,9 @@ describe("requireEventManagerSession", () => {
   });
 
   it("lets an active co-host in", async () => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const coHost = await makeUser();
-    const event = await makeEvent(owner);
+    const event = await makeEvent(owner, { planKey: "premium" });
     await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost });
 
     signedInAs(coHost);
@@ -64,9 +64,9 @@ describe("requireEventManagerSession", () => {
   /** The revocation rule. A removed co-host keeps their row for 30 days so the
    *  removal is reversible, which is exactly why this predicate is load-bearing. */
   it("refuses a co-host whose membership was soft-deleted", async () => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const coHost = await makeUser();
-    const event = await makeEvent(owner);
+    const event = await makeEvent(owner, { planKey: "premium" });
     await testDb
       .insert(eventCoHosts)
       .values({ eventId: event, userId: coHost, deletedAt: new Date() });
@@ -75,12 +75,22 @@ describe("requireEventManagerSession", () => {
     expect(await requireEventManagerSession(event, owner)).toBeNull();
   });
 
-  /** Co-hosting is a Premium capability, enforced here rather than only in the
-   *  UI, so a downgrade actually removes the access it paid for. */
-  it("refuses a co-host when the owner is no longer on Premium", async () => {
+  /** Co-hosting is a capability of the event's plan since ACT-1, enforced here
+   *  rather than only in the UI, so an event on a plan without co-hosts has none. */
+  it("refuses a co-host when the event is not on a plan with co-hosts", async () => {
     // "event" is the entry plan. There is no "free" key, which the type checker
     // caught when this test first guessed one.
-    const owner = await makeUser({ planKey: "event" });
+    const owner = await makeUser();
+    const coHost = await makeUser();
+    const event = await makeEvent(owner, { planKey: "event" });
+    await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost });
+
+    signedInAs(coHost);
+    expect(await requireEventManagerSession(event, owner)).toBeNull();
+  });
+
+  it("refuses a co-host on a draft, which has no plan yet", async () => {
+    const owner = await makeUser();
     const coHost = await makeUser();
     const event = await makeEvent(owner);
     await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost });
@@ -90,10 +100,10 @@ describe("requireEventManagerSession", () => {
   });
 
   it("refuses a co-host of a different event", async () => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const coHost = await makeUser();
-    const theirs = await makeEvent(owner);
-    const other = await makeEvent(owner);
+    const theirs = await makeEvent(owner, { planKey: "premium" });
+    const other = await makeEvent(owner, { planKey: "premium" });
     await testDb.insert(eventCoHosts).values({ eventId: theirs, userId: coHost });
 
     signedInAs(coHost);
@@ -101,9 +111,9 @@ describe("requireEventManagerSession", () => {
   });
 
   it("refuses a signed-in stranger and a signed-out visitor", async () => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const stranger = await makeUser();
-    const event = await makeEvent(owner);
+    const event = await makeEvent(owner, { planKey: "premium" });
 
     signedInAs(stranger);
     expect(await requireEventManagerSession(event, owner)).toBeNull();
@@ -118,9 +128,9 @@ describe("requireEventManagerSession", () => {
    * would be permanent in practice.
    */
   it("lets a removed co-host be restored", async () => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const coHost = await makeUser();
-    const event = await makeEvent(owner);
+    const event = await makeEvent(owner, { planKey: "premium" });
 
     await testDb
       .insert(eventCoHosts)
@@ -186,9 +196,9 @@ describe("requireSuperadmin", () => {
  */
 describe("resolveEventActor", () => {
   it("reports the owner and a superadmin as owner, with no stored row", async () => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const admin = await makeUser({ role: "superadmin" });
-    const event = await makeEvent(owner);
+    const event = await makeEvent(owner, { planKey: "premium" });
 
     signedInAs(owner);
     expect((await resolveEventActor(event, owner))?.role).toBe("owner");
@@ -200,9 +210,9 @@ describe("resolveEventActor", () => {
   it.each(["manager", "moderator", "contributor"] as const)(
     "reports a co-host's stored role: %s",
     async (role) => {
-      const owner = await makeUser({ planKey: "premium" });
+      const owner = await makeUser();
       const coHost = await makeUser();
-      const event = await makeEvent(owner);
+      const event = await makeEvent(owner, { planKey: "premium" });
       await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost, role });
 
       signedInAs(coHost);
@@ -211,9 +221,9 @@ describe("resolveEventActor", () => {
   );
 
   it("defaults an existing row with no explicit role to manager", async () => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const coHost = await makeUser();
-    const event = await makeEvent(owner);
+    const event = await makeEvent(owner, { planKey: "premium" });
     await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost });
 
     signedInAs(coHost);
@@ -223,9 +233,9 @@ describe("resolveEventActor", () => {
 
 describe("requireEventCapability", () => {
   const asCoHost = async (role: "manager" | "moderator" | "contributor") => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const coHost = await makeUser();
-    const event = await makeEvent(owner);
+    const event = await makeEvent(owner, { planKey: "premium" });
     await testDb.insert(eventCoHosts).values({ eventId: event, userId: coHost, role });
     signedInAs(coHost);
     return { owner, event };
@@ -264,9 +274,9 @@ describe("requireEventCapability", () => {
   });
 
   it("refuses every capability once the membership is soft-deleted", async () => {
-    const owner = await makeUser({ planKey: "premium" });
+    const owner = await makeUser();
     const coHost = await makeUser();
-    const event = await makeEvent(owner);
+    const event = await makeEvent(owner, { planKey: "premium" });
     await testDb
       .insert(eventCoHosts)
       .values({ eventId: event, userId: coHost, role: "manager", deletedAt: new Date() });

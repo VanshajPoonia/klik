@@ -41,6 +41,8 @@ export const JOB_PAYLOADS = {
   "media.thumbnail": z.object({ mediaId: z.string().min(1).max(64) }),
   /** Finds media with no thumbnail and queues a `media.thumbnail` for each. */
   "media.backfill_thumbnails": z.object({}),
+  /** ACT-1: repair half-spent passes and lapse events whose grant has ended. */
+  "entitlements.reconcile": z.object({}),
 } as const;
 
 export type JobKind = keyof typeof JOB_PAYLOADS;
@@ -156,6 +158,9 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     // Self-healing rather than a one-off script: catches the existing media,
     // any upload whose thumbnail failed, and anything a future bug misses.
     { kind: "media.backfill_thumbnails", payload: {} },
+    // An end date passes without anything writing to the row, so something has
+    // to look. Daily is fine: grants end on dates, not minutes.
+    { kind: "entitlements.reconcile", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

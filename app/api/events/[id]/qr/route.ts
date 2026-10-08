@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
 import { getAppUrl } from "@/lib/env";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventLicenseState, eventPlan } from "@/lib/license";
 import { canCustomizeQr, canDownloadQrSign } from "@/lib/plans";
 
 export const runtime = "nodejs";
@@ -32,6 +32,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const session = (await requireEventCapability(event.id, event.ownerId, "event.qr"))?.session ?? null;
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // ACT-3: a QR code for a draft would be printed and then either fail for
+  // every guest or quietly start working later. Neither is acceptable for
+  // something laminated onto a table, so no code exists until the event is live.
+  // A lapsed event keeps its code: guests can still view that gallery.
+  if (eventLicenseState(event) === "draft") {
+    return NextResponse.json(
+      { error: "The QR code is created when this event goes live." },
+      { status: 409 },
+    );
+  }
+
   const url = new URL(request.url);
   const format = url.searchParams.get("format") === "svg" ? "svg" : "png";
   const wantsSign = url.searchParams.get("format") === "sign";
@@ -40,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const target = `${getAppUrl()}/e/${event.slug}`;
 
   if (wantsSign) {
-    const plan = await getAccountPlan(event.ownerId);
+    const plan = eventPlan(event);
     if (!canDownloadQrSign(plan.key)) {
       return NextResponse.json(
         { error: "Formatted QR signs are available on Klik Premium and Klik Venue" },

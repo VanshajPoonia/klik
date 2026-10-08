@@ -4,7 +4,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
-import { getAccountPlan } from "@/lib/account-plans";
+import { eventPlan } from "@/lib/license";
+import type { Event } from "@/lib/schema";
 import { canUseAlbums } from "@/lib/plans";
 
 const patchAlbumSchema = z.object({
@@ -23,9 +24,8 @@ async function getManagedAlbum(eventId: string, albumId: string) {
   return { album, session, event };
 }
 
-async function ensureAlbumPlan(ownerId: string) {
-  const plan = await getAccountPlan(ownerId);
-  return canUseAlbums(plan.key);
+function ensureAlbumPlan(event: Event) {
+  return canUseAlbums(eventPlan(event).key);
 }
 
 export async function PATCH(
@@ -38,7 +38,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (!result.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await ensureAlbumPlan(result.event.ownerId))) {
+  if (!(await ensureAlbumPlan(result.event))) {
     return NextResponse.json({ error: "Album management requires Klik Premium" }, { status: 403 });
   }
 
@@ -66,7 +66,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (!result.session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await ensureAlbumPlan(result.event.ownerId))) {
+  if (!(await ensureAlbumPlan(result.event))) {
     return NextResponse.json({ error: "Album management requires Klik Premium" }, { status: 403 });
   }
 

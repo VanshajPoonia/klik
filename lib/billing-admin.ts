@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { purchases, subscriptions, users } from "@/lib/schema";
+import { entitlements, purchases, subscriptions, users } from "@/lib/schema";
 
 /**
  * Subscription states that mean the money is currently arriving. Anything else,
@@ -46,12 +46,23 @@ export async function getPendingActivations() {
         contactName: users.name,
         username: users.username,
         status: subscriptions.status,
-        planKey: users.planKey,
         currentPeriodEnd: subscriptions.currentPeriodEnd,
       })
       .from(subscriptions)
       .innerJoin(users, eq(users.id, subscriptions.userId))
-      .where(and(eq(subscriptions.planKey, "venue"), ne(users.planKey, "venue")))
+      // Against the ledger since ACT-1: a paying Venue subscription with no
+      // active Venue grant is somebody paying for something they do not have.
+      .where(
+        and(
+          eq(subscriptions.planKey, "venue"),
+          sql`NOT EXISTS (
+            SELECT 1 FROM ${entitlements}
+            WHERE ${entitlements.userId} = ${subscriptions.userId}
+              AND ${entitlements.planKey} = 'venue'
+              AND ${entitlements.status} = 'active'
+          )`,
+        ),
+      )
       .orderBy(desc(subscriptions.updatedAt)),
   ]);
 

@@ -5,8 +5,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { venueClients } from "@/lib/schema";
-import { getAccountPlan } from "@/lib/account-plans";
-import { canManageEventClients } from "@/lib/plans";
+import { hasVenueGrant } from "@/lib/entitlements";
 
 const clientSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -17,8 +16,7 @@ const clientSchema = z.object({
 async function requireVenueOrganizer() {
   const session = await auth();
   if (!session?.user) return null;
-  const plan = await getAccountPlan(session.user.id);
-  return canManageEventClients(plan.key) ? session : null;
+  return (await hasVenueGrant(session.user.id)) ? session : null;
 }
 
 export async function GET() {

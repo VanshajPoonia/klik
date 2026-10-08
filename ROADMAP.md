@@ -26,8 +26,10 @@
 - **Gallery read path rebuilt, 2026-10-08.** Pages sign their tiles in one request, tiles use thumbnails, and phones sync deltas from `/media/changes`, including removals. See ARCHITECTURE.md section 8.
 - An append-only account history, `account_timeline`, 2026-10-07. Records what happened rather than what is currently true: email sends and refusals, who granted a plan, plan corrections. `/admin` derives a seven-step chain from it per client, marking only the steps a superadmin has to act on. This is a narrow slice of ADM-4's audit log, built because the activation loop needed somewhere to record a failed send; ADM-4 can widen it rather than start over.
 
+- **Entitlement ledger, 2026-10-08 (ACT-1 to ACT-4).** Passes license one event, Venue licenses up to its limits, drafts exist before payment, and a superadmin grants with a reason. `users.plan_key` is retired. See `BILLING.md`.
+
 **Not built at all**
-- Granting a plan automatically. Stripe Checkout and the webhook now take and record money (see `BILLING.md`), but `users.plan_key` is still set by hand by a superadmin, because capability needs ACT-1's ledger before a webhook may touch it.
+- Granting a plan automatically. **Deliberately**, confirmed 2026-10-08: payments keep human approval. The ledger has a `source` column so automating it later is one webhook handler.
 - Any usage measurement. Nothing counts storage, media, or guests, so nothing can warn about limits.
 - Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt, and usernames are auto-generated at signup rather than claimed (ID-2).
 - Guest accounts, guest event history, guest to organizer upgrade.
@@ -205,7 +207,7 @@ It carries a "last verified against commit" line, so the next person can see at 
 
 ### F-2. Rate limiting
 **Size:** M. **Blocks:** PAY (webhook abuse), ACC (OTP abuse), ID (username enumeration), MED (share link password brute force).
-Create table `rate_limits` (key text primary key, window_start timestamptz, count integer) and `lib/ratelimit.ts` exposing `consume(key, limit, windowSeconds)` as a single upsert with a conditional increment so it is atomic under concurrency. Key format `<scope>:<identifier>:<bucket>`. Wire to: upload token handshake (60 per guest per hour, 200 per IP per hour), guest session creation (10 per IP per hour), gallery password attempts (10 per IP per hour), credential login (10 per IP per 15 min, plus 5 per username per 15 min), username availability checks (30 per IP per minute), OTP requests (5 per email per hour), share link password attempts (10 per token per hour). Return `429` with `Retry-After`. Sweep expired rows in the existing purge cron.
+Create table `rate_limits` (key text primary key, window_start timestamptz, count integer) and `lib/ratelimit.ts` exposing `consume(key, limit, windowSeconds)` as a single upsert with a conditional increment so it is atomic under concurrency. Key format `<scope>:<identifier>:<bucket>`. Wire to: upload token handshake (60 per guest per hour, 200 per IP per hour), guest session creation (10 per IP per hour), gallery password attempts (10 per IP per hour, **done 2026-10-08**, plus 100 per event so a script cannot spread across one gallery from many addresses), credential login (10 per IP per 15 min, plus 5 per username per 15 min), username availability checks (30 per IP per minute), OTP requests (5 per email per hour), share link password attempts (10 per token per hour). Return `429` with `Retry-After`. Sweep expired rows in the existing purge cron.
 
 ### F-3. Permissions resolver
 **Size:** M. **Blocks:** ORG, MED, ADM.
@@ -391,6 +393,15 @@ Transfer flow (owner picks a manager, that person accepts, billing responsibilit
 ## Phase ACT: Event activation (the v1 replacement for payments)
 
 ### ACT-1. One entitlement model, admin-granted first
+**DONE 2026-10-08** (`drizzle/0018_entitlements.sql`, `lib/entitlements.ts`, `lib/license.ts`, `test/entitlements.dbtest.ts`). Built close to the design below, with these differences, each deliberate:
+
+- **Two shapes, not a status machine.** A pass (`scope = 'event'`) is spent by `applied_at`, which is never cleared, so a pass cannot come back if its event is purged. An account grant (`scope = 'account'`, Venue) carries `max_active_events` and `max_events_per_month` copied from `lib/plans.ts` at grant time, the way retention is pinned. Status is only `active | revoked`; "consumed" is `applied_at`, and "expired" is `ends_at`.
+- **Architecture note 2 is resolved.** The 0002/0003 triggers are dropped. One new trigger, `events_entitlement_limits`, enforces "one pass, one event", owner match, and the Venue limits, reading its numbers from the grant row after locking it. `lib/plans.ts` is the only place a limit is written down.
+- **The plan lives on the event.** `events.plan_key`, `entitlement_id` and `licensed_at`, so every hot path answers from the row it already loaded, which also removed a query from about twenty routes. `users.plan_key` is retired and read nowhere.
+- **Windows run from going live**, not from creation, so a draft made months before a wedding does not arrive with its upload window already spent.
+- **The backfill** gave every account exactly what it had: a spent pass per existing event, an unused pass for an activated account with no event, an account grant for Venue, and nothing for anyone never activated. It is tested by running the block straight out of the migration file.
+- **The revenue leak is closed:** a $39 pass used to mean one new event every month indefinitely, because the plan was on the account.
+
 **Size:** M. **Blocks:** ACT-2, ACT-3, and later all of PAY. Formerly PAY-1; renamed 2026-10-01 when payments left v1.
 **Decision: the admin panel and (later) Stripe are both first-class grant sources, and neither may overwrite the other.** The admin panel is how things run today and stays that way after Stripe ships, so the model cannot be "Stripe is truth and admin is a hack". Building the human path first is the point: Stripe later adds a `source`, not a new concept.
 
@@ -411,10 +422,14 @@ Transfer flow (owner picks a manager, that person accepts, billing responsibilit
 - Every `canX(plan.key)` call site moves to the event-scoped resolver.
 
 ### ACT-2. Admin activation surface
+**DONE 2026-10-08.** Each client card on `/admin` has a grant form (plan, required reason, "their next event" or a named one) and the full grant history with revoke, which also needs a reason and deletes nothing. Every event shows live, draft, lapsed or deleted. A grant on an already active account emails "your event is live" about that event; the first grant's access email names the draft it put live instead of saying "create your event". `/admin/new` provisions through the same ledger.
+
 **Size:** M. **Depends on:** ACT-1. Formerly PAY-1b. **This is the v1 revenue mechanism: a human decides.**
 The admin panel already sets `users.plan_key` through `POST /api/admin/clients/[userId]/plan`. Rework it against the ledger: grant a plan to an account or to one specific event, with a reason, an optional end date, and an explicit revoke. Show the grant source on every event in the admin list so it is obvious at a glance whether an account is paying or comped.
 
 ### ACT-3. The organizer's side of activation
+**DONE 2026-10-08.** Anyone signed in can create an event; without a pass or grant it is a draft (up to five), which the organizer sets up while guests see "not open yet". A banner on the event says what is pending and offers the one thing that moves it on: "Use my plan and go live" when the account holds something, otherwise "Ask Klik to activate it". The QR tab and both QR routes refuse a draft, and the venue hub never redirects into one. All three points below are met.
+
 **Size:** M. **Depends on:** ACT-1. New 2026-10-01.
 An organizer creates an event and it is **inactive**: no live QR, no guest access, no uploads. They can still name it, set the date, pick colours and design the print sign, so the waiting time is useful rather than dead. The dashboard states plainly what is pending and what unlocks when it is activated.
 
@@ -424,6 +439,8 @@ Three things this has to get right, because they are what turn a waiting screen 
 - **The QR must not exist until activation.** A QR generated against an inactive event either 404s or silently starts working later; both are worse than not offering it yet. This interacts with QR-1: a slug is permanent once printed, so it should not be mintable before the event is real.
 
 ### ACT-4. Activation requests and queue
+**DONE 2026-10-08.** `events.activation_requested_at`, set by the organizer's button, rate limited, and recorded in `account_timeline`. `/admin` lists requests under "Waiting to go live", soonest event first, with anything within three days marked. The request emails `ALERT_EMAIL`. The decision reaches the organizer through the emails in ACT-2.
+
 **Size:** S. **Depends on:** ACT-2, ACT-3.
 An organizer asks for activation; the request lands in a queue on the admin dashboard with the event, the requester, and the date it is needed by. Without this the trigger is a WhatsApp message and the failure mode is an event going live an hour late. Notify the admin on request, notify the organizer on decision, record both in the audit log (ADM-4).
 
@@ -1437,6 +1454,9 @@ I wrote the ordering in each case so the surviving state is the recoverable one 
 **The decision to review:** `@neondatabase/serverless` also ships a WebSocket `Pool` that *does* support real transactions. Switching `lib/db.ts` is a small change with a real payoff for exactly the operations that destroy data. The cost is a connection model less suited to serverless. Worth doing before PAY writes money-related rows.
 
 ### 2. Plan limits live in two places and already disagree in shape
+
+**RESOLVED 2026-10-08 by ACT-1.** The triggers read their limits from the grant row, which copies them from `lib/plans.ts`. One source.
+
 
 `lib/plans.ts` defines limits in TypeScript. Migration `0002` also enforces them in **plpgsql triggers**, which hard-code `venue → 5, everything else → 1`. Two sources of truth, and the database one wins silently.
 

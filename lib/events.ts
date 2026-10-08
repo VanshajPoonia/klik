@@ -49,12 +49,11 @@ export interface CreateEventInput {
   moderation?: boolean;
   expiresAt?: Date | null;
   /**
-   * Gallery retention for this event, in days, taken from the owner's plan at
-   * creation. Passed in rather than looked up because admin quick-create
-   * inserts the owner and the event in one batch, so the user row does not
-   * exist yet when this runs.
+   * Gallery retention for this event, in days. Null for a draft, which has no
+   * plan yet: licensing it sets the deadline (lib/entitlements.ts), and the
+   * purge treats a null deadline as "do not touch", never as "use a default".
    */
-  retentionDays?: number;
+  retentionDays?: number | null;
 }
 
 /**
@@ -88,10 +87,10 @@ export async function prepareEventInsert(input: CreateEventInput) {
       passwordHash,
       moderation: input.moderation ?? false,
       expiresAt: input.expiresAt ?? null,
-      retentionUntil: getPlanDeadline(
-        createdAt,
-        input.retentionDays ?? PLANS.event.galleryAccessDays,
-      ),
+      retentionUntil:
+        input.retentionDays === null
+          ? null
+          : getPlanDeadline(createdAt, input.retentionDays ?? PLANS.event.galleryAccessDays),
     })
     .returning();
 

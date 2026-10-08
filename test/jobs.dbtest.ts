@@ -181,7 +181,7 @@ describe("drainJobs", () => {
 
 describe("scheduleDailyJobs", () => {
   it("schedules each daily job once per day however often it is called", async () => {
-    const daily = ["uploads.reap_orphans", "media.backfill_thumbnails"];
+    const daily = ["uploads.reap_orphans", "media.backfill_thumbnails", "entitlements.reconcile"];
     const morning = new Date("2026-10-08T04:00:00Z");
     expect(await scheduleDailyJobs(morning)).toEqual(daily);
     // Even after the first one has finished, which the live-only dedupe index

@@ -63,7 +63,7 @@ export function PendingActivations({
                 {row.contactName ?? row.username ?? row.userId}
               </span>
               <span className="text-xs text-muted">
-                Paying for Venue ({row.status}), account is on {PLANS[row.planKey].name}
+                Paying for Venue ({row.status}), but holds no active Venue grant
               </span>
             </li>
           ))}

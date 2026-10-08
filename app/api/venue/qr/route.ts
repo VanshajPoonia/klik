@@ -4,8 +4,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/schema";
-import { getAccountPlan } from "@/lib/account-plans";
-import { canUseVenueHub } from "@/lib/plans";
+import { hasVenueGrant } from "@/lib/entitlements";
 import { getAppUrl } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -26,16 +25,16 @@ function escapeXml(value: string) {
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const [account, plan] = await Promise.all([
+  const [account, hasVenue] = await Promise.all([
     db
       .select({ name: users.name, venueSlug: users.venueSlug })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1)
       .then((rows) => rows[0]),
-    getAccountPlan(session.user.id),
+    hasVenueGrant(session.user.id),
   ]);
-  if (!account?.venueSlug || !canUseVenueHub(plan.key)) {
+  if (!account?.venueSlug || !hasVenue) {
     return NextResponse.json({ error: "A Klik Venue plan is required" }, { status: 403 });
   }
 
