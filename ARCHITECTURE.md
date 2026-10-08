@@ -173,6 +173,10 @@ Three safety properties, all deliberate:
 
 Two properties to keep when adding a job kind. Declare the payload in `JOB_PAYLOADS`, so a malformed job is refused at enqueue rather than dying unseen. And make the handler idempotent: a job can run twice, because a reclaimed stale job may have done some of its work before it was killed.
 
+### Exports, which are copies and are treated as copies
+
+`exports/<eventId>/<exportId>/part-N.zip`, built by the job queue for galleries over 400 MB (MED-7). They are deleted after 7 days, by row and also by age under the prefix, so a ZIP whose event cascaded away is still caught. Erasure deletes an event's exports straight away, and the backup sweep copies only `events/`, so an export is never kept longer than its week anywhere. Downloads go through `GET /api/events/[id]/exports/[exportId]/parts/[n]`, which checks `media.exportAll` and then redirects to an hour-long signed URL.
+
 ### The backup, and why it is locked
 
 **`klik-media-backup` holds a second copy of every object for 30 days, and nothing in this codebase can delete from it.** `lib/backup.ts` copies; `app/api/cron/backup-sweep/route.ts` runs nightly at 02:00 UTC.

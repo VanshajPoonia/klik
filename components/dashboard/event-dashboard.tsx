@@ -20,7 +20,8 @@ import type { OrganizerEvent } from "@/lib/events";
 import type { Album, VenueClient } from "@/lib/schema";
 import type { MediaStatus, MediaVisibility } from "@/lib/schema";
 import { formatFileSize } from "@/lib/plans";
-import { buildDownloadBatches } from "@/lib/download-batches";
+import { INLINE_ZIP_LIMIT_BYTES, buildDownloadBatches } from "@/lib/download-batches";
+import { ExportsPanel } from "@/components/dashboard/exports-panel";
 
 type Tab = "gallery" | "links" | "settings" | "qr";
 
@@ -85,10 +86,30 @@ export function EventDashboard({
   const rejected = mediaItems.filter((item) => item.status === "rejected");
   const selectedItems = approved.filter((item) => selectedIds.has(item.id));
   const selectedDownloadParts = buildDownloadBatches(selectedItems);
-  const downloadParts = buildDownloadBatches(approved).map((items) => ({
-    itemCount: items.length,
-    sizeBytes: items.reduce((total, item) => total + item.sizeBytes, 0),
-  }));
+  const approvedBytes = approved.reduce((total, item) => total + item.sizeBytes, 0);
+  const selectedBytes = selectedItems.reduce((total, item) => total + item.sizeBytes, 0);
+  // MED-7. Small enough streams straight to the browser as it always has; past
+  // the limit it is packed in the background and downloaded from storage.
+  const streamsInline = approvedBytes <= INLINE_ZIP_LIMIT_BYTES;
+  const selectionStreamsInline = selectedBytes <= INLINE_ZIP_LIMIT_BYTES;
+  const [exportVersion, setExportVersion] = useState(0);
+  const [selectionExportState, setSelectionExportState] = useState<string | null>(null);
+
+  async function exportSelection() {
+    setSelectionExportState("Starting…");
+    const response = await fetch(`/api/events/${event.id}/exports`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mediaIds: selectedItems.map((item) => item.id) }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setSelectionExportState(body.error ?? "Could not start the download");
+      return;
+    }
+    setSelectionExportState("Preparing. It appears above when ready, and we will email you.");
+    setExportVersion((version) => version + 1);
+  }
   const lightboxIndex = lightboxId
     ? mediaItems.findIndex((item) => item.id === lightboxId)
     : -1;
@@ -280,7 +301,7 @@ export function EventDashboard({
             <p className="mt-1 text-sm text-muted">/e/{event.slug}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {downloadParts.length === 1 && (
+            {approved.length > 0 && streamsInline && (
               <a
                 href={`/api/events/${event.id}/download`}
                 className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line px-4 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt"
@@ -322,26 +343,13 @@ export function EventDashboard({
 
         {tab === "gallery" && (
           <div className="space-y-10">
-            {downloadParts.length > 1 && (
-              <section className="flex flex-wrap items-center gap-3 border-b border-canvas-line pb-6">
-                <p className="mr-auto max-w-md text-sm text-muted">
-                  This gallery is split into {downloadParts.length} ZIP files for reliable
-                  downloads.
-                </p>
-                {downloadParts.map((part, index) => (
-                  <a
-                    key={`part-${index + 1}`}
-                    href={`/api/events/${event.id}/download?part=${index + 1}`}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line px-4 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt"
-                  >
-                    <Download className="h-4 w-4" aria-hidden="true" />
-                    Part {index + 1}
-                    <span className="text-xs text-muted">
-                      {part.itemCount} items, {formatFileSize(part.sizeBytes)}
-                    </span>
-                  </a>
-                ))}
-              </section>
+            {(!streamsInline || exportVersion > 0) && (
+              <ExportsPanel
+                eventId={event.id}
+                approvedCount={approved.length}
+                approvedBytes={approvedBytes}
+                refreshKey={exportVersion}
+              />
             )}
             {mediaError && (
               <div
@@ -539,7 +547,23 @@ export function EventDashboard({
           >
             Clear
           </button>
-          {selectedDownloadParts.map((part, index) => (
+          {!selectionStreamsInline ? (
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={() => void exportSelection()}
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-canvas px-4 text-sm font-medium text-paper transition-colors hover:bg-canvas-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-canvas focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Prepare download
+              </button>
+              {selectionExportState && (
+                <p className="max-w-56 text-right text-xs text-canvas/80" aria-live="polite">
+                  {selectionExportState}
+                </p>
+              )}
+            </div>
+          ) : selectedDownloadParts.map((part, index) => (
             <form
               key={part.map((item) => item.id).join("-")}
               action={`/api/events/${event.id}/download`}

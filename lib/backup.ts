@@ -69,12 +69,26 @@ export function planBackupCopies(
     .map((object) => object.key);
 }
 
+/**
+ * What gets backed up: the media people uploaded and nothing derived from it.
+ * Exports under `exports/` are ZIP copies that expire in a week and can be
+ * rebuilt in minutes, so backing them up would pay twice to keep a copy of a
+ * copy, and keep it 30 days past the point it was meant to be gone.
+ */
+export const BACKUP_PREFIXES = ["events/"] as const;
+
 async function listAll(bucket: string): Promise<BackupObject[]> {
+  const objects: BackupObject[] = [];
+  for (const prefix of BACKUP_PREFIXES) objects.push(...(await listPrefix(bucket, prefix)));
+  return objects;
+}
+
+async function listPrefix(bucket: string, prefix: string): Promise<BackupObject[]> {
   const objects: BackupObject[] = [];
   let token: string | undefined;
   do {
     const page = await r2.send(
-      new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token }),
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
     );
     for (const object of page.Contents ?? []) {
       if (object.Key && typeof object.Size === "number") {

@@ -43,6 +43,10 @@ export const JOB_PAYLOADS = {
   "media.backfill_thumbnails": z.object({}),
   /** ACT-1: repair half-spent passes and lapse events whose grant has ended. */
   "entitlements.reconcile": z.object({}),
+  /** MED-7: build one ZIP part of an export into the bucket. */
+  "export.part": z.object({ exportId: z.string().min(1).max(64), part: z.number().int().nonnegative() }),
+  /** MED-7: delete exports past their week, and anything left under exports/. */
+  "exports.expire": z.object({}),
 } as const;
 
 export type JobKind = keyof typeof JOB_PAYLOADS;
@@ -161,6 +165,7 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     // An end date passes without anything writing to the row, so something has
     // to look. Daily is fine: grants end on dates, not minutes.
     { kind: "entitlements.reconcile", payload: {} },
+    { kind: "exports.expire", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

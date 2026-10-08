@@ -4,6 +4,7 @@ import { db } from "./db";
 import { erasureLog, events, guests, media, users } from "./schema";
 import { deleteBlobs } from "./storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys, type MediaObjectRow } from "./media-objects";
+import { deleteEventExports } from "./exports";
 
 /**
  * Hard deletion, as distinct from the soft delete in the DELETE routes.
@@ -100,6 +101,9 @@ export async function eraseEvent(
     .where(eq(media.eventId, eventId));
 
   const result = await eraseMediaRows(rows);
+  // A ZIP of the gallery is the gallery. Exports are deleted, not left to
+  // expire, because "gone within a week" is not what erasure promises.
+  await deleteEventExports([eventId]);
   await db.delete(guests).where(eq(guests.eventId, eventId));
   await db.delete(events).where(eq(events.id, eventId));
   await recordErasure("event", eventId, result, requestedBy, reason);
@@ -126,6 +130,9 @@ export async function eraseGuest(
     .where(and(eq(media.guestId, guestId), eq(media.eventId, eventId)));
 
   const result = await eraseMediaRows(rows);
+  // Any export of this event may contain their uploads. Rebuilding one is a
+  // click; leaving their photos in a ZIP for a week is not an erasure.
+  if (rows.length > 0) await deleteEventExports([eventId]);
   await db.delete(guests).where(and(eq(guests.id, guestId), eq(guests.eventId, eventId)));
 
   // A deleted guest's uploads are gone, so any event still pointing at one of
@@ -175,6 +182,9 @@ export async function eraseUser(
     const result = await eraseMediaRows(rows);
     total.mediaDeleted += result.mediaDeleted;
     total.bytesDeleted += result.bytesDeleted;
+    // Before the cascade takes the export rows, which are the only record of
+    // where the ZIPs are.
+    await deleteEventExports(ownedEvents.map((event) => event.id));
   }
 
   await db.delete(users).where(eq(users.id, userId));

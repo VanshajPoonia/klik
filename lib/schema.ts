@@ -605,6 +605,54 @@ export const entitlements = pgTable(
 
 export type Entitlement = typeof entitlements.$inferSelect;
 
+export const EXPORT_STATUSES = ["building", "ready", "failed", "expired"] as const;
+export type ExportStatus = (typeof EXPORT_STATUSES)[number];
+
+/** One ZIP file of an export: what goes in it, and where it landed. */
+export interface ExportPart {
+  /** Media ids, snapshotted when the export was asked for. */
+  items: string[];
+  /** Set once built. Under `exports/`, never `events/`. */
+  key: string | null;
+  bytes: number;
+  files: number;
+}
+
+/**
+ * MED-7: a ZIP export built in the background by the job queue, one job per
+ * part, written to `exports/<eventId>/<exportId>/part-N.zip`.
+ *
+ * Exports are copies, so they are short-lived by design: they expire after 7
+ * days, the daily job deletes anything under `exports/` older than that whether
+ * or not a row still points at it, and erasure deletes an event's exports
+ * outright, because a ZIP of somebody's photos is still somebody's photos.
+ */
+// Named mediaExports, not exports: a module-level `exports` collides with the
+// CommonJS wrapper wherever this file is compiled to CJS, as drizzle-kit does.
+export const mediaExports = pgTable(
+  "exports",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    status: text("status").$type<ExportStatus>().notNull().default("building"),
+    label: text("label").notNull(),
+    partCount: integer("part_count").notNull(),
+    partsDone: integer("parts_done").notNull().default(0),
+    parts: jsonb("parts").$type<ExportPart[]>().notNull(),
+    totalBytes: bigint("total_bytes", { mode: "number" }).notNull().default(0),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (table) => [index("exports_event_idx").on(table.eventId, table.createdAt)],
+);
+
+export type MediaExport = typeof mediaExports.$inferSelect;
+
 export const JOB_STATUSES = ["queued", "running", "succeeded", "dead"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 

@@ -19,6 +19,8 @@ export interface JobContext {
   jobId: string;
   /** 1 on the first run. */
   attempt: number;
+  /** When `attempt` reaches this, a throw is final and the job goes to dead. */
+  maxAttempts: number;
   /** Epoch ms by which the handler should have returned. */
   deadline: number;
 }
@@ -43,6 +45,10 @@ const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   "media.backfill_thumbnails": async () => (await import("./job-handlers/thumbnail")).backfillThumbnails,
   "entitlements.reconcile": async () => async () => {
     await (await import("./entitlements")).reconcileLicenses();
+  },
+  "export.part": async () => (await import("./job-handlers/export")).buildExportPart,
+  "exports.expire": async () => async () => {
+    await (await import("./exports")).expireExports();
   },
 };
 
@@ -176,6 +182,7 @@ export async function runClaimedJob(job: Job, workerId: string, deadline: number
     const outcome = await handler(parsed.data as JobPayload<typeof kind>, {
       jobId: job.id,
       attempt: job.attempts,
+      maxAttempts: job.maxAttempts,
       deadline,
     });
     if (outcome && "requeue" in outcome) {

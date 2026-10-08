@@ -7,8 +7,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
-import { extensionForMime, r2 } from "@/lib/storage";
-import { buildDownloadBatches } from "@/lib/download-batches";
+import { r2 } from "@/lib/storage";
+import { buildDownloadBatches, zipEntryName } from "@/lib/download-batches";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,14 +23,6 @@ function archiveFilename(
   return totalParts > 1
     ? `klik-${slug}-part-${part}-of-${totalParts}.zip`
     : `klik-${slug}.zip`;
-}
-
-function mediaFilename(
-  index: number,
-  item: { id: string; kind: "photo" | "video"; mimeType: string },
-) {
-  const position = String(index + 1).padStart(3, "0");
-  return `${position}-${item.kind}-${item.id.slice(0, 8)}.${extensionForMime(item.mimeType)}`;
 }
 
 async function createDownload(
@@ -108,7 +100,7 @@ async function createDownload(
       }
 
       const consumed = once(object.Body, "end");
-      archive.append(object.Body, { name: mediaFilename(index, item) });
+      archive.append(object.Body, { name: zipEntryName(index, item) });
       await consumed;
     }
     await archive.finalize();

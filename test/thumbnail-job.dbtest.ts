@@ -29,7 +29,7 @@ const { generateThumbnail, backfillThumbnails } = await import("@/lib/job-handle
 const { jobs, media } = await import("@/lib/schema");
 const { closeDatabase, makeEvent, makeMedia, makeUser, resetDatabase, testDb } = await import("./harness");
 
-const context = { jobId: "j", attempt: 1, deadline: Date.now() + 60_000 };
+const context = { jobId: "j", attempt: 1, maxAttempts: 3, deadline: Date.now() + 60_000 };
 const photo = (width: number, height: number) =>
   sharp({ create: { width, height, channels: 3, background: "#e8f000" } }).jpeg().toBuffer();
 const mediaRow = async (id: string) => (await testDb.select().from(media).where(eq(media.id, id)))[0];

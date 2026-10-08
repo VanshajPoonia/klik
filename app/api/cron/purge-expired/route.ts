@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { albums, events, guests, media, venueClients } from "@/lib/schema";
 import { deleteBlobs } from "@/lib/storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys } from "@/lib/media-objects";
+import { deleteEventExports } from "@/lib/exports";
 import { pruneRateLimits } from "@/lib/ratelimit";
 import { log, reportError } from "@/lib/observability";
 import { env } from "@/lib/env";
@@ -88,6 +89,10 @@ export async function GET(request: Request) {
       .select(MEDIA_OBJECT_COLUMNS)
       .from(media)
       .where(eq(media.eventId, event.id));
+    // Exports first: deleting the event cascades their rows away, and the rows
+    // are the only record of where the ZIPs are. The daily export sweep would
+    // catch them by age anyway; this just does not make it wait.
+    await deleteEventExports([event.id]);
     await db.delete(events).where(eq(events.id, event.id));
     await deleteBlobs(mediaObjectKeys(rows));
   }

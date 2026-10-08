@@ -163,3 +163,4 @@ early if you would rather not be asked mid-task.
 | 2026-10-08 | QR sign downloads protected from the native-library failure that took uploads down on 2 October |
 | 2026-10-08 | **ACT-1 to ACT-4**: plans granted through a ledger with a reason. A $39 pass now licenses one event, not one a month for ever. Events start as drafts, organizers can ask for activation, and you get an email when they do |
 | 2026-10-08 | Gallery password guessing rate limited |
+| 2026-10-08 | **MED-7**: galleries over 400 MB download as ZIPs built in the background, with an email when ready, instead of timing out |
