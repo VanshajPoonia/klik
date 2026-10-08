@@ -1359,8 +1359,8 @@ A scalability read of the current architecture against one realistic worst case:
 |---|---|
 | User mistake | Covered. 30-day soft delete everywhere, restore API built. |
 | Retention misconfiguration | Covered. Pinned `retention_until`, circuit breaker, null means skip. |
-| **Bug in deletion code** | **Not covered.** Erasure and purge call `DeleteObjects` for real, and R2 has no object versioning to roll back to. Needs the write-only backup bucket folded into OPS-4. |
-| **Database loss** | **Unverified.** Neon PITR depends on plan, and no restore has ever been tested. An untested backup is a belief. |
+| Bug in deletion code | **Covered 2026-10-08.** `klik-media-backup` holds a second copy, swept nightly at 02:00 by `lib/backup.ts`. Bucket Lock makes it immutable for 30 days, so the app cannot delete from it even with its own credentials, verified by a refused delete returning `ObjectLockedByBucketPolicy`. A lifecycle rule expires objects at 31 days, which is also why erasure now completes everywhere within 31 days rather than instantly. |
+| **Database loss** | **Still unverified, and now the weakest layer.** Neon PITR depends on plan, and no restore has ever been tested. An untested backup is a belief. The media is protected as of 2026-10-08 and the database is not, so this is the one to close next. Tracked in `LAUNCH.md`. |
 | **Bad migration** | **Not covered.** No staging. Four migrations have gone straight to the only database that exists. |
 
 ---
