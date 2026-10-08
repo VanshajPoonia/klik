@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { erasureLog, events, guests, media, users } from "./schema";
 import { deleteBlobs } from "./storage";
+import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys, type MediaObjectRow } from "./media-objects";
 
 /**
  * Hard deletion, as distinct from the soft delete in the DELETE routes.
@@ -58,21 +59,14 @@ async function recordErasure(
 
 /** Removes the objects for these rows, including any that were soft-deleted. */
 async function eraseMediaRows(
-  rows: Array<{
-    id: string;
-    blobPathname: string;
-    posterPathname: string | null;
-    sizeBytes: number;
-  }>,
+  rows: Array<MediaObjectRow & { id: string; sizeBytes: number }>,
 ): Promise<ErasureResult> {
   if (rows.length === 0) return { mediaDeleted: 0, bytesDeleted: 0 };
 
-  // Posters are separate objects, so they have to be named explicitly or a
-  // video's thumbnail outlives the video it was a thumbnail of.
-  await deleteBlobs([
-    ...rows.map((row) => row.blobPathname),
-    ...rows.map((row) => row.posterPathname).filter((path): path is string => Boolean(path)),
-  ]);
+  // Posters and thumbnails are separate objects, so every one a row owns has
+  // to be named, or a photo's thumbnail outlives the photo it was made from.
+  // The list is lib/media-objects.ts, which a test holds to the schema.
+  await deleteBlobs(mediaObjectKeys(rows));
   await db.delete(media).where(
     inArray(
       media.id,
@@ -99,8 +93,7 @@ export async function eraseEvent(
   const rows = await db
     .select({
       id: media.id,
-      blobPathname: media.blobPathname,
-      posterPathname: media.posterPathname,
+      ...MEDIA_OBJECT_COLUMNS,
       sizeBytes: media.sizeBytes,
     })
     .from(media)
@@ -126,8 +119,7 @@ export async function eraseGuest(
   const rows = await db
     .select({
       id: media.id,
-      blobPathname: media.blobPathname,
-      posterPathname: media.posterPathname,
+      ...MEDIA_OBJECT_COLUMNS,
       sizeBytes: media.sizeBytes,
     })
     .from(media)
@@ -170,8 +162,7 @@ export async function eraseUser(
     const rows = await db
       .select({
       id: media.id,
-      blobPathname: media.blobPathname,
-      posterPathname: media.posterPathname,
+      ...MEDIA_OBJECT_COLUMNS,
       sizeBytes: media.sizeBytes,
     })
       .from(media)

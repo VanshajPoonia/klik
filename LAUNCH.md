@@ -150,3 +150,5 @@ early if you would rather not be asked mid-task.
 | 2026-10-08 | Stripe payment links checked |
 | 2026-10-08 | Decided: Hobby for now, payments keep human approval, video through Cloudflare Stream, no face grouping |
 | 2026-10-08 | **F-5** background job queue live, with the **SEC-2** orphan reaper as its first job |
+| 2026-10-08 | Gallery rebuilt for a 200-guest wedding: thumbnails, one request per page instead of one per photo, and deleted or hidden photos now vanish from guests' phones without a reload |
+| 2026-10-08 | QR sign downloads protected from the native-library failure that took uploads down on 2 October |

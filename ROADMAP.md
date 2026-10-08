@@ -23,6 +23,7 @@
 - Transactional email through Resend in `lib/email.ts`, used by the signup welcome mail (`lib/emails/onboarding.ts`). Absent configuration is a normal state that reports itself rather than throwing, so a failed send never costs the account that was just created.
 - Two test suites: Vitest with no database and no network, plus `npm run test:db` against a throwaway local Postgres cluster.
 - The activation loop is closed, 2026-10-06. Assigning a plan on `/admin` sets `activated_at` **and** emails the organizer their dashboard link and the steps to get live, recorded in `users.activation_email_sent_at` with a resend control on the client card. Part of ACT-3, done at account level rather than per event.
+- **Gallery read path rebuilt, 2026-10-08.** Pages sign their tiles in one request, tiles use thumbnails, and phones sync deltas from `/media/changes`, including removals. See ARCHITECTURE.md section 8.
 - An append-only account history, `account_timeline`, 2026-10-07. Records what happened rather than what is currently true: email sends and refusals, who granted a plan, plan corrections. `/admin` derives a seven-step chain from it per client, marking only the steps a superadmin has to act on. This is a narrow slice of ADM-4's audit log, built because the activation loop needed somewhere to record a failed send; ADM-4 can widen it rather than start over.
 
 **Not built at all**
@@ -1364,8 +1365,8 @@ A scalability read of the current architecture against one realistic worst case:
 
 | # | What gives | Why | Fix |
 |---|---|---|---|
-| 1 | **Media delivery** | Every thumbnail is a Vercel invocation plus a Neon query plus an R2 signature plus a redirect, and `no-store` means nothing caches anywhere, ever. 200 guests scrolling 2,000 photos is hundreds of thousands of invocations for one event. | Custom R2 domain and signed **cookies** instead of signed URLs, so Cloudflare's edge serves public galleries. See architecture note 3. |
-| 2 | **Gallery polling** | SWR polls every 8 seconds. 200 phones is about **1,500 requests a minute** hitting a full keyset query before anyone opens a photo. | A cheap `HEAD`-style endpoint returning only `max(created_at)`, so the expensive query runs only when something actually changed. |
+| 1 | ~~**Media delivery**~~ **FIXED 2026-10-08** | Every thumbnail was a Vercel invocation plus a Neon query plus an R2 signature plus a redirect. | Not the fix this row first named: the custom domain and edge caching were rejected (ARCHITECTURE.md section 8). Instead the gallery request signs a page of URLs at once, rounded to 15-minute windows so browsers cache them, and tiles load a ~480px thumbnail rather than a full photo. Fifty tiles went from fifty authorized round trips to one, and from about 75 MB to about 3 MB. |
+| 2 | ~~**Gallery polling**~~ **FIXED 2026-10-08** | SWR polled a full keyset query every 8 seconds, about **1,500 requests a minute** at a 200-guest wedding, and only ever added rows. | `/media/changes` answers a quiet gallery from `events.media_changed_at`, kept by a trigger, with no media query at all. Phones back off to 60 seconds when nothing changes and pause in background tabs. It also fixed a real bug: a photo the host deleted or hid stayed on every guest's screen until they reloaded. |
 | 3 | **Video playback** | Every viewer downloads the full original. One 200 MB 4K clip watched by 50 guests is 10 GB moved to play 15 seconds. Egress is free on R2, so this is a latency and experience problem, not a bill. | OPS-1 transcoding. Posters and duration caps (done) blunt it; they do not solve it. |
 | 4 | **ZIP export** | Streams inline, blocks a function up to 300s, hard-fails past 2 GB, and video makes 2 GB arrive quickly. | MED-7, move to the job runner with a signed link by email. |
 | 5 | **Correctness under concurrency** | `neon-http` has no transactions, so multi-step deletes are not atomic. Load makes partial failures likelier, not rarer. | Architecture note 1, switch to the WebSocket `Pool`. |
@@ -1452,6 +1453,8 @@ Two hundred guests scrolling a 2,000-photo gallery is not a hypothetical at a we
 `next.config.ts` already lists `media.klik.kreativvantage.com` as a remote pattern, so a custom R2 domain was clearly intended at some point. That plus signed cookies (rather than signed URLs) would let Cloudflare's edge cache public galleries properly.
 
 **The decision to review:** whether public galleries get cacheable delivery. It is the difference between this architecture holding at one big event and buckling. Also pairs naturally with OPS-4, since both are "how do bytes reach the viewer" questions.
+
+**DECIDED 2026-10-07, BUILT 2026-10-08.** No edge cache; batched signed URLs instead. See "What breaks first", rows 1 and 2.
 
 ### 4. JWT sessions mean you cannot revoke a login
 

@@ -1,6 +1,11 @@
 import Image from "next/image";
 import { Check, Download, EyeOff, Link2, Play, Share2, Trash2, X } from "lucide-react";
 import type { Media, MediaVisibility } from "@/lib/schema";
+import type { SignedMediaUrls } from "@/lib/media-urls";
+
+/** A media row as the dashboard holds it: the row, plus the signed URLs the
+ *  page issued. Optional, so a row updated from an API response still renders. */
+export type DashboardMedia = Media & Partial<SignedMediaUrls>;
 import { VISIBILITY_OPTIONS } from "@/lib/media-access";
 
 /** Shown on the tile itself, because an organizer scanning a grid of two
@@ -30,7 +35,7 @@ export function MediaGrid({
   onVisibilityChange,
   onShare,
 }: {
-  items: Media[];
+  items: DashboardMedia[];
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
   onDelete: (id: string) => void;
@@ -74,12 +79,27 @@ export function MediaGrid({
             >
               {item.kind === "video" ? (
                 <>
-                  <video
-                    src={item.blobUrl}
-                    className="pointer-events-none h-full w-full object-cover"
-                    muted
-                    preload="metadata"
-                  />
+                  {/* The poster or its thumbnail where one exists. A <video
+                      preload="metadata"> per tile reaches for the moov atom,
+                      which on an iPhone .mov is at the end of the file. */}
+                  {item.thumbSrc ? (
+                    <Image
+                      src={item.thumbSrc}
+                      alt=""
+                      fill
+                      unoptimized
+                      loading="lazy"
+                      sizes="200px"
+                      className="pointer-events-none object-cover"
+                    />
+                  ) : (
+                    <video
+                      src={item.blobUrl}
+                      className="pointer-events-none h-full w-full object-cover"
+                      muted
+                      preload="metadata"
+                    />
+                  )}
                   <span className="absolute inset-0 flex items-center justify-center">
                     <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-paper">
                       <Play className="h-4 w-4" aria-hidden="true" />
@@ -88,10 +108,11 @@ export function MediaGrid({
                 </>
               ) : (
                 <Image
-                  src={item.blobUrl}
+                  src={item.thumbSrc ?? `${item.blobUrl}?thumb=1`}
                   alt=""
                   fill
                   unoptimized
+                  loading="lazy"
                   sizes="200px"
                   className="object-cover"
                 />

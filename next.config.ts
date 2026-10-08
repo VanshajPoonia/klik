@@ -40,6 +40,15 @@ const nextConfig: NextConfig = {
     // is a route that would otherwise fail only in production, only on Linux,
     // and only once somebody pasted a link into WhatsApp.
     "/api/s/[token]/og": ["./node_modules/@img/**"],
+    // The job queue. Thumbnail generation runs sharp inside whichever function
+    // drains the queue, and both of these do. lib/native-deps.test.ts fails if
+    // a route that can reach the job runner or sharp is missing from this list.
+    "/api/jobs/run": ["./node_modules/@img/**"],
+    // The printable QR sign is an SVG rasterized by sharp. Both routes were
+    // missing from this list until the guard test found them on 2026-10-08.
+    "/api/events/[id]/qr": ["./node_modules/@img/**"],
+    "/api/venue/qr": ["./node_modules/@img/**"],
+    "/api/cron/jobs": ["./node_modules/@img/**"],
   },
 };
 

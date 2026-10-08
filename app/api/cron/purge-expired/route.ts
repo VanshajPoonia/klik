@@ -3,6 +3,7 @@ import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events, guests, media, venueClients } from "@/lib/schema";
 import { deleteBlobs } from "@/lib/storage";
+import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys } from "@/lib/media-objects";
 import { pruneRateLimits } from "@/lib/ratelimit";
 import { log, reportError } from "@/lib/observability";
 import { env } from "@/lib/env";
@@ -22,12 +23,6 @@ const RUNAWAY_RATIO = 0.5;
 
 /** A video's poster is a separate object, so it has to be named explicitly or
  *  the thumbnail outlives the video it described. */
-function withPosters(rows: Array<{ pathname: string; poster: string | null }>): string[] {
-  return [
-    ...rows.map((row) => row.pathname),
-    ...rows.map((row) => row.poster).filter((path): path is string => Boolean(path)),
-  ];
-}
 
 /** How long soft-deleted rows stay recoverable before the bytes go for good. */
 const TRASH_RETENTION_DAYS = 30;
@@ -49,13 +44,13 @@ export async function GET(request: Request) {
   // These were already removed from every user-facing surface when they were
   // soft-deleted; this is only the point where the bytes stop existing.
   const expiredTrash = await db
-    .select({ id: media.id, pathname: media.blobPathname, poster: media.posterPathname })
+    .select({ id: media.id, ...MEDIA_OBJECT_COLUMNS })
     .from(media)
     .where(and(isNotNull(media.deletedAt), lte(media.deletedAt, trashCutoff)));
 
   if (expiredTrash.length > 0) {
     await db.delete(media).where(and(isNotNull(media.deletedAt), lte(media.deletedAt, trashCutoff)));
-    await deleteBlobs(withPosters(expiredTrash));
+    await deleteBlobs(mediaObjectKeys(expiredTrash));
   }
 
   // Albums and venue clients hold no objects, so they are a plain delete once
@@ -90,11 +85,11 @@ export async function GET(request: Request) {
 
   for (const event of expiredDeletedEvents) {
     const rows = await db
-      .select({ pathname: media.blobPathname, poster: media.posterPathname })
+      .select(MEDIA_OBJECT_COLUMNS)
       .from(media)
       .where(eq(media.eventId, event.id));
     await db.delete(events).where(eq(events.id, event.id));
-    await deleteBlobs(withPosters(rows));
+    await deleteBlobs(mediaObjectKeys(rows));
   }
 
   // --- Pass 2: events past their pinned retention deadline ------------------

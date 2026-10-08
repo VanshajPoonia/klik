@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import QRCode from "qrcode";
-import sharp from "sharp";
 import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
@@ -77,6 +76,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         <circle cx="900" cy="2305" r="13" fill="${accent}"/>
       </svg>
     `;
+    // Imported here rather than at module scope. A failed native load at the
+    // top of the file takes down every format this route serves, including the
+    // plain QR PNG that never touches sharp. See lib/native-deps.test.ts.
+    const sharp = (await import("sharp")).default;
     const sign = await sharp(Buffer.from(svg)).png().toBuffer();
     return new NextResponse(new Uint8Array(sign), {
       headers: {

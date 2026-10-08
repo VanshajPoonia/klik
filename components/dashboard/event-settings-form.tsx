@@ -20,7 +20,7 @@ function CoverPicker({
   value,
   onChange,
 }: {
-  photos: Media[];
+  photos: Array<Media & { thumbSrc?: string | null }>;
   value: string;
   onChange: (id: string) => void;
 }) {
@@ -65,7 +65,7 @@ function CoverPicker({
               }`}
             >
               <Image
-                src={photo.blobUrl}
+                src={photo.thumbSrc ?? `${photo.blobUrl}?thumb=1`}
                 alt=""
                 fill
                 unoptimized

@@ -38,6 +38,7 @@ const row: Event = {
   deletedAt: null,
   createdAt: new Date("2026-07-01T00:00:00Z"),
   updatedAt: new Date("2026-07-01T00:00:00Z"),
+  mediaChangedAt: new Date("2026-07-01T00:00:00Z"),
 };
 
 /**
@@ -79,6 +80,7 @@ const WITHHELD: Record<string, string> = {
   purgedAt: "internal deletion bookkeeping",
   deletedAt: "internal soft-delete state",
   updatedAt: "reveals organizer activity to guests",
+  mediaChangedAt: "sync bookkeeping, read by the changes endpoint and never sent",
   // Host configuration. The server already filters private media out of a
   // guest's gallery, so the flag buys a guest nothing and telling them about a
   // back room they cannot see is worse than silence.

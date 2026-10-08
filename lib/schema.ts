@@ -230,6 +230,11 @@ export const events = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    // The latest media.changed_at for this event, kept by the same trigger. It
+    // lets a gallery poll answer "nothing changed" from the event row it has
+    // to read anyway, without touching the media table at all, which is what
+    // makes two hundred phones polling one wedding cheap.
+    mediaChangedAt: timestamp("media_changed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -325,6 +330,15 @@ export const media = pgTable(
     // browser for video "metadata", which on iPhone .mov files means reaching
     // to the end of the file for the moov atom. See lib/video-poster.ts.
     posterPathname: text("poster_pathname"),
+    // A small rendition for grid tiles: about 480px on the short side, a few
+    // tens of kilobytes where the stored photo is a megabyte or more. Made on
+    // the uploader's device when it can be, and by the `media.thumbnail` job
+    // otherwise. Null means "not made yet", and tiles fall back to the full
+    // image, so nothing breaks while a backfill catches up.
+    //
+    // Every object key column on this table must be listed in
+    // `lib/media-objects.ts`, or erasure leaves it behind. A test enforces it.
+    thumbPathname: text("thumb_pathname"),
     // When the camera says the photo was taken, as a zone-less wall clock.
     //
     // Deliberately NOT `withTimezone`. EXIF carries no zone, so storing an
@@ -341,6 +355,12 @@ export const media = pgTable(
     // row being gone. See ROADMAP.md SEC-4.
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // When something a gallery viewer can see last changed: status,
+    // visibility, deletion, album, or a rendition arriving. Maintained by a
+    // trigger in drizzle/0017_gallery_sync.sql rather than by the routes, so a
+    // new route that moderates media cannot forget it. The changes endpoint
+    // reads it to send a phone only what moved since it last asked.
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),

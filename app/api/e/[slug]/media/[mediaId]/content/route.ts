@@ -50,22 +50,30 @@ export async function GET(
   }
 
   // ?poster=1 serves the still extracted at upload time instead of the video
-  // itself. It goes through this same route so it inherits every access check
-  // above: a poster frame of a private gallery is still that gallery's content.
-  const wantsPoster =
-    new URL(request.url).searchParams.get("poster") === "1" && item.posterPathname;
-  if (wantsPoster) {
-    const posterUrl = await getSignedUrl(
+  // itself, and ?thumb=1 the small grid rendition. Both go through this same
+  // route so they inherit every access check above: a thumbnail of a private
+  // gallery is still that gallery's content. ?thumb=1 is what a grid tile falls
+  // back to when its signed URL has expired, so it degrades to the poster or the
+  // photo itself rather than failing when no thumbnail has been made yet.
+  const searchParams = new URL(request.url).searchParams;
+  const stillKey =
+    searchParams.get("thumb") === "1"
+      ? (item.thumbPathname ?? (item.kind === "video" ? item.posterPathname : null))
+      : searchParams.get("poster") === "1"
+        ? item.posterPathname
+        : null;
+  if (stillKey) {
+    const stillUrl = await getSignedUrl(
       r2,
       new GetObjectCommand({
         Bucket: process.env.R2_BUCKET_NAME,
-        Key: item.posterPathname!,
+        Key: stillKey,
         ResponseContentType: "image/jpeg",
         ResponseContentDisposition: "inline",
       }),
       { expiresIn: 60 * 60 },
     );
-    return NextResponse.redirect(posterUrl, {
+    return NextResponse.redirect(stillUrl, {
       status: 307,
       headers: { "Cache-Control": "private, no-store" },
     });

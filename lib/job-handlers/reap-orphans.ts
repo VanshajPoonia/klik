@@ -2,6 +2,7 @@ import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { inArray } from "drizzle-orm";
 import { db } from "../db";
 import { media } from "../schema";
+import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys } from "../media-objects";
 import { deleteBlobs, r2 } from "../storage";
 import { log, reportError } from "../observability";
 import type { JobContext, JobOutcome } from "../job-runner";
@@ -79,13 +80,10 @@ async function referencedKeys(eventIds: string[]): Promise<Set<string>> {
   if (eventIds.length === 0) return keys;
   // Deliberately no deleted_at filter. See the header.
   const rows = await db
-    .select({ blob: media.blobPathname, poster: media.posterPathname })
+    .select(MEDIA_OBJECT_COLUMNS)
     .from(media)
     .where(inArray(media.eventId, eventIds));
-  for (const row of rows) {
-    keys.add(row.blob);
-    if (row.poster) keys.add(row.poster);
-  }
+  for (const key of mediaObjectKeys(rows)) keys.add(key);
   return keys;
 }
 

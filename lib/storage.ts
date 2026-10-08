@@ -80,3 +80,13 @@ export async function deleteBlobs(pathnames: string[]) {
     );
   }
 }
+
+/** The poster still the uploader's browser pulls out of a video. */
+export function posterPathnameFor(eventId: string, mediaId: string) {
+  return blobPathnameFor(eventId, `${mediaId}-poster`, "jpg");
+}
+
+/** The grid rendition of a photo, or of a video's poster. */
+export function thumbPathnameFor(eventId: string, mediaId: string) {
+  return blobPathnameFor(eventId, `${mediaId}-thumb`, "jpg");
+}

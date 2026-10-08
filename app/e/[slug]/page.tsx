@@ -15,7 +15,8 @@ import {
 } from "@/lib/guest";
 import { toPublicEvent } from "@/lib/events";
 import { fetchGalleryMedia } from "@/lib/media";
-import { toPublicMedia, withProtectedMediaUrl } from "@/lib/media-delivery";
+import { toGalleryMedia } from "@/lib/gallery-media";
+import { signMediaUrls } from "@/lib/media-urls";
 import {
   canCustomizeGallery,
   canUseAlbums,
@@ -89,14 +90,18 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     return <EntrySheet slug={slug} eventName={event.name} requiresPassword={false} />;
   }
 
-  const initialMedia = (
+  // Taken before the query, so anything that changes while it runs is sent
+  // again by the first poll rather than falling between the two.
+  const syncedAt = new Date().toISOString();
+  const initialMedia = await toGalleryMedia(
     await fetchGalleryMedia(event.id, {
       isOwner,
       guestId: guestSession?.guestId,
       event,
       limit: 60,
-    })
-  ).map((item) => toPublicMedia(item, event.slug));
+    }),
+    event.slug,
+  );
   const [albumRows, coverRows] = await Promise.all([
     canUseAlbums(plan.key)
       ? db.select().from(albums).where(and(eq(albums.eventId, event.id), isNull(albums.deletedAt))).orderBy(albums.createdAt)
@@ -109,9 +114,12 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
           .limit(1)
       : Promise.resolve([]),
   ]);
-  const coverUrl = coverRows[0]
-    ? withProtectedMediaUrl(coverRows[0], event.slug).blobUrl
-    : null;
+  // The cover is chosen by the host from the gallery, so whoever can see the
+  // gallery can see it. Signed like a tile, for the same reason. A video cover
+  // shows its poster; the route URL it used to get was a video handed to an
+  // <img>, which rendered nothing.
+  const coverUrls = coverRows[0] ? await signMediaUrls(coverRows[0]) : null;
+  const coverUrl = coverUrls ? (coverUrls.src ?? coverUrls.posterSrc) : null;
 
   const publicEvent = toPublicEvent({
     ...event,
@@ -126,6 +134,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       event={publicEvent}
       isOwner={isOwner}
       initialMedia={initialMedia}
+      syncedAt={syncedAt}
       albums={albumRows}
       coverUrl={coverUrl}
       canSlideshow={canUseSlideshow(plan.key)}

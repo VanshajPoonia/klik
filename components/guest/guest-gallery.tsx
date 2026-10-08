@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import useSWR from "swr";
 import { nanoid } from "nanoid";
 import { Camera, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
 import { compressImageForUpload } from "@/lib/image-compress";
+import { makeThumbnail } from "@/lib/image-thumbnail";
 import { formatDuration, probeVideo } from "@/lib/video-poster";
 import { readCaptureTimeFromFile } from "@/lib/exif";
 import {
@@ -22,6 +22,7 @@ import {
 import { Lightbox } from "@/components/guest/lightbox";
 import type { CapturedItem } from "@/components/guest/camera-capture";
 import { encodeMediaCursor } from "@/lib/media-cursor";
+import { mergeGalleryChanges } from "@/lib/gallery-sync";
 
 // The camera carries the looks engine and its pixel passes. Most guests never
 // open it, so it stays out of the initial bundle until they do.
@@ -32,6 +33,11 @@ const CameraCapture = dynamic(
 
 interface MediaItem {
   id: string;
+  /** Signed, direct from R2. See lib/media-urls.ts. Absent on items from an
+   *  older deployment's payload, which is why every use falls back. */
+  src?: string | null;
+  thumbSrc?: string | null;
+  posterSrc?: string | null;
   posterUrl?: string | null;
   durationS?: number | null;
   kind: "photo" | "video";
@@ -60,12 +66,40 @@ interface FailedUpload extends PendingUpload {
   id: string;
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
 const UPLOAD_CONCURRENCY = 3;
 const MAX_FILES_PER_PICK = 20;
 const DEFAULT_BACKGROUND = "#050505";
 const PAGE_SIZE = 60;
 const RETRY_DELAYS = [600, 1800];
+
+// Polling backs off while nothing happens and snaps back the moment something
+// does. Two hundred phones at a fixed 8 seconds is 1,500 requests a minute
+// against a gallery where, most of the evening, nothing new has arrived.
+const POLL_FAST_MS = 8_000;
+const POLL_SLOW_MS = 60_000;
+
+/**
+ * An image that falls back to the authorized route when its signed URL fails,
+ * which is what happens to a gallery left open past the signing window. Keyed
+ * on the primary URL by its caller, so a new URL starts a fresh attempt.
+ */
+function FallbackImage({
+  primary,
+  fallback,
+  ...props
+}: Omit<React.ComponentProps<typeof Image>, "src"> & { primary: string; fallback: string }) {
+  const [src, setSrc] = useState(primary);
+  return (
+    <Image
+      {...props}
+      src={src}
+      alt={props.alt}
+      onError={() => {
+        if (src !== fallback) setSrc(fallback);
+      }}
+    />
+  );
+}
 
 async function processInBatches<T>(items: T[], batchSize: number, run: (item: T) => Promise<void>) {
   for (let i = 0; i < items.length; i += batchSize) {
@@ -121,6 +155,7 @@ export function GuestGallery({
   event,
   isOwner,
   initialMedia,
+  syncedAt,
   albums = [],
   coverUrl = null,
   canSlideshow = false,
@@ -130,6 +165,8 @@ export function GuestGallery({
   event: PublicEvent;
   isOwner: boolean;
   initialMedia: MediaItem[];
+  /** When the server read `initialMedia`. The first poll asks what changed since. */
+  syncedAt: string;
   albums?: Array<{ id: string; name: string }>;
   coverUrl?: string | null;
   canSlideshow?: boolean;
@@ -182,44 +219,102 @@ export function GuestGallery({
   const inputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Before anything has loaded, there's no "newest" cursor to poll since, so fall
-  // back to the plain first page so a brand new, empty event still notices its
-  // first upload.
-  const newestLoadedCursor = items[0] ? encodeMediaCursor(items[0]) : null;
-  const pollUrl = newestLoadedCursor
-    ? `/api/e/${event.slug}/media?since=${encodeURIComponent(newestLoadedCursor)}`
-    : `/api/e/${event.slug}/media?limit=${PAGE_SIZE}`;
-
-  const { data: polled, mutate } = useSWR<{ media: MediaItem[]; nextCursor: string | null }>(
-    pollUrl,
-    fetcher,
-    { refreshInterval: 8000 },
-  );
-
-  // Folding each poll into the accumulating `items` list is exactly the
-  // "sync local state from an external store" case effects are for. SWR's
-  // own cache is keyed per-URL and has no concept of an accumulator growing
-  // across many different since= keys over time.
+  // Read inside async callbacks, which must see the latest values without
+  // being re-created on every change.
+  const hasMoreRef = useRef(hasMore);
   useEffect(() => {
-    if (!polled?.media) return;
-    // Bootstrap case (no items loaded yet): this was the plain first-page
-    // fetch, not a since-poll, so it also carries real pagination info.
-    if (newestLoadedCursor === null) {
-      if (polled.media.length === 0) return;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setItems(polled.media);
-      setSettledIds(new Set(polled.media.map((item) => item.id)));
-      setCursor(polled.nextCursor ?? null);
-      setHasMore(Boolean(polled.nextCursor));
-      return;
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+  const syncNow = useRef<() => void>(() => {});
+
+  const applyChanges = useCallback((upserts: MediaItem[], removed: string[]) => {
+    setItems((current) => mergeGalleryChanges(current, upserts, removed, hasMoreRef.current));
+  }, []);
+
+  /** Starts over from the first page, for when a delta would not be honest:
+   *  the host changed a setting, or too much changed at once. */
+  const reloadFirstPage = useCallback(async () => {
+    const res = await fetch(`/api/e/${event.slug}/media?limit=${PAGE_SIZE}`, { cache: "no-store" });
+    if (!res.ok) return;
+    const json: { media: MediaItem[]; nextCursor: string | null } = await res.json();
+    setItems(json.media);
+    setSettledIds((current) => new Set([...current, ...json.media.map((item) => item.id)]));
+    setCursor(json.nextCursor ?? null);
+    setHasMore(Boolean(json.nextCursor));
+  }, [event.slug]);
+
+  // Asks the server what changed since the last answer. The quiet case costs
+  // the server one event read, so the expensive part only runs when something
+  // actually moved. Paused while the tab is hidden, and run at once on return,
+  // which is when someone glancing back at their phone expects it to be fresh.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let inFlight = false;
+    let delay = POLL_FAST_MS;
+    let since = syncedAt;
+
+    const schedule = () => {
+      if (cancelled) return;
+      clearTimeout(timer);
+      timer = setTimeout(poll, delay);
+    };
+
+    async function poll() {
+      if (cancelled || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        const res = await fetch(
+          `/api/e/${event.slug}/media/changes?since=${encodeURIComponent(since)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) {
+          // Access ended or the event is gone. Keep what is on screen and ask
+          // rarely, rather than hammering a door that is now closed.
+          delay = POLL_SLOW_MS;
+          return;
+        }
+        const data: { at: string; resync?: boolean; upserts?: MediaItem[]; removed?: string[] } =
+          await res.json();
+        if (data.resync) {
+          await reloadFirstPage();
+          delay = POLL_FAST_MS;
+        } else {
+          const upserts = data.upserts ?? [];
+          const removed = data.removed ?? [];
+          if (upserts.length > 0 || removed.length > 0) {
+            applyChanges(upserts, removed);
+            delay = POLL_FAST_MS;
+          } else {
+            delay = Math.min(POLL_SLOW_MS, Math.round(delay * 1.5));
+          }
+        }
+        since = data.at;
+      } catch {
+        delay = Math.min(POLL_SLOW_MS, delay * 2);
+      } finally {
+        inFlight = false;
+        schedule();
+      }
     }
-    if (polled.media.length === 0) return;
-    setItems((current) => {
-      const seen = new Set(current.map((item) => item.id));
-      const arrivals = polled.media.filter((item) => !seen.has(item.id));
-      return arrivals.length ? [...arrivals, ...current] : current;
-    });
-  }, [polled, newestLoadedCursor]);
+
+    syncNow.current = () => {
+      delay = POLL_FAST_MS;
+      clearTimeout(timer);
+      void poll();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") syncNow.current();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    schedule();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [applyChanges, event.slug, reloadFirstPage, syncedAt]);
 
   // Resolves to -1 if the open item was removed (moderated away), which closes.
   const lightboxIndex = lightboxId ? items.findIndex((item) => item.id === lightboxId) : -1;
@@ -260,6 +355,12 @@ export function GuestGallery({
         const uploadBody = compressed?.blob ?? file;
         const mimeType = compressed ? "image/jpeg" : file.type;
 
+        // The grid tile, made here from pixels this device has already decoded.
+        // A photo the browser could not decode (HEIC outside Safari) has no
+        // source, and the server makes its thumbnail instead.
+        const thumbSource = isPhoto ? (compressed?.blob ?? (prepared ? file : null)) : (probe?.poster ?? null);
+        const thumbnail = thumbSource ? await makeThumbnail(thumbSource) : null;
+
         const signRes = await fetch("/api/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -269,11 +370,13 @@ export function GuestGallery({
             mimeType,
             sizeBytes: uploadBody.size,
             posterBytes: probe?.poster?.size,
+            thumbBytes: thumbnail?.size,
           }),
         });
         const signed = await signRes.json().catch(() => ({}));
         if (!signRes.ok) throw new Error(signed.error ?? "Failed to get upload URL");
-        const { uploadUrl, pathname, posterUploadUrl, posterPathname } = signed;
+        const { uploadUrl, pathname, posterUploadUrl, posterPathname, thumbUploadUrl, thumbPathname } =
+          signed;
 
         await putWithRetry(uploadUrl, uploadBody, mimeType, (percentage) =>
           setUploading((current) =>
@@ -294,6 +397,16 @@ export function GuestGallery({
           }
         }
 
+        let uploadedThumb: string | null = null;
+        if (thumbUploadUrl && thumbPathname && thumbnail) {
+          try {
+            await putObject(thumbUploadUrl, thumbnail, "image/jpeg", () => {});
+            uploadedThumb = thumbPathname;
+          } catch {
+            uploadedThumb = null;
+          }
+        }
+
         const registerRes = await fetch(`/api/e/${event.slug}/media`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -306,17 +419,21 @@ export function GuestGallery({
             height: compressed?.height ?? prepared?.height ?? (probe?.height || undefined),
             durationS: probe?.duration ?? undefined,
             posterPathname: uploadedPoster ?? undefined,
+            thumbPathname: uploadedThumb ?? undefined,
             clientCompressed: Boolean(compressed) || Boolean(prepared),
             capturedAt: capturedAt ?? undefined,
             albumId: uploadAlbumId || null,
           }),
         });
+        const registered = await registerRes.json().catch(() => ({}));
         if (!registerRes.ok) {
-          const registered = await registerRes.json().catch(() => ({}));
           throw new Error(registered.error ?? "Could not add media to the gallery");
         }
 
-        mutate();
+        // Shown straight away from the registration response rather than
+        // waiting for the next poll, so the uploader sees their own photo land.
+        if (registered.media) applyChanges([registered.media], []);
+        syncNow.current();
       } catch {
         // One file failing shouldn't block the rest of the batch, but it should
         // never disappear silently either.
@@ -326,7 +443,7 @@ export function GuestGallery({
         setRemaining((count) => Math.max(0, count - 1));
       }
     },
-    [event.id, event.slug, maxVideoSeconds, mutate, uploadAlbumId],
+    [applyChanges, event.id, event.slug, maxVideoSeconds, uploadAlbumId],
   );
 
   const uploadFiles = useCallback(
@@ -590,12 +707,15 @@ export function GuestGallery({
                         files "metadata" means reaching to the end of the file
                         for the moov atom, once per visible video. Clips that
                         predate poster extraction still fall back to that. */}
-                    {item.posterUrl ? (
-                      <Image
-                        src={item.posterUrl}
+                    {item.thumbSrc || item.posterUrl ? (
+                      <FallbackImage
+                        key={item.thumbSrc ?? item.posterUrl!}
+                        primary={item.thumbSrc ?? item.posterUrl!}
+                        fallback={item.posterUrl ?? `${item.blobUrl}?thumb=1`}
                         alt=""
                         fill
                         unoptimized
+                        loading="lazy"
                         sizes="(min-width: 768px) 25vw, 50vw"
                         className="pointer-events-none object-cover"
                         style={{ filter: gridFilter }}
@@ -620,11 +740,14 @@ export function GuestGallery({
                     ) : null}
                   </>
                 ) : (
-                  <Image
-                    src={item.blobUrl}
+                  <FallbackImage
+                    key={item.thumbSrc ?? item.blobUrl}
+                    primary={item.thumbSrc ?? `${item.blobUrl}?thumb=1`}
+                    fallback={`${item.blobUrl}?thumb=1`}
                     alt=""
                     fill
                     unoptimized
+                    loading="lazy"
                     sizes="(min-width: 768px) 25vw, 50vw"
                     className="object-cover"
                     style={{ filter: gridFilter }}

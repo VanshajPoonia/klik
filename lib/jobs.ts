@@ -37,10 +37,19 @@ export const JOB_PAYLOADS = {
     scanned: z.number().int().nonnegative().optional(),
     orphaned: z.number().int().nonnegative().optional(),
   }),
+  /** The grid rendition for one photo, or for one video's poster still. */
+  "media.thumbnail": z.object({ mediaId: z.string().min(1).max(64) }),
+  /** Finds media with no thumbnail and queues a `media.thumbnail` for each. */
+  "media.backfill_thumbnails": z.object({}),
 } as const;
 
 export type JobKind = keyof typeof JOB_PAYLOADS;
 export type JobPayload<K extends JobKind> = z.infer<(typeof JOB_PAYLOADS)[K]>;
+
+/** Queues a thumbnail for one media row, at most once while one is pending. */
+export function enqueueThumbnail(mediaId: string) {
+  return enqueue("media.thumbnail", { mediaId }, { dedupeKey: `thumb:${mediaId}`, maxAttempts: 3 });
+}
 
 export function isJobKind(kind: string): kind is JobKind {
   return Object.hasOwn(JOB_PAYLOADS, kind);
@@ -144,6 +153,9 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
   const day = now.toISOString().slice(0, 10);
   const daily: Array<{ kind: JobKind; payload: JobPayload<JobKind> }> = [
     { kind: "uploads.reap_orphans", payload: {} },
+    // Self-healing rather than a one-off script: catches the existing media,
+    // any upload whose thumbnail failed, and anything a future bug misses.
+    { kind: "media.backfill_thumbnails", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

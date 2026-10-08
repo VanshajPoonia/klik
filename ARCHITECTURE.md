@@ -56,9 +56,9 @@ These are not style preferences. Each one has already caused a bug or came withi
 
 **6. `sharp` is a native module and its shared library is invisible to file tracing.** This caused a real outage on 2026-10-02 in which guest uploads were dead for hours. Three things combined: the lockfile had `sharp` at one version and its `@img/*` binaries at another, because npm hoisted Next's own nested sharp binaries to the top level; Next traces a function's files by following imports, and `libvips-cpp.so` is opened by the OS, so no JavaScript tracer can see it; and `sharp` was imported at module scope, so the failed import took down **every** handler in the file, including the `GET` that lists a gallery and never touches an image library.
 
-The fix is all three: the linux binaries are explicit `optionalDependencies`, `next.config.ts` names `./node_modules/@img/**` in `outputFileTracingIncludes` **for every route that touches sharp**, and the import is lazy, inside `sanitizePhoto`. Any new route that uses sharp needs its own tracing entry; forgetting one fails only at runtime, only on Linux. `/api/health` encodes an 8x8 JPEG specifically to catch that, and `lib/native-deps.test.ts` guards the lockfile half. Routes currently holding an entry: `/api/e/[slug]/media`, `/api/health`, and `/api/s/[token]/og`, the last added with MED-2 and the first real test of the rule.
+The fix is all three: the linux binaries are explicit `optionalDependencies`, `next.config.ts` names `./node_modules/@img/**` in `outputFileTracingIncludes` **for every route that touches sharp**, and the import is lazy, inside `sanitizePhoto`. Any new route that uses sharp needs its own tracing entry; forgetting one fails only at runtime, only on Linux. `/api/health` encodes an 8x8 JPEG specifically to catch that, and `lib/native-deps.test.ts` guards the lockfile half. Routes currently holding an entry: `/api/e/[slug]/media`, `/api/health`, `/api/s/[token]/og`, the two QR routes, and the two job routes that run the thumbnail handler. **`lib/native-deps.test.ts` now enforces the rule**: it scans every `route.ts` for `sharp` or the job runner and fails when one has no entry. On its first run it found both QR routes missing, each importing sharp at module scope, so the printable sign and every plain QR download were one native-load failure from a 500.
 
-**7. Every image view costs a function invocation and a database query.** `GET /api/e/[slug]/media/[mediaId]/content` loads the event, loads the media row, resolves the plan, resolves the viewer, then redirects to a short-lived signed R2 URL. That is correct for private galleries and expensive for public ones. OPS-4 moves public delivery to signed cookies so the edge can cache.
+**7. A signed URL is a bearer token for its whole window.** Since 2026-10-08 a gallery page signs its tiles in the request that ran the access rule (section 8), and those URLs live 15 to 30 minutes. Hiding or deleting a photo stops new URLs being issued for it at once and removes the tile from every phone within one poll, but a URL already handed out keeps working until it expires. Anything that must stop **instantly**, which today means share-link revocation, must not be batched this way; `/s/[token]` still authorizes per request.
 
 ---
 
@@ -194,6 +194,12 @@ Four decisions worth not re-litigating:
 
 ## 8. Delivery and access
 
+**A gallery page signs its own tiles.** `GET /api/e/[slug]/media`, the page's server render, `/media/changes` and the dashboard run the access rule once for a page of media and return direct signed R2 URLs alongside the rows (`lib/media-urls.ts`, `lib/gallery-media.ts`). Fifty tiles used to be fifty authorized round trips through the content route; now they are one. Signing time is rounded to a 15-minute boundary so the same photo gets the same URL for a whole window, which is what lets the browser cache it, and URLs stay valid for two windows. Responses ask for `private` caching only, so no shared cache keeps the bytes. Tiles use a ~480px thumbnail (`media.thumb_pathname`), made in the uploader's browser, by the registration route when it re-encodes, or by the `media.thumbnail` job.
+
+**The content route is still the authority**, for video playback (a viewing session outlives the window), downloads, share links, and as the fallback every tile switches to when its signed URL fails. `?thumb=1` and `?poster=1` serve the stills through the same checks.
+
+**The gallery stays current by asking what changed.** Triggers from `drizzle/0017_gallery_sync.sql` stamp `media.changed_at` when anything a viewer can see changes, and roll it up to `events.media_changed_at`. `/api/e/[slug]/media/changes?since=` answers a quiet gallery from the event row alone, and otherwise returns the changed rows split into what this viewer may now see and the ids they should drop. A host deleting a photo removes it from guests' screens within one poll, which polling for new rows never did. Phones poll at 8 seconds while things change, back off to 60 when nothing does, and pause in a background tab.
+
 `GET /api/e/[slug]/media/[mediaId]/content` resolves event, media, plan and viewer, then redirects to a short-lived signed R2 URL. The bucket is private and has no public access.
 
 Visibility rules, in the order they are applied:
@@ -201,7 +207,7 @@ Visibility rules, in the order they are applied:
 - A guest sees `approved` media, plus their own `pending` uploads when moderation is on.
 - Private and password galleries are gated by `canViewGallery` before any of this.
 
-**Every byte is authorized on every request, and that is a closed decision, not a pending optimization.** There is one delivery path: this route, which checks access and then redirects to a signed URL that expires in 60 seconds, or 6 hours for video so range requests survive a viewing session. The bucket is private, has no public custom domain, and is not fronted by a cache.
+**Every URL is issued by a request that ran the full access rule, and that is a closed decision, not a pending optimization.** Either the content route issues it per request (60 seconds for a photo, 6 hours for video so range requests survive a viewing session), or a gallery request issues a page of them at once (15 to 30 minutes, above). The bucket is private, has no public custom domain, and is not fronted by a cache.
 
 The obvious optimization is a public R2 custom domain with CDN caching, and `ROADMAP.md` OPS-4 originally carried it. It was rejected on 2026-10-07 because a cached response never reaches this route, and five live controls here depend on being asked every time:
 
@@ -213,7 +219,7 @@ The obvious optimization is a public R2 custom domain with CDN caching, and `ROA
 
 `lib/media-access.ts` and `lib/share-access.ts` are pure and shared so the page, the OG image, the content redirect and the download cannot disagree about who may see what. A CDN would be a fifth consumer of those bytes that is structurally unable to call either function.
 
-The cost of this decision is a database round trip per media request, and that is the real ceiling to watch. If a 200-guest gallery becomes slow, the fix is to batch the authorization queries, not to make the bytes public. The latency argument for caching was answered by OPS-4 instead: the bucket is now in ENAM rather than the EU, and storage round trips fell from 437ms to 104ms without weakening a single control above.
+The cost of this decision was a database round trip per media request, and on 2026-10-08 it was paid down the way this paragraph said it should be: by batching the authorization, not by making the bytes public. What batching gave up is constraint 7 in section 3, a bearer window of up to 30 minutes instead of 60 seconds for tiles; what it kept is that no URL exists that a request running `canViewMedia` did not issue. The latency argument for caching was answered by OPS-4 instead: the bucket is now in ENAM rather than the EU, and storage round trips fell from 437ms to 104ms without weakening a single control above.
 
 `toPublicEvent` in `lib/events.ts` is an **allowlist** of 15 fields. It used to be a denylist, which meant every new column was published to guests by default, and it had already leaked `retentionUntil`, `deletedAt` and `purgedAt`. `lib/events.test.ts` now reads the column list out of the schema and fails if any column is neither published nor explicitly withheld with a reason, so a new column cannot default to public.
 

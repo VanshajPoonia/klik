@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
 import heicConvert from "heic-convert";
@@ -16,8 +16,14 @@ import {
   isAllowedMime,
   isVideoMime,
   maxBytesForMime,
+  posterPathnameFor,
   r2,
+  thumbPathnameFor,
 } from "@/lib/storage";
+import { acceptDerivedObject } from "@/lib/derived-objects";
+import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
+import { renderThumbnail } from "@/lib/thumbnail";
+import { enqueueThumbnail, kickJobRunner } from "@/lib/jobs";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
 import {
   SIGNATURE_BYTES,
@@ -27,7 +33,8 @@ import {
 import { encodeMediaCursor } from "@/lib/media-cursor";
 import { isPlausibleCaptureTime, readCaptureTime } from "@/lib/exif";
 import { log, reportError } from "@/lib/observability";
-import { mediaContentPath, toPublicMedia } from "@/lib/media-delivery";
+import { mediaContentPath } from "@/lib/media-delivery";
+import { toGalleryMedia } from "@/lib/gallery-media";
 import { canUseAlbums } from "@/lib/plans";
 
 // sharp/heic-convert need native/WASM Node bindings, never the edge runtime.
@@ -43,6 +50,7 @@ const registerSchema = z.object({
   height: z.number().int().positive().optional(),
   durationS: z.number().positive().optional(),
   posterPathname: z.string().min(1).optional(),
+  thumbPathname: z.string().min(1).optional(),
   contentHash: z.string().optional(),
   albumId: z.string().min(10).max(64).nullable().optional(),
   // True when the browser already resized/re-encoded the photo before
@@ -152,7 +160,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   });
 
   return NextResponse.json({
-    media: rows.map((item) => toPublicMedia(item, event.slug)),
+    media: await toGalleryMedia(rows, event.slug),
     // Meaningless in since-mode (the client only reads `media` there); it
     // already knows to keep polling since* regardless of what this says.
     nextCursor: !since && rows.length === limit ? encodeMediaCursor(rows[rows.length - 1]) : null,
@@ -320,6 +328,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   let storedMimeType = input.mimeType;
   let width = input.width;
   let height = input.height;
+  // Set when the server re-encodes the photo below, which is also the cheapest
+  // moment to make its thumbnail: the decoded pixels are already in memory.
+  let serverThumbnail: Buffer | null = null;
 
   if (kind === "photo" && !input.clientCompressed) {
     let original: Buffer<ArrayBufferLike>;
@@ -395,9 +406,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
 
     sizeBytes = sanitized.data.byteLength;
+    serverThumbnail = await renderThumbnail(sanitized.data);
     storedMimeType = "image/jpeg";
     width = sanitized.info.width;
     height = sanitized.info.height;
+  }
+
+  // Stills the client made. Each is checked against the key this media id would
+  // have been given and held to the same standard as any upload. See
+  // lib/derived-objects.ts for why the key check matters.
+  const posterPathname =
+    kind === "video"
+      ? await acceptDerivedObject({
+          claimed: input.posterPathname,
+          expected: posterPathnameFor(event.id, input.mediaId),
+          maxBytes: MAX_POSTER_BYTES,
+          label: "poster",
+        })
+      : null;
+  let thumbPathname = await acceptDerivedObject({
+    claimed: input.thumbPathname,
+    expected: thumbPathnameFor(event.id, input.mediaId),
+    maxBytes: MAX_THUMB_BYTES,
+    label: "thumbnail",
+  });
+  if (!thumbPathname && serverThumbnail) {
+    try {
+      const key = thumbPathnameFor(event.id, input.mediaId);
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: key,
+          Body: serverThumbnail,
+          ContentType: "image/jpeg",
+        }),
+      );
+      thumbPathname = key;
+    } catch (error) {
+      // The job below makes it instead. Never worth failing an upload over.
+      log.warn("upload.thumbnail_store_failed", { error });
+    }
   }
 
   const [row] = await db
@@ -417,18 +465,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       width: width ?? null,
       height: height ?? null,
       durationS: input.durationS ?? null,
-      posterPathname: kind === "video" ? (input.posterPathname ?? null) : null,
+      posterPathname,
+      thumbPathname,
       capturedAt,
     })
     .returning();
 
-  return NextResponse.json(
-    {
-      media: toPublicMedia(
-        { ...row, mine: !viewer.ownerSession && row.guestId === viewer.guestId },
-        event.slug,
-      ),
-    },
-    { status: 201 },
+  // No thumbnail yet and something to make one from: queue it now, so it is on
+  // record even if this function stops here, and start the queue after the
+  // response so the guest is not kept waiting for it.
+  if (!row.thumbPathname && (row.kind === "photo" || row.posterPathname)) {
+    await enqueueThumbnail(row.id).catch((error) => reportError("upload.thumbnail_enqueue_failed", error));
+    after(kickJobRunner);
+  }
+
+  const [published] = await toGalleryMedia(
+    [{ ...row, mine: !viewer.ownerSession && row.guestId === viewer.guestId }],
+    event.slug,
   );
+  return NextResponse.json({ media: published }, { status: 201 });
 }

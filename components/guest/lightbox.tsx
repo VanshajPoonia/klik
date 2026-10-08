@@ -17,7 +17,13 @@ import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
 export interface LightboxItem {
   id: string;
   kind: "photo" | "video";
+  /** The authorized route. Plays video, and is the fallback for a photo whose
+   *  signed URL has expired. */
   blobUrl: string;
+  /** Signed, direct from R2, when the payload carried one. */
+  src?: string | null;
+  posterSrc?: string | null;
+  posterUrl?: string | null;
 }
 
 const SWIPE_THRESHOLD = 50;
@@ -60,6 +66,14 @@ export function Lightbox({
   const enhancedBlob = useRef<Blob | null>(null);
   const item = items[index];
   const enhancedUrl = item && enhancedFor?.id === item.id ? enhancedFor.url : null;
+  // Ids whose signed URL failed, so the viewer falls back to the route that
+  // re-authorizes. Keyed by id like the enhancement above.
+  const [expiredIds, setExpiredIds] = useState<ReadonlySet<string>>(() => new Set());
+  const photoUrl = item
+    ? item.src && !expiredIds.has(item.id)
+      ? item.src
+      : item.blobUrl
+    : null;
 
   /**
    * Auto-levels the photo on this device. The original is shown immediately and
@@ -74,7 +88,7 @@ export function Lightbox({
     const controller = new AbortController();
     let objectUrl: string | null = null;
 
-    enhancePhoto(item.blobUrl, controller.signal).then((blob) => {
+    enhancePhoto(photoUrl ?? item.blobUrl, controller.signal).then((blob) => {
       if (controller.signal.aborted || !blob) return;
       enhancedBlob.current = blob;
       objectUrl = URL.createObjectURL(blob);
@@ -86,7 +100,7 @@ export function Lightbox({
       enhancedBlob.current = null;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [enhanced, item]);
+  }, [enhanced, item, photoUrl]);
 
   const go = useCallback(
     (delta: number) => {
@@ -232,6 +246,7 @@ export function Lightbox({
           <video
             key={item.id}
             src={item.blobUrl}
+            poster={item.posterSrc ?? item.posterUrl ?? undefined}
             aria-label={`Video ${index + 1} of ${items.length}`}
             className="h-full w-full object-contain"
             controls
@@ -241,7 +256,12 @@ export function Lightbox({
         ) : (
           <Image
             key={item.id}
-            src={enhancedUrl ?? item.blobUrl}
+            src={enhancedUrl ?? photoUrl ?? item.blobUrl}
+            onError={() => {
+              if (item.src && !expiredIds.has(item.id)) {
+                setExpiredIds((current) => new Set(current).add(item.id));
+              }
+            }}
             alt={`Photo ${index + 1} of ${items.length}`}
             fill
             unoptimized

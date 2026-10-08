@@ -18,6 +18,7 @@ import {
   canUseVenueHub,
 } from "@/lib/plans";
 import { withProtectedMediaUrl } from "@/lib/media-delivery";
+import { signMediaUrls } from "@/lib/media-urls";
 import { EventDashboard } from "@/components/dashboard/event-dashboard";
 import { SupportCard } from "@/components/dashboard/support-card";
 import { resolveEventActor } from "@/lib/roles";
@@ -48,7 +49,16 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       .from(media)
       .where(and(eq(media.eventId, id), isNull(media.deletedAt)))
       .orderBy(desc(media.createdAt))
-      .then((rows) => rows.map((item) => withProtectedMediaUrl(item, event.slug))),
+      // Signed once here, like the guest gallery, so a grid of hundreds of
+      // tiles is not hundreds of authorized round trips to the content route.
+      .then((rows) =>
+        Promise.all(
+          rows.map(async (item) => ({
+            ...withProtectedMediaUrl(item, event.slug),
+            ...(await signMediaUrls(item)),
+          })),
+        ),
+      ),
     getAccountPlan(event.ownerId),
     db.select().from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt))).orderBy(albums.createdAt),
     db

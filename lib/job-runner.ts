@@ -39,6 +39,8 @@ type Handler<K extends JobKind> = (payload: JobPayload<K>, context: JobContext) 
  */
 const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   "uploads.reap_orphans": async () => (await import("./job-handlers/reap-orphans")).reapOrphans,
+  "media.thumbnail": async () => (await import("./job-handlers/thumbnail")).generateThumbnail,
+  "media.backfill_thumbnails": async () => (await import("./job-handlers/thumbnail")).backfillThumbnails,
 };
 
 /** How long a job may sit in `running` before it is presumed killed. */

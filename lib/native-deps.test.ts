@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
@@ -93,5 +93,43 @@ describe("sharp's native binaries", () => {
 
     expect(libvips.length).toBeGreaterThan(0);
     expect(new Set(libvips).size, `libvips versions found: ${[...new Set(libvips)].join(", ")}`).toBe(1);
+  });
+});
+
+/**
+ * The second half of the outage: a route that loads sharp but has no
+ * `outputFileTracingIncludes` entry ships without libvips and fails only on
+ * Linux, only at runtime. Every route that names sharp, or that drains the job
+ * queue (whose thumbnail handler uses sharp), must be listed.
+ *
+ * A text scan rather than a module graph walk, so it can miss sharp reached
+ * through a helper. It catches the two shapes that have actually happened.
+ */
+describe("routes that load sharp", () => {
+  const appDir = resolve(import.meta.dirname, "..", "app");
+  const config = readFileSync(resolve(import.meta.dirname, "..", "next.config.ts"), "utf8");
+
+  function routeFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = resolve(dir, entry.name);
+      if (entry.isDirectory()) return routeFiles(path);
+      return entry.name === "route.ts" ? [path] : [];
+    });
+  }
+
+  const needing = routeFiles(appDir)
+    .filter((file) => /["']sharp["']|job-runner/.test(readFileSync(file, "utf8")))
+    .map((file) => file.slice(appDir.length).replace(/\/route\.ts$/, ""));
+
+  it("finds the routes it is meant to guard", () => {
+    expect(needing).toContain("/api/jobs/run");
+  });
+
+  it.each(needing)("%s has a tracing include for the libvips binary", (route) => {
+    expect(
+      config.includes(`"${route}": ["./node_modules/@img/**"]`),
+      `${route} loads sharp but next.config.ts has no outputFileTracingIncludes entry for it. ` +
+        "It will build, pass every local check, and fail in production with ERR_DLOPEN_FAILED.",
+    ).toBe(true);
   });
 });

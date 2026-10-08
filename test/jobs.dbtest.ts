@@ -181,13 +181,14 @@ describe("drainJobs", () => {
 
 describe("scheduleDailyJobs", () => {
   it("schedules each daily job once per day however often it is called", async () => {
+    const daily = ["uploads.reap_orphans", "media.backfill_thumbnails"];
     const morning = new Date("2026-10-08T04:00:00Z");
-    expect(await scheduleDailyJobs(morning)).toEqual(["uploads.reap_orphans"]);
+    expect(await scheduleDailyJobs(morning)).toEqual(daily);
     // Even after the first one has finished, which the live-only dedupe index
     // would not catch on its own.
     await testDb.update(jobs).set({ status: "succeeded" });
     expect(await scheduleDailyJobs(new Date("2026-10-08T23:59:00Z"))).toEqual([]);
-    expect(await scheduleDailyJobs(new Date("2026-10-09T00:01:00Z"))).toEqual(["uploads.reap_orphans"]);
+    expect(await scheduleDailyJobs(new Date("2026-10-09T00:01:00Z"))).toEqual(daily);
   });
 });
 

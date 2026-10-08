@@ -15,8 +15,11 @@ import {
   isAllowedMime,
   isVideoMime,
   maxBytesForMime,
+  posterPathnameFor,
   r2,
+  thumbPathnameFor,
 } from "@/lib/storage";
+import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
 
 const requestSchema = z.object({
   eventId: z.string().min(1),
@@ -24,7 +27,9 @@ const requestSchema = z.object({
   mimeType: z.string().min(1),
   sizeBytes: z.number().int().positive(),
   /** Size of the poster still, when the client extracted one for a video. */
-  posterBytes: z.number().int().positive().max(2 * 1024 * 1024).optional(),
+  posterBytes: z.number().int().positive().max(MAX_POSTER_BYTES).optional(),
+  /** Size of the grid thumbnail, when the client made one. */
+  thumbBytes: z.number().int().positive().max(MAX_THUMB_BYTES).optional(),
 });
 
 function throttled(retryAfter: number) {
@@ -118,7 +123,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   let posterUploadUrl: string | null = null;
   let posterPathname: string | null = null;
   if (isVideoMime(mimeType) && parsed.data.posterBytes) {
-    posterPathname = blobPathnameFor(event.id, `${mediaId}-poster`, "jpg");
+    posterPathname = posterPathnameFor(event.id, mediaId);
     posterUploadUrl = await getSignedUrl(
       r2,
       new PutObjectCommand({
@@ -131,11 +136,31 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  // And a slot for the grid thumbnail, photo or video alike. Same binding, for
+  // the same reason, and capped far below any real media file.
+  let thumbUploadUrl: string | null = null;
+  let thumbPathname: string | null = null;
+  if (parsed.data.thumbBytes) {
+    thumbPathname = thumbPathnameFor(event.id, mediaId);
+    thumbUploadUrl = await getSignedUrl(
+      r2,
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: thumbPathname,
+        ContentType: "image/jpeg",
+        ContentLength: parsed.data.thumbBytes,
+      }),
+      { expiresIn: 5 * 60 },
+    );
+  }
+
   return NextResponse.json({
     uploadUrl,
     pathname,
     maxBytes,
     posterUploadUrl,
     posterPathname,
+    thumbUploadUrl,
+    thumbPathname,
   });
 }

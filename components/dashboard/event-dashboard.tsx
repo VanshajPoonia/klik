@@ -7,7 +7,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, Download, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MediaGrid } from "@/components/dashboard/media-grid";
+import { MediaGrid, type DashboardMedia } from "@/components/dashboard/media-grid";
 import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
 import { AlbumManager } from "@/components/dashboard/album-manager";
@@ -43,7 +43,7 @@ export function EventDashboard({
   clients = [],
 }: {
   event: OrganizerEvent;
-  initialMedia: Media[];
+  initialMedia: DashboardMedia[];
   guestUrl: string;
   backHref?: string;
   canManageClients?: boolean;
