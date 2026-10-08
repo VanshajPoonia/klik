@@ -187,3 +187,4 @@ early if you would rather not be asked mid-task.
 | 2026-10-08 | **CAM-4**: disposable camera mode. A roll of shots per guest, and nobody sees anything until it develops |
 | 2026-10-08 | **Security**: Next.js 16.4.0 and Auth.js updated, clearing two critical advisories (a middleware bypass and an auth check that could fail open) and image-library CVEs. Production dependencies audit clean |
 | 2026-10-08 | Custom gallery addresses that never break printed signs, styled QR codes checked to scan, and sharing the code straight to WhatsApp or as a story |
+| 2026-10-08 | Bulk actions on a selection with undo, and an Insights tab showing what happened at each event |

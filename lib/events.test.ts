@@ -50,6 +50,7 @@ const row: Event = {
   disposableMode: false,
   shotsPerGuest: 24,
   developsAt: null,
+  galleryOpens: 0,
 };
 
 /**
@@ -107,6 +108,7 @@ const WITHHELD: Record<string, string> = {
   disposableMode: "rendered as copy on the guest page, not sent raw",
   shotsPerGuest: "rendered as copy on the guest page, not sent raw",
   developsAt: "rendered as copy on the guest page, not sent raw",
+  galleryOpens: "the host's analytics, not the guests' business",
   // Host configuration. The server already filters private media out of a
   // guest's gallery, so the flag buys a guest nothing and telling them about a
   // back room they cannot see is worse than silence.

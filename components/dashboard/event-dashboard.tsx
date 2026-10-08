@@ -23,9 +23,10 @@ import { formatFileSize } from "@/lib/plans";
 import { INLINE_ZIP_LIMIT_BYTES, buildDownloadBatches } from "@/lib/download-batches";
 import { ExportsPanel } from "@/components/dashboard/exports-panel";
 import { TrashPanel } from "@/components/dashboard/trash-panel";
+import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { UsageMeter, type UsageSummary } from "@/components/dashboard/usage-meter";
 
-type Tab = "gallery" | "links" | "settings" | "qr" | "trash";
+type Tab = "gallery" | "insights" | "links" | "settings" | "qr" | "trash";
 
 export function EventDashboard({
   event,
@@ -429,6 +430,7 @@ export function EventDashboard({
           {(
             [
               "gallery",
+              ...(license.state !== "draft" ? ["insights"] : []),
               ...(canManageShares ? ["links"] : []),
               "settings",
               "qr",
@@ -614,6 +616,7 @@ export function EventDashboard({
           </div>
         )}
         {tab === "trash" && canManageTrash && <TrashPanel eventId={event.id} />}
+        {tab === "insights" && <InsightsPanel eventId={event.id} />}
         {tab === "qr" &&
           (license.state === "draft" ? (
             // ACT-3: no QR code before the event is live. One printed now

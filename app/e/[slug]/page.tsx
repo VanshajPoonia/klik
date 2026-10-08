@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { after } from "next/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
@@ -9,6 +10,7 @@ import { albums, events, guests, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
 import { eventUsage } from "@/lib/usage";
+import { countGalleryOpen } from "@/lib/insights";
 import { rollUndeveloped } from "@/lib/media-access";
 import {
   guestCookieName,
@@ -102,6 +104,10 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   if (!hasConsented && !isOwner) {
     return <EntrySheet slug={slug} eventName={event.name} requiresPassword={false} />;
   }
+
+  // GRW-7: an open by someone other than the event's team. Counted after the
+  // page has gone, so a guest is never kept waiting on a statistic.
+  if (!isOwner) after(() => countGalleryOpen(event.id).catch(() => {}));
 
   // Taken before the query, so anything that changes while it runs is sent
   // again by the first poll rather than falling between the two.

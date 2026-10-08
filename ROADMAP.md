@@ -804,6 +804,8 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 **Size:** L. "Order prints" and "order a photo book" from the gallery, fulfilled through Prodigi or a similar print API with a margin. Turns the print studio (QR-4) into a revenue line rather than a cost centre, and guests are already in a buying mood the day after an event.
 
 ### GRW-7. Organizer analytics
+**DONE 2026-10-08** (`lib/insights.ts`, `components/dashboard/insights-panel.tsx`). An Insights tab on every live event: photos and videos shared as the one hero number; gallery opens, guests joined, guests who shared and share-link opens as tiles; uploads by hour (by day past three days) as a single-series column chart with the quiet hours filled in, hover and keyboard tooltips and a table view; and the five guests who shared most. Gallery opens are a new counter (`events.gallery_opens`), bumped after the page is sent and never for the event's own team; everything else is counted from existing rows. QR scans are not distinguished from other opens, which would need a tagged URL on the sign.
+
 **Size:** M. QR scans over time, uploads per hour, unique contributors, top contributors, gallery views, share link clicks. Answers "was this worth $89" and justifies renewal for venues.
 
 ---

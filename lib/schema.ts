@@ -274,6 +274,8 @@ export const events = pgTable(
     disposableMode: boolean("disposable_mode").notNull().default(false),
     shotsPerGuest: integer("shots_per_guest").notNull().default(24),
     developsAt: timestamp("develops_at", { withTimezone: true }),
+    // GRW-7: gallery page loads by anyone but the event's team, for insights.
+    galleryOpens: integer("gallery_opens").notNull().default(0),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
