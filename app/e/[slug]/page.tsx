@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { albums, events, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
+import { eventUsage } from "@/lib/usage";
 import {
   guestCookieName,
   verifyGuestSession,
@@ -123,12 +124,15 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   const coverUrls = coverRows[0] ? await signMediaUrls(coverRows[0]) : null;
   const coverUrl = coverUrls ? (coverUrls.src ?? coverUrls.posterSrc) : null;
 
+  const galleryFull = eventUsage(event, plan).full;
   const publicEvent = toPublicEvent({
     ...event,
     coverMediaId: canCustomizeGallery(plan.key) ? event.coverMediaId : null,
     accentColor: canCustomizeGallery(plan.key) ? event.accentColor : "#edee00",
     backgroundColor: canCustomizeGallery(plan.key) ? event.backgroundColor : "#050505",
-    uploadsEnabled: canUpload(event),
+    // PAY-7: a full gallery offers no upload button at all, rather than one
+    // that fails. The banner below says why.
+    uploadsEnabled: canUpload(event) && !galleryFull,
   });
 
   return (
@@ -142,6 +146,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       canSlideshow={canUseSlideshow(plan.key)}
       maxVideoSeconds={plan.maxVideoSeconds}
       showBranding={!removesKlikBranding(plan.key)}
+      galleryFull={galleryFull && canUpload(event)}
     />
   );
 }

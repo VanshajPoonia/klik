@@ -43,6 +43,10 @@ const row: Event = {
   planKey: "premium",
   licensedAt: new Date("2026-07-01T00:00:00Z"),
   activationRequestedAt: null,
+  mediaCount: 12,
+  mediaBytes: 1024,
+  usageWarnedPercent: 0,
+  retentionWarnedDays: null,
 };
 
 /**
@@ -92,6 +96,10 @@ const WITHHELD: Record<string, string> = {
   planKey: "what the organizer bought, never shown to guests",
   licensedAt: "billing state, enforced server side",
   activationRequestedAt: "the organizer's conversation with Klik",
+  mediaCount: "the server enforces capacity; guests see their own count of what is shown",
+  mediaBytes: "storage use is the organizer's business, not the guests'",
+  usageWarnedPercent: "notification bookkeeping",
+  retentionWarnedDays: "notification bookkeeping",
   // Host configuration. The server already filters private media out of a
   // guest's gallery, so the flag buys a guest nothing and telling them about a
   // back room they cannot see is worse than silence.

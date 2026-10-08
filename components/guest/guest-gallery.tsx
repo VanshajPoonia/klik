@@ -161,6 +161,7 @@ export function GuestGallery({
   canSlideshow = false,
   showBranding = true,
   maxVideoSeconds,
+  galleryFull = false,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -172,6 +173,8 @@ export function GuestGallery({
   canSlideshow?: boolean;
   showBranding?: boolean;
   maxVideoSeconds: number;
+  /** PAY-7: storage is used up, so uploads are off and the guest is told why. */
+  galleryFull?: boolean;
 }) {
   // A single accumulating, always-sorted list: new arrivals are prepended via
   // a `since` cursor (never re-polls a fixed window, so nothing can be pushed
@@ -661,6 +664,13 @@ export function GuestGallery({
             </div>
           )}
         </header>
+
+        {galleryFull && (
+          <p className="mb-6 rounded-xl border border-canvas-line bg-canvas-raised px-4 py-3 text-sm text-muted" role="status">
+            {/* Never the plan's name: what a guest can do about it is ask. */}
+            This gallery is full. Ask the host to make room.
+          </p>
+        )}
 
         {(remaining > 0 || notice) && (
           <div className="mb-6 space-y-2" role="status" aria-live="polite">

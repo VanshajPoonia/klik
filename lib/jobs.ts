@@ -47,6 +47,12 @@ export const JOB_PAYLOADS = {
   "export.part": z.object({ exportId: z.string().min(1).max(64), part: z.number().int().nonnegative() }),
   /** MED-7: delete exports past their week, and anything left under exports/. */
   "exports.expire": z.object({}),
+  /** PAY-7: email the host that their event crossed a storage threshold. */
+  "notify.usage": z.object({ eventId: z.string().min(1).max(64), level: z.union([z.literal(75), z.literal(90), z.literal(100)]) }),
+  /** SEC-1: warn hosts 30, 7 and 1 days before their gallery closes. */
+  "notify.retention": z.object({}),
+  /** F-4: recompute the usage counters from the media rows. */
+  "usage.reconcile": z.object({}),
 } as const;
 
 export type JobKind = keyof typeof JOB_PAYLOADS;
@@ -166,6 +172,8 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     // to look. Daily is fine: grants end on dates, not minutes.
     { kind: "entitlements.reconcile", payload: {} },
     { kind: "exports.expire", payload: {} },
+    { kind: "notify.retention", payload: {} },
+    { kind: "usage.reconcile", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

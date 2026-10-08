@@ -23,6 +23,7 @@ import { formatFileSize } from "@/lib/plans";
 import { INLINE_ZIP_LIMIT_BYTES, buildDownloadBatches } from "@/lib/download-batches";
 import { ExportsPanel } from "@/components/dashboard/exports-panel";
 import { TrashPanel } from "@/components/dashboard/trash-panel";
+import { UsageMeter, type UsageSummary } from "@/components/dashboard/usage-meter";
 
 type Tab = "gallery" | "links" | "settings" | "qr" | "trash";
 
@@ -42,6 +43,7 @@ export function EventDashboard({
   canUseVenueHub = false,
   canDeleteEvent = false,
   canManageTrash = false,
+  usage = null,
   license = { state: "live", canGoLive: false, requestedAt: null },
   albums = [],
   coHosts = [],
@@ -62,6 +64,7 @@ export function EventDashboard({
   canUseVenueHub?: boolean;
   canDeleteEvent?: boolean;
   canManageTrash?: boolean;
+  usage?: UsageSummary | null;
   license?: EventLicenseSummary;
   albums?: Album[];
   coHosts?: Array<{
@@ -351,6 +354,7 @@ export function EventDashboard({
         </header>
 
         <LicenseBanner eventId={event.id} license={license} />
+        {usage && license.state !== "draft" && <UsageMeter usage={usage} />}
 
         <nav className="mb-8 flex gap-1 border-b border-canvas-line" aria-label="Event sections">
           {(

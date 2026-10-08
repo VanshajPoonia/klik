@@ -103,7 +103,7 @@ and `getPlan` falls back silently: `PLANS[planKey ?? "event"] ?? PLANS.event`, w
 
 **FIXED 2026-09-30** (migration `0003_soft_delete_and_retention.sql`). `events.retention_until` is now pinned at creation from the owner's plan at that moment, and the cron reads only that column. A null means "we do not know" and the event is skipped, never defaulted, because "we do not know" must not resolve to "delete it". Admin plan changes move retention outward via `GREATEST()` and can no longer shorten it. Existing rows were backfilled to the window that applied yesterday, so nothing became newly eligible because of the migration.
 
-**Still outstanding:** warning emails at 30, 7, and 1 days before a purge (needs F-8).
+**Warning emails DONE 2026-10-08.** `notify.retention` runs daily and emails the organizer at 30, 7 and 1 days before `retention_until`, once each, recorded on `events.retention_warned_days`. A window that moves out (an upgrade) resets them, so the new date gets its own warnings. Drafts are never warned, since no window is running.
 
 ### SEC-2. Abandoned uploads are permanent, untracked, unbilled storage
 **Size:** M. **Severity: high.**
@@ -214,6 +214,8 @@ Create table `rate_limits` (key text primary key, window_start timestamptz, coun
 `lib/permissions.ts` replaces the three ad-hoc guards in `lib/roles.ts` with one resolver: `getEventCapabilities(eventId)` returns a typed set such as `{ viewDashboard, manageSettings, moderate, manageMedia, manageFolders, manageCoHosts, manageBilling, rotateQr, deleteEvent, exportAll }`. It resolves superadmin, owner, co-host role (ORG-2), and the owner's effective plan in one query. Every organizer route switches to it. Keep `lib/roles.ts` as thin wrappers during migration, then delete it.
 
 ### F-4. Usage accounting
+**DONE 2026-10-08** (`drizzle/0021_usage.sql`, `lib/usage.ts`, `test/usage.dbtest.ts`). Not a separate `event_usage` table: `events.media_count` and `events.media_bytes`, kept by statement-level triggers on `media` (insert, delete, and update as "old row leaves, new row arrives", which covers soft delete, restore and re-encodes in one rule), and recomputed nightly by `usage.reconcile` so drift heals. Live media only: the trash costs storage but is not what the organizer can be asked to make room in, and empties within 30 days. `PlanDefinition` gained `maxStorageBytesPerEvent`, `photoHeadline` and `maxAlbums` per the table below; co-hosts were already there. Account-level usage and AI credits wait for ADM-3 and the AI phase.
+
 **Size:** M. **Blocks:** PAY-7 (limit warnings), ADM-3.
 Counting with `COUNT(*)` on every dashboard load will not survive a 3000-photo wedding. Add a rollup table `event_usage` (event_id primary key, photo_count, video_count, bytes_used bigint, guest_count, updated_at) incremented in the same request that inserts or deletes a media row, and an `account_usage` view or rollup keyed by user. Add `lib/usage.ts` with `getEventUsage(eventId)` and `getAccountUsage(userId)`, both returning percentages against the effective plan. Add a reconciliation job (F-5) that recomputes from `media` nightly so drift self-heals. Extend `PlanDefinition` with `maxMediaPerEvent`, `maxStorageBytesPerEvent`, `maxCoHosts`, `maxAlbums`, `aiCreditsPerEvent`.
 
@@ -476,10 +478,14 @@ What shipped records money. It does not grant capability, and that line is the w
 `/dashboard/billing`: current plan per event, unused passes, subscription status and renewal date, invoice history, "Manage billing" opening the Stripe Customer Portal (`POST /api/billing/portal`), and an upgrade path from any event that hits a gated feature. Upgrade prompts should appear at the point of friction (the locked folder button), not only on a pricing page.
 
 ### PAY-6. Plan enforcement at the edges
+**DONE 2026-10-08 for storage and folders.** The upload handshake refuses a file that would take the event past its storage, before a byte is sent, and tells guests "This gallery is full. Ask the host to make room", never a plan name; the gallery page hides its upload buttons at that point rather than offering ones that fail. Folders are capped by `plan.maxAlbums` instead of a literal 20 that disagreed with the pricing page. Co-hosts were already enforced, the upload window has been since ACT-1, and AI credits wait for the AI phase.
+
 **Size:** M. **Depends on:** PAY-1, F-4.
 Every limit currently enforced only at event creation needs enforcing where it actually bites: the upload token handshake checks media count, storage bytes, and upload window; the co-host route checks `maxCoHosts`; the folder route checks `maxAlbums`; AI routes check credits. Each refusal returns a message that names the plan and the upgrade action, because a bare 403 at a wedding is a support ticket.
 
 ### PAY-7. Approaching-limit warnings
+**DONE 2026-10-08.** A usage meter on each live event's page: storage against the plan, photos against the headline, and upload days left. Quiet below 75 percent, amber at 75 and 90, red only when full. An email goes at 75, 90 and full, once each per event, claimed by a conditional update on `events.usage_warned_percent` and sent from the job queue so an upload is never kept waiting. Not done: banners beyond the meter, and the admin-wide view (ADM-3).
+
 **Size:** M. **Depends on:** F-4, PAY-6. This is the warning behaviour you asked for.
 - A `<UsageMeter>` component on the organizer event dashboard showing storage, photo count, and days left in the upload window, using the volt token with a warning treatment at 75 percent and a stronger one at 90 percent. Never a red alert bar at 60 percent; false urgency trains people to ignore it.
 - A dismissible banner at 75 percent, a persistent one at 90, and a blocking state at 100 with a one-click upgrade.

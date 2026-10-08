@@ -259,6 +259,15 @@ export const events = pgTable(
     // ACT-4: when the organizer asked for this draft to go live. Cleared by
     // nothing: once licensed, licensed_at is what the queue reads instead.
     activationRequestedAt: timestamp("activation_requested_at", { withTimezone: true }),
+    // F-4: live media in this event, kept by the triggers in
+    // drizzle/0021_usage.sql rather than by the routes, and recomputed nightly
+    // so any drift heals. Read for the storage cap and the usage meter.
+    mediaCount: integer("media_count").notNull().default(0),
+    mediaBytes: bigint("media_bytes", { mode: "number" }).notNull().default(0),
+    // PAY-7: the highest storage warning sent (75, 90, 100), so each goes once.
+    usageWarnedPercent: integer("usage_warned_percent").notNull().default(0),
+    // SEC-1: the nearest retention warning sent (30, 7, 1 days). Null for none.
+    retentionWarnedDays: integer("retention_warned_days"),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );

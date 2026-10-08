@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
 import { canUpload } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
+import { GALLERY_FULL_MESSAGE, wouldExceedStorage } from "@/lib/usage";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { clientIp, consume } from "@/lib/ratelimit";
 import {
@@ -65,6 +66,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!isAllowedMime(mimeType)) {
     return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
   }
+  // PAY-6: the event's storage, from the counter the triggers keep on the row.
+  // Checked here, before a byte is sent, so a full gallery refuses the upload
+  // rather than accepting it and refusing it afterwards. Guests are told it is
+  // full and nothing about plans, which are the host's business.
+  if (wouldExceedStorage(event, plan, sizeBytes + (parsed.data.posterBytes ?? 0) + (parsed.data.thumbBytes ?? 0))) {
+    return NextResponse.json({ error: GALLERY_FULL_MESSAGE, full: true }, { status: 413 });
+  }
+
   const maxBytes = maxBytesForMime(mimeType, plan);
   if (sizeBytes > maxBytes) {
     return NextResponse.json(

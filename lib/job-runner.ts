@@ -50,6 +50,15 @@ const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   "exports.expire": async () => async () => {
     await (await import("./exports")).expireExports();
   },
+  "notify.usage": async () => async (payload) => {
+    await (await import("./notices")).sendUsageWarning(payload.eventId, payload.level);
+  },
+  "notify.retention": async () => async () => {
+    await (await import("./notices")).sendRetentionWarnings();
+  },
+  "usage.reconcile": async () => async () => {
+    await (await import("./notices")).reconcileUsage();
+  },
 };
 
 /** How long a job may sit in `running` before it is presumed killed. */

@@ -23,7 +23,8 @@ import {
 import { acceptDerivedObject } from "@/lib/derived-objects";
 import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
 import { renderThumbnail } from "@/lib/thumbnail";
-import { enqueueThumbnail, kickJobRunner } from "@/lib/jobs";
+import { enqueue, enqueueThumbnail, kickJobRunner } from "@/lib/jobs";
+import { claimUsageWarning } from "@/lib/notices";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
 import {
   SIGNATURE_BYTES,
@@ -469,6 +470,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       capturedAt,
     })
     .returning();
+
+  // PAY-7: did this upload carry the event past 75%, 90% or full? Claimed here
+  // so it is once-only, sent from the queue so the guest is not kept waiting.
+  const warning = await claimUsageWarning(event.id).catch(() => null);
+  if (warning) {
+    await enqueue("notify.usage", { eventId: event.id, level: warning }).catch(() => {});
+    after(kickJobRunner);
+  }
 
   // No thumbnail yet and something to make one from: queue it now, so it is on
   // record even if this function stops here, and start the queue after the

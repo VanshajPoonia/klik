@@ -186,6 +186,8 @@ describe("scheduleDailyJobs", () => {
       "media.backfill_thumbnails",
       "entitlements.reconcile",
       "exports.expire",
+      "notify.retention",
+      "usage.reconcile",
     ];
     const morning = new Date("2026-10-08T04:00:00Z");
     expect(await scheduleDailyJobs(morning)).toEqual(daily);

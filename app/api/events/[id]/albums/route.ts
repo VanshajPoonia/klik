@@ -50,8 +50,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const existing = await db.select({ id: albums.id }).from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt)));
-  if (existing.length >= 20) {
-    return NextResponse.json({ error: "An event can have up to 20 albums" }, { status: 409 });
+  // PAY-6: from the plan, rather than a literal 20 that disagreed with the
+  // number on the pricing page.
+  if (existing.length >= plan.maxAlbums) {
+    return NextResponse.json(
+      { error: `An event on ${plan.name} can have up to ${plan.maxAlbums} albums` },
+      { status: 409 },
+    );
   }
 
   const [album] = await db

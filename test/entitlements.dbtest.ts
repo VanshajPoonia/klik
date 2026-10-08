@@ -14,6 +14,7 @@ const {
   reconcileLicenses,
   revokeEntitlement,
   getAccountEntitlements,
+  hasVenueGrant,
 } = await import("@/lib/entitlements");
 const { eventLicenseState } = await import("@/lib/license");
 const { entitlements, events, users } = await import("@/lib/schema");
@@ -152,6 +153,22 @@ describe("a Venue grant", () => {
     await expect(
       testDb.update(events).set({ isActive: true }).where(eq(events.id, first)),
     ).rejects.toThrow();
+  });
+});
+
+describe("hasVenueGrant", () => {
+  it("is true only while a Venue grant is active and current", async () => {
+    const owner = await makeUser();
+    expect(await hasVenueGrant(owner)).toBe(false);
+    await grant(owner, "event");
+    expect(await hasVenueGrant(owner)).toBe(false);
+    const { entitlement } = await grant(owner, "venue", { endsAt: new Date(Date.now() + 60_000) });
+    expect(await hasVenueGrant(owner)).toBe(true);
+    await testDb
+      .update(entitlements)
+      .set({ endsAt: sql`now() - interval '1 minute'` })
+      .where(eq(entitlements.id, entitlement.id));
+    expect(await hasVenueGrant(owner)).toBe(false);
   });
 });
 

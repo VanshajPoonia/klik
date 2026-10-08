@@ -9,6 +9,7 @@ import { getAppUrl } from "@/lib/env";
 import { eventLicenseState, eventPlan } from "@/lib/license";
 import { getAccountEntitlements } from "@/lib/entitlements";
 import { openReportCounts } from "@/lib/reports";
+import { eventUsage } from "@/lib/usage";
 import {
   canCustomizeGallery,
   canCustomizeQr,
@@ -106,6 +107,18 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canManageCoHosts={canUseCoHosts(plan.key) && session.user.id === event.ownerId}
         canManageShares={can(actor.role, "shares.manage")}
         canManageTrash={can(actor.role, "trash.manage")}
+        usage={(() => {
+          const usage = eventUsage(event, plan);
+          return {
+            bytes: usage.bytes,
+            storageLimit: usage.storageLimit,
+            storagePercent: usage.storagePercent,
+            count: usage.count,
+            photoHeadline: usage.photoHeadline,
+            level: usage.level,
+            uploadDaysLeft: usage.uploadDaysLeft,
+          };
+        })()}
         canCustomizeGallery={canCustomizeGallery(plan.key)}
         canCustomizeQr={canCustomizeQr(plan.key)}
         canDownloadQrSign={canDownloadQrSign(plan.key)}
