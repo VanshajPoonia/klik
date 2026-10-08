@@ -112,3 +112,80 @@ body::before {
     transform: none !important;
   }
 }
+
+/**
+ * Legal pages.
+ *
+ * Written as plain semantic markup rather than utility classes on every node,
+ * because the content is long prose that will be edited by someone reading the
+ * policy rather than the JSX. Scoped to `.legal-prose` so nothing here leaks
+ * into the product surfaces.
+ */
+.legal-prose h2 {
+  margin-top: 2.5rem;
+  font-size: 1.25rem;
+  line-height: 1.4;
+  color: var(--color-paper);
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+.legal-prose h3 {
+  margin-top: 1.75rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--color-paper);
+}
+
+.legal-prose p,
+.legal-prose li {
+  margin-top: 0.875rem;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--color-paper) 85%, transparent);
+}
+
+.legal-prose ul {
+  margin-top: 0.5rem;
+  padding-left: 1.125rem;
+  list-style: disc;
+}
+
+.legal-prose li {
+  margin-top: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+.legal-prose li::marker {
+  color: var(--color-muted);
+}
+
+.legal-prose strong {
+  color: var(--color-paper);
+  font-weight: 500;
+}
+
+.legal-prose a {
+  color: var(--color-paper);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-muted);
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.legal-prose a:hover {
+  color: var(--color-volt);
+  text-decoration-color: var(--color-volt);
+}
+
+.legal-prose a:focus-visible {
+  outline: 2px solid var(--color-volt);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+/* A fact someone may need to act on: a retention window, a deadline, a number. */
+.legal-prose .legal-key {
+  margin-top: 1.25rem;
+  border-left: 2px solid var(--color-volt-dim);
+  padding-left: 1rem;
+}

@@ -100,7 +100,21 @@ export function EntrySheet({
               {error}
             </p>
           )}
-          <p className="text-xs leading-relaxed text-muted">{CURRENT_CONSENT.detail}</p>
+          <p className="text-xs leading-relaxed text-muted">
+            {CURRENT_CONSENT.detail}{" "}
+            {/* The one place a guest is asked to agree to anything, so the one
+                place the policy has to be reachable. Opens in a new tab: this
+                form holds a half-typed name and an unticked box, and navigating
+                away to read the policy would lose both. */}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-paper underline underline-offset-2 transition-colors hover:text-volt focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-volt"
+            >
+              Privacy Policy
+            </a>
+          </p>
           <Button type="submit" disabled={loading || !consent} className="w-full">
             {loading ? "Joining…" : "Continue"}
           </Button>

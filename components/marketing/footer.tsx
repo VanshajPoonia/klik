@@ -10,7 +10,19 @@ export function Footer() {
           <Image src="/klik-mark.png" alt="" width={22} height={22} className="rounded-[6px]" />
           <span className="text-sm text-muted">&copy; {new Date().getFullYear()} Klik</span>
         </div>
-        <div className="flex gap-6 text-sm text-muted">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted">
+          <Link
+            href="/terms"
+            className="transition-colors hover:text-volt focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-volt"
+          >
+            Terms
+          </Link>
+          <Link
+            href="/privacy"
+            className="transition-colors hover:text-volt focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-volt"
+          >
+            Privacy
+          </Link>
           <span>
             Made by{" "}
             <Link
