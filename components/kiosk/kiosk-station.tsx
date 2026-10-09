@@ -186,7 +186,10 @@ export function KioskStation({
     if (!video) return;
     setFlash(true);
     window.setTimeout(() => setFlash(false), 180);
-    const captured = await capturePhoto(video, { mirror: facing === "user", digitalZoom: 1, look: lookById(DEFAULT_LOOK) });
+    // The preview is a mirror, which is how people expect to see themselves,
+    // but the photo is saved the right way round, so a sign behind the group
+    // reads properly in the gallery.
+    const captured = await capturePhoto(video, { mirror: false, digitalZoom: 1, look: lookById(DEFAULT_LOOK) });
     if (!captured) {
       setCameraError("The camera did not give a picture. Tap Try again.");
       return;
@@ -194,7 +197,7 @@ export function KioskStation({
     const file = new File([captured.blob], `kiosk-${Date.now()}.jpg`, { type: "image/jpeg" });
     setShot({ file, url: URL.createObjectURL(captured.blob), width: captured.width, height: captured.height });
     setStep("review");
-  }, [facing]);
+  }, []);
 
   // Three, two, one.
   useEffect(() => {
@@ -257,11 +260,11 @@ export function KioskStation({
         <button
           type="button"
           onClick={openCamera}
-          className="flex flex-1 flex-col items-center justify-center gap-10 px-8 pb-40 pt-16 text-center"
+          className="flex flex-1 flex-col items-center justify-center gap-10 px-8 pb-64 pt-16 text-center sm:pb-40"
         >
           <span className="max-w-3xl font-display text-5xl leading-tight text-paper sm:text-7xl">{eventName}</span>
-          <span className="inline-flex min-h-20 items-center gap-4 rounded-full bg-volt px-12 text-2xl font-semibold text-on-volt shadow-none transition-transform active:scale-95">
-            <Camera className="h-8 w-8" aria-hidden="true" />
+          <span className="inline-flex min-h-20 items-center gap-3 whitespace-nowrap rounded-full bg-volt px-8 text-xl font-semibold text-on-volt transition-transform active:scale-95 sm:gap-4 sm:px-12 sm:text-2xl">
+            <Camera className="h-7 w-7 sm:h-8 sm:w-8" aria-hidden="true" />
             Tap to take a photo
           </span>
           <span className="max-w-xl text-base text-muted">It goes straight into the gallery for everyone here.</span>
@@ -269,18 +272,18 @@ export function KioskStation({
       )}
 
       {step === "attract" && (
-        <footer className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-6 p-6">
+        <footer className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col-reverse items-start gap-4 p-6 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
           <p className="max-w-xl text-xs leading-relaxed text-muted">
             By taking a photo you agree: &ldquo;{consent}&rdquo; To have one taken down, ask the host. Terms and
             Privacy Policy at {shortUrl.split("/")[0]}.
           </p>
-          <div className="pointer-events-auto flex items-center gap-2">
+          <div className="pointer-events-auto flex shrink-0 items-center gap-2">
             {canFullscreen && !fullscreen && (
               <button
                 type="button"
                 onClick={() => void document.documentElement.requestFullscreen?.().catch(() => {})}
                 aria-label="Full screen"
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-canvas-line text-muted"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-canvas-line text-muted"
               >
                 <Expand className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -289,7 +292,7 @@ export function KioskStation({
               <button
                 type="button"
                 onClick={() => void leave()}
-                className="min-h-11 rounded-full border border-canvas-line px-4 text-xs text-muted"
+                className="min-h-11 whitespace-nowrap rounded-full border border-canvas-line px-4 text-xs text-muted"
               >
                 Leave kiosk mode
               </button>
