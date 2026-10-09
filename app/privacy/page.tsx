@@ -208,10 +208,12 @@ export default function PrivacyPage() {
       <p>
         Access is controlled by the organizer. A gallery can be public to anyone with the link,
         protected by a password, or private. An organizer can hide an individual photo, and can
-        create a share link for one photo that can later be revoked, expired, or limited to a number
-        of views. Every single request for a photo is checked against those rules at the moment it
-        is made, so revoking access takes effect immediately rather than when a cache happens to
-        expire.
+        create a share link for one photo, for a folder, or for a selection of photos, that can
+        later be revoked, expired, or limited to a number of views. A folder link shows what is in
+        that folder when it is opened, including photos added to it later, but never a photo the
+        organizer hid. Every request is checked against those rules at the moment it is made, so
+        revoking access stops a link working immediately; a photo already showing on someone&rsquo;s
+        screen stays viewable there for a few minutes at most.
       </p>
       <p>
         A guest can delete anything they uploaded. The organizer can also remove it, which is what

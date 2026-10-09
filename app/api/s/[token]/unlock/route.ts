@@ -9,7 +9,7 @@ import {
 } from "@/lib/guest";
 import { clientIp, consume } from "@/lib/ratelimit";
 import { DENIAL_COPY, evaluateShare } from "@/lib/share-access";
-import { loadShareByToken, verifySharePassword } from "@/lib/shares";
+import { loadShareByToken, shareTargetExists, verifySharePassword } from "@/lib/shares";
 
 const bodySchema = z.object({ password: z.string().min(1).max(200) });
 
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   // does but has no password: both are "there is nothing to unlock here", and
   // separating them would turn this route into a way to test whether a token is
   // real without ever holding the password.
-  if (!resolved?.item || !resolved.share.passwordHash) {
+  if (!resolved || !shareTargetExists(resolved) || !resolved.share.passwordHash) {
     return NextResponse.json({ error: DENIAL_COPY.not_found.title }, { status: 404 });
   }
 

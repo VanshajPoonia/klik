@@ -21,6 +21,16 @@ import type { Media, MediaShare } from "./schema";
 
 export const MAX_SHARE_VIEWS = 10_000;
 
+/**
+ * The most photos one selection link may hold. A selection is picked by hand
+ * in the dashboard, so this is far past anything a person means, and it keeps
+ * one request from writing an unbounded list.
+ */
+export const MAX_SELECTION_SHARE_ITEMS = 500;
+
+/** Photos a share page shows at once before it asks for more. */
+export const SHARE_PAGE_SIZE = 60;
+
 export type ShareDenial =
   /** No such token, or what it pointed at no longer exists. */
   | "not_found"
@@ -106,6 +116,31 @@ export const DENIAL_COPY: Record<ShareDenial, { title: string; detail: string }>
   },
 };
 
+/**
+ * The same refusals, worded for a link to several photos. Only the ones that
+ * name what was shared differ; the rest read the same either way.
+ */
+const COLLECTION_DENIAL_COPY: Partial<Record<ShareDenial, { title: string; detail: string }>> = {
+  revoked: {
+    title: "This link was turned off.",
+    detail: "The person who shared these photos switched the link off. Ask them for a new one.",
+  },
+  password: {
+    title: "These photos need a password.",
+    detail: "Whoever sent you the link can give you the password.",
+  },
+};
+
+/** The copy for a refusal, for a link to one photo or to several. */
+export function denialCopy(reason: ShareDenial, collection = false): { title: string; detail: string } {
+  return (collection ? COLLECTION_DENIAL_COPY[reason] : undefined) ?? DENIAL_COPY[reason];
+}
+
+/** Whether a scope opens several photos rather than one. */
+export function isCollectionScope(scope: string): scope is "album" | "selection" {
+  return scope === "album" || scope === "selection";
+}
+
 /** HTTP status for a refusal. 410 for something that existed and stopped. */
 export function denialStatus(reason: ShareDenial): number {
   switch (reason) {
@@ -135,6 +170,30 @@ export function shareDownloadPath(token: string): string {
 }
 
 /**
+ * Where the photos behind a folder or selection link live, one route per
+ * photo below it: `<base>/<id>/content` and `<base>/<id>/download`, the same
+ * shape as the gallery's, so the gallery's viewer can open them as they are.
+ */
+export function shareItemsPath(token: string): string {
+  return `/api/s/${encodeURIComponent(token)}/items`;
+}
+
+export function shareItemContentPath(token: string, mediaId: string): string {
+  return `${shareItemsPath(token)}/${encodeURIComponent(mediaId)}/content`;
+}
+
+/** A ZIP of everything behind a folder or selection link, in parts. */
+export function shareZipPath(token: string, part: number): string {
+  return `/api/s/${encodeURIComponent(token)}/zip?part=${part}`;
+}
+
+/** What a ZIP of shared photos is called. Like a single download, it names
+ *  neither the event nor the token. */
+export function shareZipFilename(part: number, parts: number): string {
+  return parts > 1 ? `klik-shared-photos-part-${part}-of-${parts}.zip` : "klik-shared-photos.zip";
+}
+
+/**
  * The name the file lands under.
  *
  * Shared by the download route and the viewer's own save-the-enhanced-bytes
@@ -145,6 +204,23 @@ export function shareDownloadPath(token: string): string {
  */
 export function shareDownloadFilename(item: Pick<Media, "id">, extension: string): string {
   return `klik-${item.id.slice(0, 8)}.${extension}`;
+}
+
+/**
+ * One photo as a folder or selection link's page receives it: the routes that
+ * re-check the link, and short-lived signed URLs so a page of tiles is not a
+ * page of requests to us. Nothing about who took it.
+ */
+export interface SharedItem {
+  id: string;
+  kind: "photo" | "video";
+  /** The authorized route: plays video, and is the fallback when a signature lapses. */
+  blobUrl: string;
+  src: string | null;
+  thumbSrc: string | null;
+  posterSrc: string | null;
+  posterUrl: string | null;
+  durationS: number | null;
 }
 
 /**
@@ -159,9 +235,17 @@ export interface ManagedShare {
   id: string;
   token: string;
   url: string;
-  scope: "media" | "album" | "event";
+  scope: "media" | "album" | "event" | "selection";
   mediaId: string | null;
   mediaKind: "photo" | "video" | null;
+  /** A folder link's folder, and its name while it is not in the trash. */
+  albumId: string | null;
+  albumName: string | null;
+  /** A selection link: how many of its photos are still there. */
+  itemCount: number | null;
+  /** A selection link: one of its photos, for the list's thumbnail. */
+  previewMediaId: string | null;
+  previewKind: "photo" | "video" | null;
   allowDownload: boolean;
   /** Whether one is set. Never the hash. */
   hasPassword: boolean;

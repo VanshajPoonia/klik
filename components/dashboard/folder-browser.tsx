@@ -2,7 +2,7 @@
 
 import { useState, type DragEvent, type FormEvent } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Folder, FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Folder, FolderPlus, Link2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
@@ -78,6 +78,7 @@ export function FolderBrowser({
   onDropMedia,
   moments = [],
   onMomentsChange,
+  onShareFolder,
 }: {
   eventId: string;
   folders: DashboardFolder[];
@@ -91,6 +92,8 @@ export function FolderBrowser({
   /** AI-1: the event's moments, worked out from capture times. */
   moments?: DashboardMoment[];
   onMomentsChange?: (next: DashboardMoment[]) => void;
+  /** MED-2: opens the share sheet for a folder, for whoever may make links. */
+  onShareFolder?: (folder: DashboardFolder) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -341,6 +344,15 @@ export function FolderBrowser({
         </div>
       )}
 
+      {current && !canManage && onShareFolder && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onShareFolder(current)}>
+            <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Share link
+          </Button>
+        </div>
+      )}
+
       {current && canManage && (
         <div className="flex flex-wrap items-center gap-2">
           {renaming ? (
@@ -382,6 +394,12 @@ export function FolderBrowser({
             </div>
           ) : (
             <>
+              {onShareFolder && (
+                <Button variant="ghost" size="sm" onClick={() => onShareFolder(current)}>
+                  <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  Share link
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"

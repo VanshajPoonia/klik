@@ -21,6 +21,9 @@ export async function GET(
   }
 
   const { share, item } = resolved;
+  // A folder or selection link downloads each photo from its own route below
+  // `/items`, which checks that the link opens that photo.
+  if (!item) return NextResponse.json({ error: DENIAL_COPY.not_found.title }, { status: 404 });
 
   // Downloading is viewing with a copy kept, so it is a separate permission and
   // defaults to off. A host who shares a photo to be looked at has not thereby

@@ -181,7 +181,7 @@ export type MediaStatus = (typeof MEDIA_STATUSES)[number];
 export const MEDIA_VISIBILITIES = ["gallery", "private", "link"] as const;
 export type MediaVisibility = (typeof MEDIA_VISIBILITIES)[number];
 
-export const SHARE_SCOPES = ["media", "album", "event"] as const;
+export const SHARE_SCOPES = ["media", "album", "event", "selection"] as const;
 export type ShareScope = (typeof SHARE_SCOPES)[number];
 
 export const QR_TEMPLATES = ["classic", "minimal", "bold"] as const;
@@ -579,6 +579,28 @@ export const mediaShares = pgTable(
   (table) => [
     index("media_shares_event_idx").on(table.eventId, table.createdAt),
     index("media_shares_media_idx").on(table.mediaId),
+    index("media_shares_album_idx").on(table.albumId),
+  ],
+);
+
+/**
+ * The photos in a `selection` share link, fixed when the link is made. A
+ * selection is not a folder: a photo lives in one folder, and a hidden folder
+ * for the link would move the photos out of the host's own.
+ */
+export const mediaShareItems = pgTable(
+  "media_share_items",
+  {
+    shareId: text("share_id")
+      .notNull()
+      .references(() => mediaShares.id, { onDelete: "cascade" }),
+    mediaId: text("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.shareId, table.mediaId] }),
+    index("media_share_items_media_idx").on(table.mediaId),
   ],
 );
 

@@ -6,7 +6,7 @@ import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
-import { DENIAL_COPY } from "@/lib/share-access";
+import { denialCopy } from "@/lib/share-access";
 
 /**
  * The password in front of a protected share link.
@@ -15,8 +15,9 @@ import { DENIAL_COPY } from "@/lib/share-access";
  * a photo or a video. Whoever sent the link said that; the page repeating it
  * would hand the same detail to anyone who got the address by accident.
  */
-export function SharePasswordGate({ token }: { token: string }) {
+export function SharePasswordGate({ token, collection = false }: { token: string; collection?: boolean }) {
   const router = useRouter();
+  const copy = denialCopy("password", collection);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,9 +60,9 @@ export function SharePasswordGate({ token }: { token: string }) {
           </span>
         </div>
         <h1 className="mt-5 text-center font-display text-2xl text-paper">
-          {DENIAL_COPY.password.title}
+          {copy.title}
         </h1>
-        <p className="mt-3 text-center text-sm text-muted">{DENIAL_COPY.password.detail}</p>
+        <p className="mt-3 text-center text-sm text-muted">{copy.detail}</p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           <Field label="Password" htmlFor="share-password">
@@ -80,7 +81,7 @@ export function SharePasswordGate({ token }: { token: string }) {
             </p>
           )}
           <Button type="submit" disabled={loading || password.length === 0} className="w-full">
-            {loading ? "Checking" : "Open the photo"}
+            {loading ? "Checking" : collection ? "Open the photos" : "Open the photo"}
           </Button>
         </form>
       </div>

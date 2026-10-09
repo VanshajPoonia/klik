@@ -284,6 +284,22 @@ copy goes with it, yours included. That is on purpose, and the Privacy Policy no
 
 - [ ] Edited a photo as a guest and as the host, and saw the copy go when the guest deleted the original
 
+And **share links for a folder or a selection**. On your laptop, open a Premium event's
+gallery tab and open a folder: its row of buttons now starts with **Share link**. Tick
+"Allow downloads", press **Create link**, and open the link on your phone in a private
+tab: you see the folder's photos (and those of the folders inside it) as a grid, open any
+of them, and **Download all** gives a ZIP. Then go back to the laptop, select a few photos
+from anywhere, and choose **Make a share link** from the selection bar's Actions. Check the
+**Links** tab lists both, one with the folder's name and one with the photo count. Press
+**Turn off** on the folder link and reload it on the phone: it says it was turned off.
+Note what a folder link shows: photos added to that folder later appear through it, but a
+photo you hid never does.
+
+The **Privacy Policy** changed for this, the "Who can see a photo" section, dated 10 October.
+
+- [ ] Shared a folder and a selection, opened both on a phone, and turned one off
+- [ ] Read the share link paragraph in `/privacy`
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

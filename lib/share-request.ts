@@ -2,8 +2,8 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { shareCookieName, verifyShareViewer, type ShareViewerState } from "./guest";
 import { evaluateShare, type ShareDenial } from "./share-access";
-import { loadShareByToken } from "./shares";
-import type { Event, Media, MediaShare } from "./schema";
+import { loadShareByToken, shareTargetExists } from "./shares";
+import type { Album, Event, Media, MediaShare } from "./schema";
 
 /**
  * Resolving a share token for one request: look it up, read this browser's
@@ -27,7 +27,19 @@ export type ShareRequest =
       ok: true;
       share: MediaShare;
       event: Event;
+      /** The photo, for a link to one photo. */
       item: Media;
+      folder: null;
+      viewer: ShareViewerState;
+    }
+  | {
+      ok: true;
+      share: MediaShare;
+      event: Event;
+      /** Null: a folder or selection link opens several, through `lib/shares`. */
+      item: null;
+      /** The folder, for a folder link; null for a selection. */
+      folder: Album | null;
       viewer: ShareViewerState;
     }
   | { ok: false; reason: ShareDenial; share: MediaShare | null };
@@ -36,12 +48,12 @@ export async function resolveShareRequest(token: string): Promise<ShareRequest> 
   const resolved = await loadShare(token);
   if (!resolved) return { ok: false, reason: "not_found", share: null };
 
-  const { share, event, item } = resolved;
+  const { share, event, item, folder } = resolved;
 
-  // Null when the photo is soft-deleted, which also covers retention expiry and
-  // purge. Checked before the gate so a link to a deleted photo reads as broken
-  // rather than as revoked, since nobody revoked it.
-  if (!item) return { ok: false, reason: "not_found", share };
+  // A soft-deleted photo, which also covers retention expiry and purge, or a
+  // folder in the trash. Checked before the gate so a link to something
+  // deleted reads as broken rather than as revoked, since nobody revoked it.
+  if (!shareTargetExists(resolved)) return { ok: false, reason: "not_found", share };
 
   const cookieStore = await cookies();
   const raw = cookieStore.get(shareCookieName(share.id))?.value;
@@ -54,5 +66,21 @@ export async function resolveShareRequest(token: string): Promise<ShareRequest> 
   const gate = evaluateShare(share, viewer);
   if (!gate.ok) return { ok: false, reason: gate.reason, share };
 
-  return { ok: true, share, event, item, viewer };
+  if (share.scope === "media" && item) return { ok: true, share, event, item, folder: null, viewer };
+  return { ok: true, share, event, item: null, folder: share.scope === "album" ? folder : null, viewer };
+}
+
+export type CollectionRequest = Extract<ShareRequest, { ok: true; item: null }>;
+
+/**
+ * The same, for the routes that serve a folder or selection link's photos.
+ * A link to one photo opens nothing here: its photo has its own routes.
+ */
+export async function resolveCollectionRequest(
+  token: string,
+): Promise<CollectionRequest | { ok: false; reason: ShareDenial }> {
+  const resolved = await resolveShareRequest(token);
+  if (!resolved.ok) return { ok: false, reason: resolved.reason };
+  if (resolved.item) return { ok: false, reason: "not_found" };
+  return resolved;
 }

@@ -18,7 +18,7 @@ export const LEGAL_ENTITY = "Kreativ Vantage";
 export const SERVICE_NAME = "Klik";
 
 /** Bump whenever either page changes in substance, not for typos. */
-export const LEGAL_LAST_UPDATED = "9 October 2026";
+export const LEGAL_LAST_UPDATED = "10 October 2026";
 
 /** Where notices go. Routed to a human; there is no inbox behind no-reply. */
 export const LEGAL_CONTACT_EMAIL = "hello@klik.kreativvantage.com";

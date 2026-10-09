@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DENIAL_COPY,
+  denialCopy,
   denialStatus,
+  isCollectionScope,
+  shareZipFilename,
   evaluateShare,
   EXPIRY_OPTIONS,
   MAX_SHARE_VIEWS,
@@ -296,18 +299,31 @@ describe("toManagedShare", () => {
   } as MediaShare;
 
   const item = { id: "med_1", kind: "photo" } as Media;
+  const row = (overrides: Partial<MediaShare> = {}) => ({
+    share: { ...share, ...overrides },
+    item,
+    albumName: null,
+    itemCount: null,
+    previewMediaId: null,
+    previewKind: null,
+  });
 
   it("emits exactly the fields the UI needs, and no others", () => {
-    expect(Object.keys(toManagedShare(share, item)).sort()).toEqual(
+    expect(Object.keys(toManagedShare(row())).sort()).toEqual(
       [
+        "albumId",
+        "albumName",
         "allowDownload",
         "createdAt",
         "expiresAt",
         "hasPassword",
         "id",
+        "itemCount",
         "maxViews",
         "mediaId",
         "mediaKind",
+        "previewKind",
+        "previewMediaId",
         "revokedAt",
         "scope",
         "token",
@@ -318,24 +334,42 @@ describe("toManagedShare", () => {
   });
 
   it("never sends the password hash, only whether one is set", () => {
-    const payload = toManagedShare(share, item);
+    const payload = toManagedShare(row());
     expect(JSON.stringify(payload)).not.toContain("$2a$");
     expect(payload.hasPassword).toBe(true);
-    expect(toManagedShare({ ...share, passwordHash: null }, item).hasPassword).toBe(false);
+    expect(toManagedShare(row({ passwordHash: null })).hasPassword).toBe(false);
   });
 
   /** Dates become strings over JSON whatever the type says, so they are
    *  converted here rather than left for a `getTime` on a string to discover. */
   it("serialises timestamps as strings, matching what the client receives", () => {
-    const payload = toManagedShare(share, item);
+    const payload = toManagedShare(row());
     expect(payload.expiresAt).toBe("2026-11-01T00:00:00.000Z");
     expect(payload.createdAt).toBe("2026-10-03T00:00:00.000Z");
     expect(payload.revokedAt).toBeNull();
   });
 
   it("builds an absolute link, since this is the thing being pasted into chat", () => {
-    expect(toManagedShare(share, item).url).toBe(
+    expect(toManagedShare(row()).url).toBe(
       "https://example.test/s/abcdefghijklmnopqrstuv",
     );
+  });
+});
+
+describe("folder and selection links", () => {
+  it("are the scopes that open several photos", () => {
+    expect(["media", "album", "selection", "event"].filter(isCollectionScope)).toEqual(["album", "selection"]);
+  });
+
+  it("word a refusal for several photos only where the words name them", () => {
+    expect(denialCopy("password", true).title).toBe("These photos need a password.");
+    expect(denialCopy("revoked", true).detail).toContain("these photos");
+    expect(denialCopy("expired", true)).toEqual(DENIAL_COPY.expired);
+    expect(denialCopy("password")).toEqual(DENIAL_COPY.password);
+  });
+
+  it("name a ZIP after neither the event nor the link", () => {
+    expect(shareZipFilename(1, 1)).toBe("klik-shared-photos.zip");
+    expect(shareZipFilename(2, 3)).toBe("klik-shared-photos-part-2-of-3.zip");
   });
 });

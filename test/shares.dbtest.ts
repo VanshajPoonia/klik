@@ -256,7 +256,7 @@ describe("listEventShares", () => {
     await makeShare(eventId, { mediaId });
     await makeShare(eventId, { mediaId: otherMedia });
 
-    const rows = await listEventShares(eventId, mediaId);
+    const rows = await listEventShares(eventId, { mediaId });
     expect(rows).toHaveLength(1);
     expect(rows[0].share.mediaId).toBe(mediaId);
   });

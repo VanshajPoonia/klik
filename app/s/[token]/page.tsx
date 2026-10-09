@@ -1,23 +1,40 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  DENIAL_COPY,
+  denialCopy,
+  isCollectionScope,
   shareContentPath,
   shareDownloadFilename,
   shareDownloadPath,
 } from "@/lib/share-access";
 import { extensionForMime } from "@/lib/storage";
-import { resolveShareRequest } from "@/lib/share-request";
+import { loadShare, resolveShareRequest, type CollectionRequest } from "@/lib/share-request";
+import { allCollectionItems, collectionSummary, listCollectionItems, toSharedItems } from "@/lib/shares";
+import { rollUndeveloped } from "@/lib/media-access";
+import { INLINE_ZIP_LIMIT_BYTES, buildDownloadBatches } from "@/lib/download-batches";
 import { ShareView } from "@/components/share/share-view";
+import { ShareCollection } from "@/components/share/share-collection";
 import { SharePasswordGate } from "@/components/share/share-password-gate";
 
 /**
- * One photo, reachable by token alone.
+ * A photo, a folder or a selection, reachable by token alone.
  *
- * Deliberately not a gallery. Somebody arriving here was sent one picture by
- * one person, and very likely has never heard of Klik. So the page is the photo,
- * a line saying where it came from, and one way out.
+ * Deliberately not the gallery. Somebody arriving here was sent something by
+ * one person, and very likely has never heard of Klik. So the page is the
+ * photos, a line saying where they came from, and one way out.
  */
+
+/** What a folder or selection link's page and its preview are called. */
+function collectionTitle(resolved: Pick<CollectionRequest, "event" | "folder">, count: number): string {
+  if (resolved.folder) return `${resolved.folder.name}, from ${resolved.event.name}`;
+  return `${count} ${count === 1 ? "photo" : "photos"} from ${resolved.event.name}`;
+}
+
+/** Whether a token is a folder or selection link, for wording a refusal. */
+async function isCollection(token: string): Promise<boolean> {
+  const loaded = await loadShare(token);
+  return loaded ? isCollectionScope(loaded.share.scope) : false;
+}
 
 export async function generateMetadata({
   params,
@@ -45,7 +62,7 @@ export async function generateMetadata({
   const robots = { index: false, follow: false };
 
   if (!resolved.ok) {
-    const copy = DENIAL_COPY[resolved.reason];
+    const copy = denialCopy(resolved.reason, resolved.share ? isCollectionScope(resolved.share.scope) : false);
     return {
       title: copy.title,
       description: copy.detail,
@@ -54,9 +71,16 @@ export async function generateMetadata({
     };
   }
 
-  const noun = resolved.item.kind === "video" ? "video" : "photo";
-  const title = `A ${noun} from ${resolved.event.name}`;
-  const description = "Shared with you through Klik. Tap to open it.";
+  let title: string;
+  let description: string;
+  if (resolved.item) {
+    title = `A ${resolved.item.kind === "video" ? "video" : "photo"} from ${resolved.event.name}`;
+    description = "Shared with you through Klik. Tap to open it.";
+  } else {
+    const { count } = await collectionSummary(resolved.share, resolved.event);
+    title = collectionTitle(resolved, count);
+    description = "Shared with you through Klik. Tap to see them.";
+  }
 
   return {
     title,
@@ -100,8 +124,9 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
   const resolved = await resolveShareRequest(token);
 
   if (!resolved.ok) {
+    const collection = await isCollection(token);
     if (resolved.reason === "password") {
-      return <SharePasswordGate token={token} />;
+      return <SharePasswordGate token={token} collection={collection} />;
     }
     /**
      * Deliberately a 200 with an explanation rather than a 404. A Server
@@ -111,8 +136,45 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
      * pasted. The routes a machine calls return the honest 404 and 410, and the
      * page is noindex in every state, so nothing is leaning on this status.
      */
-    const copy = DENIAL_COPY[resolved.reason];
+    const copy = denialCopy(resolved.reason, collection);
     return <Refusal title={copy.title} detail={copy.detail} />;
+  }
+
+  // Only offered when the gallery is genuinely open to anyone with the
+  // address. Pointing a stranger at a private or password-protected gallery is
+  // an invitation to a locked door.
+  const galleryUrl = resolved.event.visibility === "public" ? `/e/${resolved.event.slug}` : null;
+
+  if (!resolved.item) {
+    const { share, event, folder } = resolved;
+    const [summary, firstPage] = await Promise.all([
+      collectionSummary(share, event),
+      listCollectionItems(share, event),
+    ]);
+    // A selection whose every photo has gone points at nothing, which is a
+    // broken link rather than an empty one. A folder can fill up again.
+    if (share.scope === "selection" && summary.count === 0) {
+      const copy = denialCopy("not_found", true);
+      return <Refusal title={copy.title} detail={copy.detail} />;
+    }
+    const zipParts =
+      share.allowDownload && summary.count > 0
+        ? buildDownloadBatches(await allCollectionItems(share, event), INLINE_ZIP_LIMIT_BYTES).length
+        : 0;
+    return (
+      <ShareCollection
+        token={token}
+        eventName={event.name}
+        folderName={folder?.name ?? null}
+        count={summary.count}
+        initialItems={await toSharedItems(token, firstPage.items)}
+        initialCursor={firstPage.nextCursor}
+        canDownload={share.allowDownload}
+        zipParts={zipParts}
+        undeveloped={share.scope === "album" && rollUndeveloped(event)}
+        galleryUrl={galleryUrl}
+      />
+    );
   }
 
   const { share, event, item } = resolved;
@@ -132,10 +194,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
        * of those two paths ran would be a small, permanent confusion.
        */
       downloadName={shareDownloadFilename(item, extensionForMime(item.mimeType))}
-      // Only offered when the gallery is genuinely open to anyone with the
-      // address. Pointing a stranger at a private or password-protected gallery
-      // is an invitation to a locked door.
-      galleryUrl={event.visibility === "public" ? `/e/${event.slug}` : null}
+      galleryUrl={galleryUrl}
     />
   );
 }

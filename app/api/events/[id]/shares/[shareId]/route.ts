@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { events, media, mediaShares } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
 import { MAX_SHARE_VIEWS } from "@/lib/share-access";
-import { hashSharePassword, revokeShare, toManagedShare } from "@/lib/shares";
+import { hashSharePassword, revokeShare, shareListRow, toManagedShare } from "@/lib/shares";
 
 /**
  * Every field is `.nullable().optional()`, which is the only way to tell "leave
@@ -103,7 +103,7 @@ export async function PATCH(
     .where(eq(mediaShares.id, shareId))
     .returning();
 
-  return NextResponse.json({ share: toManagedShare(updated, row.item) });
+  return NextResponse.json({ share: toManagedShare(await shareListRow(updated)) });
 }
 
 export async function DELETE(
@@ -121,5 +121,5 @@ export async function DELETE(
   // off. Revoking twice is not an error, and a host clicking it again because
   // they were not sure the first one landed should get agreement, not a 409.
   const [after] = await db.select().from(mediaShares).where(eq(mediaShares.id, shareId)).limit(1);
-  return NextResponse.json({ share: toManagedShare(after, row.item) });
+  return NextResponse.json({ share: toManagedShare(await shareListRow(after)) });
 }

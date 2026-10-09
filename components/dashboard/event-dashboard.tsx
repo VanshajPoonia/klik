@@ -22,7 +22,7 @@ import { CoHostManager, type CoHost, type PendingInvite } from "@/components/das
 import { TeamActivity } from "@/components/dashboard/team-activity";
 import { TransferOffer } from "@/components/dashboard/transfer-offer";
 import type { ActivityEntry } from "@/lib/activity";
-import { ShareSheet } from "@/components/dashboard/share-sheet";
+import { ShareSheet, type ShareTarget } from "@/components/dashboard/share-sheet";
 import { ShareLinksPanel } from "@/components/dashboard/share-links-panel";
 import { Lightbox } from "@/components/guest/lightbox";
 import type { OrganizerEvent } from "@/lib/events";
@@ -125,9 +125,16 @@ export function EventDashboard({
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  // The photo whose share sheet is open. Held as an id rather than the row so it
-  // cannot go stale when the list behind it changes.
-  const [shareMediaId, setShareMediaId] = useState<string | null>(null);
+  // What the share sheet is open for: a photo, a folder or a selection. A
+  // photo is held as an id rather than the row so it cannot go stale when the
+  // list behind it changes.
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+  const shareMedia = (mediaId: string) =>
+    setShareTarget({
+      scope: "media",
+      mediaId,
+      kind: mediaItems.find((item) => item.id === mediaId)?.kind ?? "photo",
+    });
 
   // MED-4. The folder tree is held here because the grid, the selection bar
   // and the browser all read it, and any of them can change what is in it.
@@ -583,7 +590,7 @@ export function EventDashboard({
                   albums={canManageAlbums ? folders : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
-                  onShare={canManageShares ? setShareMediaId : undefined}
+                  onShare={canManageShares ? shareMedia : undefined}
                 />
               </section>
             )}
@@ -646,6 +653,11 @@ export function EventDashboard({
                     onDropMedia={(ids, folderId) => void runBulk({ action: "move", albumId: folderId }, ids)}
                     moments={moments}
                     onMomentsChange={setMoments}
+                    onShareFolder={
+                      canManageShares
+                        ? (folder) => setShareTarget({ scope: "album", albumId: folder.id, name: folder.name })
+                        : undefined
+                    }
                   />
                 </div>
               )}
@@ -675,7 +687,7 @@ export function EventDashboard({
                   albums={canManageAlbums ? folders : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
-                  onShare={canManageShares ? setShareMediaId : undefined}
+                  onShare={canManageShares ? shareMedia : undefined}
                   // A selected tile drags the whole selection with it.
                   dragIds={
                     canManageAlbums && folders.length > 0
@@ -703,7 +715,7 @@ export function EventDashboard({
                   albums={canManageAlbums ? folders : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
-                  onShare={canManageShares ? setShareMediaId : undefined}
+                  onShare={canManageShares ? shareMedia : undefined}
                 />
               </section>
             )}
@@ -805,7 +817,8 @@ export function EventDashboard({
                 if (window.confirm(`Move ${ids.length} to the trash? You can undo, and restore from the trash for 30 days.`)) {
                   void runBulk({ action: "delete" }, ids);
                 }
-              } else if (value === "reject") void runBulk({ action: "reject" }, ids);
+              } else if (value === "share") setShareTarget({ scope: "selection", mediaIds: ids });
+              else if (value === "reject") void runBulk({ action: "reject" }, ids);
               else if (value === "private" || value === "gallery" || value === "link") {
                 void runBulk({ action: "visibility", visibility: value }, ids);
               } else if (value.startsWith("move:")) {
@@ -818,6 +831,7 @@ export function EventDashboard({
             <option value="" disabled>
               {bulkBusy ? "Working…" : "Actions"}
             </option>
+            {canManageShares && <option value="share">Make a share link</option>}
             <option value="private">Hide from guests</option>
             <option value="gallery">Show in the gallery</option>
             <option value="link">Link only</option>
@@ -913,7 +927,7 @@ export function EventDashboard({
           canSlideshow={canSlideshow}
           downloadBaseUrl={downloadBaseUrl}
           slug={event.slug}
-          onShare={canManageShares ? setShareMediaId : undefined}
+          onShare={canManageShares ? shareMedia : undefined}
           share={{
             eventName: event.name,
             accent: canCustomizeGallery ? event.accentColor : "#edee00",
@@ -961,15 +975,8 @@ export function EventDashboard({
         />
       )}
 
-      {shareMediaId && (
-        <ShareSheet
-          eventId={event.id}
-          mediaId={shareMediaId}
-          mediaKind={
-            mediaItems.find((item) => item.id === shareMediaId)?.kind ?? "photo"
-          }
-          onClose={() => setShareMediaId(null)}
-        />
+      {shareTarget && (
+        <ShareSheet eventId={event.id} target={shareTarget} onClose={() => setShareTarget(null)} />
       )}
     </div>
   );

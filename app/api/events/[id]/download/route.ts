@@ -1,14 +1,10 @@
-import { once } from "node:events";
-import { PassThrough, Readable } from "node:stream";
-import { ZipArchive } from "archiver";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { events, media } from "@/lib/schema";
 import { requireEventCapability } from "@/lib/roles";
-import { r2 } from "@/lib/storage";
-import { buildDownloadBatches, zipEntryName } from "@/lib/download-batches";
+import { buildDownloadBatches } from "@/lib/download-batches";
+import { streamZip } from "@/lib/zip-stream";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -82,44 +78,14 @@ async function createDownload(
   }
   const selectedItems = batches[requestedPart - 1];
 
-  const output = new PassThrough();
-  const archive = new ZipArchive({ zlib: { level: 0 } });
-  archive.on("error", (error) => output.destroy(error));
-  archive.pipe(output);
-
-  void (async () => {
-    for (const [index, item] of selectedItems.entries()) {
-      const object = await r2.send(
-        new GetObjectCommand({
-          Bucket: process.env.R2_BUCKET_NAME,
-          Key: item.blobPathname,
-        }),
-      );
-      if (!object.Body || !(object.Body instanceof Readable)) {
-        throw new Error(`Media object ${item.id} did not return a readable body`);
-      }
-
-      const consumed = once(object.Body, "end");
-      archive.append(object.Body, { name: zipEntryName(index, item) });
-      await consumed;
-    }
-    await archive.finalize();
-  })().catch((error) => output.destroy(error instanceof Error ? error : new Error(String(error))));
-
-  return new NextResponse(Readable.toWeb(output) as ReadableStream<Uint8Array>, {
-    headers: {
-      "Cache-Control": "private, no-store",
-      "Content-Disposition": `attachment; filename="${archiveFilename(
-        event.slug,
-        requestedPart,
-        batches.length,
-        Boolean(selectedMediaIds),
-      )}"`,
-      "Content-Type": "application/zip",
+  return streamZip(
+    selectedItems,
+    archiveFilename(event.slug, requestedPart, batches.length, Boolean(selectedMediaIds)),
+    {
       "X-Klik-Zip-Part": String(requestedPart),
       "X-Klik-Zip-Parts": String(batches.length),
     },
-  });
+  );
 }
 
 export async function GET(

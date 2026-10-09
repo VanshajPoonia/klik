@@ -2,12 +2,24 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { Folder } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ShareLinkRow } from "@/components/dashboard/share-link-row";
 import { ShareSettingsEditor } from "@/components/dashboard/share-settings-editor";
 import { useShareLinks } from "@/components/dashboard/use-share-links";
 import { mediaContentPath, mediaPosterPath } from "@/lib/media-delivery";
-import { shareState } from "@/lib/share-access";
+import { shareState, type ManagedShare } from "@/lib/share-access";
+
+/** What a link points at, in words, above its row. A photo needs none: its
+ *  thumbnail is the answer. */
+function targetLabel(share: ManagedShare): string | null {
+  if (share.scope === "album") return share.albumName ? `Folder: ${share.albumName}` : "A folder now in the trash";
+  if (share.scope === "selection") {
+    const count = share.itemCount ?? 0;
+    return count === 0 ? "A selection, now empty" : `${count} selected ${count === 1 ? "photo" : "photos"}`;
+  }
+  return null;
+}
 
 /**
  * Every share link on the event, in one place.
@@ -33,8 +45,9 @@ export function ShareLinksPanel({ eventId, slug }: { eventId: string; slug: stri
       <div>
         <h2 className="font-display text-xl text-paper">Share links</h2>
         <p className="mt-1.5 text-sm text-muted">
-          Every link you have made from a photo in this gallery. Anyone holding a
-          live link can open that photo without joining the gallery.
+          Every link you have made to a photo, a folder or a selection in this
+          gallery. Anyone holding a live link can open what it points at without
+          joining the gallery.
         </p>
       </div>
 
@@ -75,44 +88,59 @@ export function ShareLinksPanel({ eventId, slug }: { eventId: string; slug: stri
       ) : visible.length === 0 ? (
         <Card className="text-sm text-muted">
           {shares.length === 0
-            ? "No share links yet. Open a photo in the gallery and use Share to make one."
+            ? "No share links yet. Open a photo or a folder in the gallery and use Share, or select photos and make one link for them all."
             : "No live links. Switch to All to see the ones you turned off."}
         </Card>
       ) : (
         <div className="space-y-2.5">
-          {visible.map((share) => (
-            <div key={share.id} className="flex gap-3">
-              {share.mediaId && (
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-canvas-line bg-canvas">
-                  <Image
-                    src={
-                      share.mediaKind === "video"
-                        ? mediaPosterPath(slug, share.mediaId)
-                        : mediaContentPath(slug, share.mediaId)
-                    }
-                    alt=""
-                    fill
-                    unoptimized
-                    sizes="64px"
-                    className="object-cover"
-                  />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <ShareLinkRow
-                  share={share}
-                  busy={busyIds.has(share.id)}
-                  onRevoke={(id) => void revoke(id)}
-                >
-                  <ShareSettingsEditor
+          {visible.map((share) => {
+            const previewId = share.mediaId ?? share.previewMediaId;
+            const previewKind = share.mediaId ? share.mediaKind : share.previewKind;
+            const label = targetLabel(share);
+            return (
+              <div key={share.id} className="flex gap-3">
+                {previewId ? (
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-canvas-line bg-canvas">
+                    <Image
+                      src={
+                        previewKind === "video"
+                          ? mediaPosterPath(slug, previewId)
+                          : `${mediaContentPath(slug, previewId)}?thumb=1`
+                      }
+                      alt=""
+                      fill
+                      unoptimized
+                      sizes="64px"
+                      className="object-cover"
+                    />
+                    {share.scope === "selection" && (share.itemCount ?? 0) > 1 && (
+                      <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-medium tabular-nums text-paper">
+                        {share.itemCount}
+                      </span>
+                    )}
+                  </div>
+                ) : share.scope === "album" ? (
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-canvas-line bg-canvas text-muted">
+                    <Folder className="h-6 w-6" aria-hidden="true" />
+                  </div>
+                ) : null}
+                <div className="min-w-0 flex-1">
+                  {label && <p className="mb-1.5 truncate text-sm font-medium text-paper">{label}</p>}
+                  <ShareLinkRow
                     share={share}
                     busy={busyIds.has(share.id)}
-                    onSave={(changes) => void update(share.id, changes)}
-                  />
-                </ShareLinkRow>
+                    onRevoke={(id) => void revoke(id)}
+                  >
+                    <ShareSettingsEditor
+                      share={share}
+                      busy={busyIds.has(share.id)}
+                      onSave={(changes) => void update(share.id, changes)}
+                    />
+                  </ShareLinkRow>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

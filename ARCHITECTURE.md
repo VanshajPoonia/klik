@@ -282,7 +282,7 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 **The entitlement ledger, 2026-10-08.** See constraint 3 and `BILLING.md`. Grants are made on `/admin` with a reason; payments never grant anything themselves.
 
-Folder share links. Any AI that needs a model. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding. Passkeys.
+Any AI that needs a model. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding. Passkeys.
 
 **Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
 
@@ -309,6 +309,8 @@ Folder share links. Any AI that needs a model. The canvas print studio (the QR s
 **Photo challenges, 2026-10-09 (GRW-3).** `challenges` rows (soft-deleted) and `media.challenge_id`, set at registration from a live challenge of the event or dropped. `challengeBoard` in `lib/challenges.ts` is the whole read: per-challenge counts and the leaderboard through the visitor rule of `mediaVisibilityFilter`, the viewer's own ticks without it. The change sync's resync payload is now built in one place (`resyncPayload`), and carries the board; a delta carries it only when it carries photos. `events.leaderboard_enabled` is withheld from guests like `moments_enabled`, because the server decides what it implies.
 
 **Edited copies, 2026-10-09 (CAM-2).** The editor is Filerobot (a pinned beta, the only React 19 release) behind `next/dynamic`, and it never writes to a photo: its output is uploaded as a new row whose `media.derived_from_id` names the original. `lib/media-edits.ts` decides who may edit what (the team any photo, a guest their own; never a kiosk, a video, or a guest on a disposable). `lib/erasure.ts` walks `derived_from_id` before deleting, so a guest's erasure takes every copy made from their photos, including the host's.
+
+**Folder and selection share links, 2026-10-10 (MED-2 album scope, MED-5).** `media_shares.scope` gains `selection`, whose photos are rows in `media_share_items` (`drizzle/0036_collection_shares.sql`), cascading from both sides. A folder link is `album` scope as `0011` laid out, and its contents are worked out when it is opened. `collectionCondition` in `lib/shares.ts` is the one rule for what either opens, used by the page, `/api/s/[token]/items` (paging), `/items/[mediaId]/content` and `/download`, the ZIP and the preview image: a folder opens its live subtree's approved photos that are in the gallery or link-only, dark during an undeveloped roll; a selection opens what was picked, whatever its visibility, until a photo is rejected or deleted; neither opens a video still held back by MED-8. The page signs its tiles with `SHARE_SIGNING_WINDOW_MS` (five minutes, valid ten), shorter than a gallery's, because these signatures are what keeps working after a link is turned off. ZIPs come in 400 MB parts through `lib/zip-stream.ts`, now shared with the organizer's own download. A selection of one is made as a photo link.
 
 `ROADMAP.md` has all of it with task IDs and an order.
 

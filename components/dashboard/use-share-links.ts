@@ -5,8 +5,11 @@ import useSWR from "swr";
 import { apiRequest } from "@/lib/api-client";
 import type { ManagedShare } from "@/lib/share-access";
 
+/** Exactly one target: a photo, a folder, or a selection of photos. */
 export interface CreateShareFields {
-  mediaId: string;
+  mediaId?: string;
+  albumId?: string;
+  mediaIds?: string[];
   allowDownload: boolean;
   expiresInDays: number | null;
   maxViews: number | null;
@@ -27,13 +30,27 @@ export interface CreateShareFields {
  * server still has it live is a photo the host believes is unreachable and is
  * not, so every mutation waits for the server and stores exactly what came back.
  */
-export function useShareLinks(eventId: string, mediaId?: string) {
+/**
+ * Which links to list: one photo's, one folder's, all of the event's, or, for
+ * a selection, none from the server, only those made here. A selection is
+ * not a thing with links of its own until one is made; earlier ones are on the
+ * Links tab.
+ */
+export type ShareLinksScope = { mediaId: string } | { albumId: string } | { madeHere: true } | undefined;
+
+export function useShareLinks(eventId: string, scope?: ShareLinksScope) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
+  const [madeHere, setMadeHere] = useState<ManagedShare[]>([]);
+  const local = Boolean(scope && "madeHere" in scope);
 
-  const listUrl = mediaId
-    ? `/api/events/${eventId}/shares?mediaId=${encodeURIComponent(mediaId)}`
-    : `/api/events/${eventId}/shares`;
+  const listUrl = local
+    ? null
+    : scope && "mediaId" in scope
+      ? `/api/events/${eventId}/shares?mediaId=${encodeURIComponent(scope.mediaId)}`
+      : scope && "albumId" in scope
+        ? `/api/events/${eventId}/shares?albumId=${encodeURIComponent(scope.albumId)}`
+        : `/api/events/${eventId}/shares`;
 
   // SWR rather than a hand-rolled fetch effect, as the guest gallery does. It
   // also means a mutation can write straight into the cache instead of keeping
@@ -48,7 +65,13 @@ export function useShareLinks(eventId: string, mediaId?: string) {
     { revalidateOnFocus: false },
   );
 
-  const shares = data ?? [];
+  const shares = local ? madeHere : (data ?? []);
+
+  /** Writes the server's answer into whichever list this is. */
+  async function write(change: (current: ManagedShare[]) => ManagedShare[]) {
+    if (local) setMadeHere(change);
+    else await mutate((current = []) => change(current), { revalidate: false });
+  }
 
   function setBusy(shareId: string, busy: boolean) {
     setBusyIds((current) => {
@@ -62,10 +85,7 @@ export function useShareLinks(eventId: string, mediaId?: string) {
   /** `revalidate: false` because the response already is the server's answer;
    *  refetching would only add a round trip and a chance to flicker. */
   function replace(updated: ManagedShare) {
-    void mutate(
-      (current = []) => current.map((share) => (share.id === updated.id ? updated : share)),
-      { revalidate: false },
-    );
+    void write((current) => current.map((share) => (share.id === updated.id ? updated : share)));
   }
 
   /** Returns the new link, so the caller can hand it straight to the share sheet. */
@@ -80,7 +100,7 @@ export function useShareLinks(eventId: string, mediaId?: string) {
       setActionError(result.error);
       return null;
     }
-    await mutate((current = []) => [result.data.share, ...current], { revalidate: false });
+    await write((current) => [result.data.share, ...current]);
     return result.data.share;
   }
 
@@ -128,7 +148,7 @@ export function useShareLinks(eventId: string, mediaId?: string) {
 
   return {
     shares,
-    loading: isLoading,
+    loading: !local && isLoading,
     // A failed action is the more recent news, so it wins over a stale load
     // failure rather than being appended to it.
     error: actionError ?? (loadError instanceof Error ? loadError.message : null),

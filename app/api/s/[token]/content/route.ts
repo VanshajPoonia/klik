@@ -33,6 +33,9 @@ export async function GET(
   }
 
   const { item } = resolved;
+  // A folder or selection link serves each photo from its own route below
+  // `/items`, which checks that the link opens that photo.
+  if (!item) return NextResponse.json({ error: DENIAL_COPY.not_found.title }, { status: 404 });
   const wantsPoster =
     new URL(request.url).searchParams.get("poster") === "1" && item.posterPathname;
 

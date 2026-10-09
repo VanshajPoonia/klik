@@ -34,10 +34,17 @@ import { r2 } from "./storage";
 
 export const SIGNING_WINDOW_MS = 15 * 60 * 1000;
 
-export function signingWindow(now: number) {
+/**
+ * Share links sign for a shorter window. A link travels further than a
+ * gallery and can be turned off, and these signatures are what keeps working
+ * for whoever already has the page open after that, so they last minutes.
+ */
+export const SHARE_SIGNING_WINDOW_MS = 5 * 60 * 1000;
+
+export function signingWindow(now: number, windowMs = SIGNING_WINDOW_MS) {
   return {
-    signingDate: new Date(Math.floor(now / SIGNING_WINDOW_MS) * SIGNING_WINDOW_MS),
-    expiresIn: (2 * SIGNING_WINDOW_MS) / 1000,
+    signingDate: new Date(Math.floor(now / windowMs) * windowMs),
+    expiresIn: (2 * windowMs) / 1000,
   };
 }
 
@@ -49,8 +56,9 @@ export function signObjectUrl(
   key: string,
   contentType: string,
   now: number,
+  windowMs = SIGNING_WINDOW_MS,
 ): Promise<string> {
-  const { signingDate, expiresIn } = signingWindow(now);
+  const { signingDate, expiresIn } = signingWindow(now, windowMs);
   return getSignedUrl(
     r2,
     new GetObjectCommand({
@@ -83,14 +91,20 @@ export interface SignedMediaUrls {
   posterSrc: string | null;
 }
 
-export async function signMediaUrls(item: SignableMedia, now = Date.now()): Promise<SignedMediaUrls> {
-  const thumb = item.thumbPathname ? signObjectUrl(item.thumbPathname, "image/jpeg", now) : null;
+export async function signMediaUrls(
+  item: SignableMedia,
+  now = Date.now(),
+  windowMs = SIGNING_WINDOW_MS,
+): Promise<SignedMediaUrls> {
+  const thumb = item.thumbPathname ? signObjectUrl(item.thumbPathname, "image/jpeg", now, windowMs) : null;
 
   if (item.kind === "video") {
-    const poster = item.posterPathname ? await signObjectUrl(item.posterPathname, "image/jpeg", now) : null;
+    const poster = item.posterPathname
+      ? await signObjectUrl(item.posterPathname, "image/jpeg", now, windowMs)
+      : null;
     return { src: null, thumbSrc: (await thumb) ?? poster, posterSrc: poster };
   }
 
-  const src = await signObjectUrl(item.blobPathname, item.mimeType, now);
+  const src = await signObjectUrl(item.blobPathname, item.mimeType, now, windowMs);
   return { src, thumbSrc: (await thumb) ?? src, posterSrc: null };
 }
