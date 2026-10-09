@@ -89,6 +89,8 @@ interface PendingUpload {
   prepared?: { width: number; height: number };
   /** GRW-3: taken from a challenge card. */
   challengeId?: string | null;
+  /** CAM-1: when the in-app camera took it. */
+  capturedAt?: string;
 }
 
 interface FailedUpload extends PendingUpload {
@@ -375,7 +377,7 @@ export function GuestGallery({
   }, [applyChanges, event.slug, reloadFirstPage, syncedAt]);
 
   const uploadOne = useCallback(
-    async ({ file, prepared, challengeId }: PendingUpload) => {
+    async ({ file, prepared, challengeId, capturedAt }: PendingUpload) => {
       const mediaId = nanoid();
 
       setUploading((current) => [...current, { id: mediaId, progress: 0 }]);
@@ -388,6 +390,7 @@ export function GuestGallery({
           prepared,
           albumId: uploadAlbumId || null,
           challengeId: challengeId ?? null,
+          capturedAt: capturedAt ?? null,
           maxVideoSeconds,
           onProgress: (percentage) =>
             setUploading((current) =>
@@ -407,7 +410,7 @@ export function GuestGallery({
       } catch {
         // One file failing shouldn't block the rest of the batch, but it should
         // never disappear silently either.
-        setFailed((current) => [...current, { id: mediaId, file, prepared, challengeId }]);
+        setFailed((current) => [...current, { id: mediaId, file, prepared, challengeId, capturedAt }]);
       } finally {
         setUploading((current) => current.filter((item) => item.id !== mediaId));
         setRemaining((count) => Math.max(0, count - 1));
@@ -442,7 +445,7 @@ export function GuestGallery({
   const retryFailed = useCallback(() => {
     // Kept out of the state updater: those must stay pure, or StrictMode's
     // double-invoke would queue every retry twice.
-    const pending = failed.map(({ file, prepared, challengeId }) => ({ file, prepared, challengeId }));
+    const pending = failed.map(({ file, prepared, challengeId, capturedAt }) => ({ file, prepared, challengeId, capturedAt }));
     setFailed([]);
     uploadFiles(pending);
   }, [failed, uploadFiles]);
@@ -1187,10 +1190,11 @@ export function GuestGallery({
           disposable={cameraOnly ? { shotsLeft } : undefined}
           onComplete={(captured: CapturedItem[]) =>
             uploadFiles(
-              captured.map(({ file, width, height }) => ({
+              captured.map(({ file, width, height, capturedAt }) => ({
                 file,
                 prepared: width && height ? { width, height } : undefined,
                 challengeId: challengeRef.current,
+                capturedAt,
               })),
             )
           }

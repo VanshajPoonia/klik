@@ -67,6 +67,8 @@ export interface GalleryUpload {
   albumId?: string | null;
   /** GRW-3: the challenge card it was taken from. */
   challengeId?: string | null;
+  /** CAM-1: when a camera capture was taken. A capture has no EXIF to read. */
+  capturedAt?: string | null;
   maxVideoSeconds: number;
   onProgress?: (percentage: number) => void;
 }
@@ -90,6 +92,7 @@ export async function uploadToGallery({
   prepared,
   albumId = null,
   challengeId = null,
+  capturedAt: capturedAtGiven = null,
   maxVideoSeconds,
   onProgress = () => {},
 }: GalleryUpload): Promise<{ media?: unknown }> {
@@ -104,7 +107,7 @@ export async function uploadToGallery({
   // draws to a canvas, and a canvas cannot carry metadata across, so this is
   // the last moment the camera's timestamp exists. Camera captures arrive
   // already prepared and never had EXIF to begin with.
-  const capturedAt = isPhoto && !prepared ? await readCaptureTimeFromFile(file) : null;
+  const capturedAt = capturedAtGiven ?? (isPhoto && !prepared ? await readCaptureTimeFromFile(file) : null);
 
   const compressed = isPhoto && !prepared ? await compressImageForUpload(file) : null;
 

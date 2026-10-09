@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { nanoid } from "nanoid";
 import { Camera, Expand, RotateCcw, SwitchCamera, X } from "lucide-react";
-import { cameraSupported, capturePhoto, openStream, type FacingMode } from "@/lib/camera";
+import { cameraSupported, capturePhoto, openStream, wallClock, type FacingMode } from "@/lib/camera";
 import { DEFAULT_LOOK, lookById } from "@/lib/image-enhance";
 import { UploadRefused, uploadToGallery } from "@/lib/upload-client";
 
@@ -27,6 +27,7 @@ const COUNTDOWN_FROM = 3;
 
 interface Shot {
   file: File;
+  capturedAt: string;
   url: string;
   width: number;
   height: number;
@@ -189,13 +190,14 @@ export function KioskStation({
     // The preview is a mirror, which is how people expect to see themselves,
     // but the photo is saved the right way round, so a sign behind the group
     // reads properly in the gallery.
+    const capturedAt = wallClock();
     const captured = await capturePhoto(video, { mirror: false, digitalZoom: 1, look: lookById(DEFAULT_LOOK) });
     if (!captured) {
       setCameraError("The camera did not give a picture. Tap Try again.");
       return;
     }
     const file = new File([captured.blob], `kiosk-${Date.now()}.jpg`, { type: "image/jpeg" });
-    setShot({ file, url: URL.createObjectURL(captured.blob), width: captured.width, height: captured.height });
+    setShot({ file, capturedAt, url: URL.createObjectURL(captured.blob), width: captured.width, height: captured.height });
     setStep("review");
   }, []);
 
@@ -221,6 +223,7 @@ export function KioskStation({
         mediaId: nanoid(),
         file: shot.file,
         prepared: { width: shot.width, height: shot.height },
+        capturedAt: shot.capturedAt,
         // The server files it where the host chose for this kiosk.
         albumId: null,
         maxVideoSeconds: 0,

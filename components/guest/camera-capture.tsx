@@ -5,6 +5,7 @@ import {
   Camera,
   Check,
   Grid3x3,
+  Images,
   RotateCcw,
   SwitchCamera,
   Timer,
@@ -26,17 +27,22 @@ import {
 import {
   applyTorch,
   applyZoom,
+  cameraFailure,
   cameraSupported,
   capturePhoto,
   createFilteredStream,
   estimateBrightness,
   extensionForMime,
   focusAt,
+  levelAngle,
+  LEVEL_TOLERANCE_DEGREES,
   openStream,
   openStreamWithAudio,
   pickRecorderMimeType,
   readCapabilities,
+  wallClock,
   type CameraCapabilities,
+  type CameraFailure,
   type CaptureMode,
   type FacingMode,
   type FilteredStream,
@@ -52,6 +58,8 @@ interface Shot {
    * uploader can skip re-compressing them. */
   width?: number;
   height?: number;
+  /** CAM-1: the wall clock when it was taken. A capture has no EXIF. */
+  capturedAt?: string;
 }
 
 /** What the camera hands back for upload. */
@@ -59,9 +67,15 @@ export interface CapturedItem {
   file: File;
   width?: number;
   height?: number;
+  capturedAt?: string;
 }
 
 const TIMER_STEPS = [0, 3, 10] as const;
+/** CAM-1: holding the shutter this long starts a burst instead of one shot. */
+const BURST_HOLD_MS = 350;
+const BURST_MAX = 20;
+/** A pause between frames, on top of the time a capture takes. */
+const BURST_GAP_MS = 120;
 const DARK_THRESHOLD = 0.28;
 const DOUBLE_TAP_MS = 300;
 
@@ -154,6 +168,12 @@ export function CameraCapture({
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const lastTapRef = useRef(0);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const burstingRef = useRef(false);
+  // Where a press on the shutter is: none, held but not yet a burst, a burst.
+  const pressRef = useRef<"none" | "pressed" | "burst">("none");
+  const libraryRef = useRef<HTMLInputElement>(null);
+  const nativeCameraRef = useRef<HTMLInputElement>(null);
 
   const [facing, setFacing] = useState<FacingMode>(() => loadPrefs().facing ?? "environment");
   const [mode, setMode] = useState<CaptureMode>("photo");
@@ -176,7 +196,9 @@ export function CameraCapture({
   const [captureBlink, setCaptureBlink] = useState(false);
   const [lookToast, setLookToast] = useState<string | null>(null);
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<CameraFailure | null>(null);
+  const [burstCount, setBurstCount] = useState<number | null>(null);
+  const [level, setLevel] = useState<{ degrees: number; flat: boolean } | null>(null);
   const [starting, setStarting] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -212,7 +234,7 @@ export function CameraCapture({
 
   const start = useCallback(async () => {
     if (!cameraSupported()) {
-      setError("This browser can't open the camera. Try adding photos from your library instead.");
+      setError(cameraFailure({ name: "unsupported" }, navigator.userAgent));
       setStarting(false);
       return;
     }
@@ -234,14 +256,7 @@ export function CameraCapture({
         await videoRef.current.play().catch(() => {});
       }
     } catch (err) {
-      const name = err instanceof DOMException ? err.name : "";
-      if (name === "NotAllowedError") {
-        setError("Camera access was blocked. Allow the camera in your browser settings to shoot.");
-      } else if (name === "NotFoundError") {
-        setError("No camera was found on this device.");
-      } else {
-        setError("Couldn't start the camera. You can still add photos from your library.");
-      }
+      setError(cameraFailure(err, navigator.userAgent));
     } finally {
       setStarting(false);
     }
@@ -311,21 +326,29 @@ export function CameraCapture({
     [caps.hasTorch, facing, trackTimeout],
   );
 
-  const shootNow = useCallback(async () => {
+  const shootNow = useCallback(async ({ burst = false }: { burst?: boolean } = {}) => {
     const video = videoRef.current;
     if (!video) return;
     setBusy(true);
     try {
+      // No flash inside a burst: a strobe at four frames a second helps nobody.
       const wantFlash =
-        flash === "on" || (flash === "auto" && estimateBrightness(video) < DARK_THRESHOLD);
+        !burst && (flash === "on" || (flash === "auto" && estimateBrightness(video) < DARK_THRESHOLD));
       await runFlashPulse(wantFlash);
       if (wantFlash) await new Promise((r) => trackTimeout(() => r(null), 120));
 
-      const captured = await capturePhoto(video, { mirror, digitalZoom, look: activeLook });
+      const capturedAt = wallClock();
+      // CAM-1: the front camera's preview is a mirror, which is how people
+      // expect to see themselves, but the photo is saved the right way round,
+      // as phone cameras do, so writing behind someone reads properly.
+      const captured = await capturePhoto(video, { mirror: false, digitalZoom, look: activeLook });
       if (!captured) return;
-      // A quick blink of the viewfinder is the tactile "it fired" cue.
-      setCaptureBlink(true);
-      trackTimeout(() => setCaptureBlink(false), 110);
+      // A quick blink of the viewfinder is the tactile "it fired" cue. Not
+      // in a burst, where it would strobe; the counter says it is firing.
+      if (!burst) {
+        setCaptureBlink(true);
+        trackTimeout(() => setCaptureBlink(false), 110);
+      }
       const id = nanoid();
       const file = new File([captured.blob], `klik-photo-${id}.jpg`, { type: "image/jpeg" });
       const shot: Shot = {
@@ -335,13 +358,14 @@ export function CameraCapture({
         kind: "photo",
         width: captured.width,
         height: captured.height,
+        capturedAt,
       };
       setShots((prev) => [...prev, shot]);
-      if (navigator.vibrate) navigator.vibrate(15);
+      if (navigator.vibrate) navigator.vibrate(burst ? 5 : 15);
     } finally {
       setBusy(false);
     }
-  }, [activeLook, digitalZoom, flash, mirror, runFlashPulse, trackTimeout]);
+  }, [activeLook, digitalZoom, flash, runFlashPulse, trackTimeout]);
 
   const takePhoto = useCallback(() => {
     if (busy || countdown !== null) return;
@@ -372,9 +396,10 @@ export function CameraCapture({
     // frames; plain recording stays on the direct stream.
     let recordStream = source;
     if (look !== "original" && supportsCtxFilter() && videoRef.current) {
+      // Saved the right way round, like a photo (CAM-1).
       const filtered = createFilteredStream(videoRef.current, source, {
         filter: activeLook.preview,
-        mirror,
+        mirror: false,
       });
       if (filtered) {
         filteredRef.current = filtered;
@@ -389,7 +414,7 @@ export function CameraCapture({
     } catch {
       filteredRef.current?.stop();
       filteredRef.current = null;
-      setError("This browser can't record video. Photos still work.");
+      setError({ message: "This browser can't record video.", help: "Photos still work: close this and switch to Photo." });
       return;
     }
     chunksRef.current = [];
@@ -420,7 +445,7 @@ export function CameraCapture({
     setRecordSeconds(0);
     recordTimerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
     if (navigator.vibrate) navigator.vibrate(20);
-  }, [activeLook.preview, caps.hasTorch, flash, look, mirror]);
+  }, [activeLook.preview, caps.hasTorch, flash, look]);
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop();
@@ -447,6 +472,132 @@ export function CameraCapture({
     }
   }, [disposable, mode, recording, rollSpent, startRecording, stopRecording, takePhoto]);
 
+  /**
+   * CAM-1: burst. Holding the shutter in photo mode shoots frame after frame
+   * until it is let go, or twenty frames. Each frame carries its own capture
+   * time, so the gallery stacks them as a burst (AI-1). Not on a disposable,
+   * where every frame is meant to count, and not with the self-timer on.
+   */
+  const canBurst = mode === "photo" && !disposable && timer === 0;
+  const runBurst = useCallback(async () => {
+    burstingRef.current = true;
+    let taken = 0;
+    setBurstCount(0);
+    while (burstingRef.current && taken < BURST_MAX) {
+      await shootNow({ burst: true });
+      taken += 1;
+      setBurstCount(taken);
+      await new Promise((resolve) => setTimeout(resolve, BURST_GAP_MS));
+    }
+    burstingRef.current = false;
+    trackTimeout(() => setBurstCount(null), 900);
+  }, [shootNow, trackTimeout]);
+
+  const shutterDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      pressRef.current = "pressed";
+      if (!canBurst || busy || starting || countdown !== null) return;
+      holdTimerRef.current = setTimeout(() => {
+        holdTimerRef.current = null;
+        pressRef.current = "burst";
+        void runBurst();
+      }, BURST_HOLD_MS);
+    },
+    [busy, canBurst, countdown, runBurst, starting],
+  );
+
+  const shutterUp = useCallback(() => {
+    const press = pressRef.current;
+    pressRef.current = "none";
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    // Letting go ends a burst, including one that already stopped at its
+    // limit, and takes nothing more.
+    if (press === "burst") {
+      burstingRef.current = false;
+      return;
+    }
+    // A tap, or any shutter that cannot burst: the shutter as it always was.
+    if (press === "pressed") handleShutter();
+  }, [handleShutter]);
+
+  const shutterCancel = useCallback(() => {
+    pressRef.current = "none";
+    burstingRef.current = false;
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }, []);
+
+  // A burst never outlives the camera.
+  useEffect(() => () => {
+    burstingRef.current = false;
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+  }, []);
+
+  /**
+   * CAM-1: the grid brings a level with it, a line that lies along the real
+   * horizon and turns to the accent when the phone is straight. iOS asks
+   * permission for the motion sensor, and only from a tap, so it is asked
+   * here, when the grid is switched on.
+   */
+  const toggleGrid = useCallback(() => {
+    const turningOn = !grid;
+    setGrid(turningOn);
+    if (!turningOn) return;
+    const Orientation = (window as unknown as {
+      DeviceOrientationEvent?: { requestPermission?: () => Promise<"granted" | "denied"> };
+    }).DeviceOrientationEvent;
+    void Orientation?.requestPermission?.().catch(() => "denied");
+  }, [grid]);
+
+  useEffect(() => {
+    if (!grid || typeof window === "undefined" || !("DeviceOrientationEvent" in window)) return;
+    let frame = 0;
+    let latest: DeviceOrientationEvent | null = null;
+    const screenAngle = () => {
+      // window.orientation is the one both iOS and Android agree on: 90 for a
+      // phone turned counter-clockwise. screen.orientation is the fallback.
+      const legacy = (window as unknown as { orientation?: number }).orientation;
+      return typeof legacy === "number" ? legacy : (screen.orientation?.angle ?? 0);
+    };
+    const onOrientation = (event: DeviceOrientationEvent) => {
+      latest = event;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (latest?.beta == null || latest.gamma == null) return;
+        const next = levelAngle(latest.beta, latest.gamma, screenAngle());
+        // Half a degree is finer than anyone can hold a phone.
+        const degrees = Math.round(next.degrees * 2) / 2;
+        setLevel((current) =>
+          current && current.degrees === degrees && current.flat === next.flat ? current : { degrees, flat: next.flat },
+        );
+      });
+    };
+    window.addEventListener("deviceorientation", onOrientation);
+    return () => {
+      window.removeEventListener("deviceorientation", onOrientation);
+      if (frame) cancelAnimationFrame(frame);
+      setLevel(null);
+    };
+  }, [grid]);
+
+  /** CAM-1: when the camera cannot open, the phone's own camera or library. */
+  const handOverFiles = useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      stopStream();
+      onComplete(Array.from(files).map((file) => ({ file })));
+      onClose();
+    },
+    [onClose, onComplete, stopStream],
+  );
+
   const switchCamera = useCallback(() => {
     if (recording) return;
     setFacing((f) => (f === "environment" ? "user" : "environment"));
@@ -464,7 +615,7 @@ export function CameraCapture({
   const finish = useCallback(() => {
     if (shots.length === 0) return;
     stopStream();
-    onComplete(shots.map((s) => ({ file: s.file, width: s.width, height: s.height })));
+    onComplete(shots.map((s) => ({ file: s.file, width: s.width, height: s.height, capturedAt: s.capturedAt })));
     // Revoking only drops the URL mapping; the File objects handed off for
     // upload stay valid.
     shots.forEach((s) => URL.revokeObjectURL(s.url));
@@ -550,12 +701,12 @@ export function CameraCapture({
       } else if (e.key.toLowerCase() === "f") {
         switchCamera();
       } else if (e.key.toLowerCase() === "g") {
-        setGrid((g) => !g);
+        toggleGrid();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cleanupAndClose, handleShutter, preview, switchCamera]);
+  }, [cleanupAndClose, handleShutter, preview, switchCamera, toggleGrid]);
 
   return (
     <div className="fixed inset-0 z-[120] flex flex-col bg-black text-paper">
@@ -589,6 +740,26 @@ export function CameraCapture({
             <div className="absolute left-2/3 top-0 h-full w-px bg-white/25" />
             <div className="absolute left-0 top-1/3 h-px w-full bg-white/25" />
             <div className="absolute left-0 top-2/3 h-px w-full bg-white/25" />
+            {/* CAM-1: the level. Two fixed stubs mark straight; the line
+                between them follows the real horizon. */}
+            {level && !level.flat && (
+              <div className="absolute left-1/2 top-1/2 flex w-1/2 -translate-x-1/2 -translate-y-1/2 items-center">
+                {(() => {
+                  const straight = Math.abs(level.degrees) <= LEVEL_TOLERANCE_DEGREES;
+                  const tone = straight ? "bg-volt" : "bg-white/70";
+                  return (
+                    <>
+                      <span className={`h-0.5 w-6 rounded-full ${tone}`} />
+                      <span
+                        className={`mx-2 h-0.5 flex-1 rounded-full transition-colors ${tone}`}
+                        style={{ transform: `rotate(${straight ? 0 : level.degrees}deg)` }}
+                      />
+                      <span className={`h-0.5 w-6 rounded-full ${tone}`} />
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         )}
 
@@ -624,6 +795,16 @@ export function CameraCapture({
           </div>
         )}
 
+        {/* CAM-1: the shot counter, and the burst as it runs. */}
+        {!recording && !disposable && (burstCount !== null || shots.length > 0) && (
+          <div
+            className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium tabular-nums backdrop-blur"
+            aria-live="polite"
+          >
+            {burstCount !== null ? `Burst ${burstCount}` : `${shots.length} taken`}
+          </div>
+        )}
+
         {/* Recording pill */}
         {recording && (
           <div className="pointer-events-none absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium backdrop-blur">
@@ -656,7 +837,7 @@ export function CameraCapture({
                   </span>
                 )}
               </IconButton>
-              <IconButton label="Grid" onClick={() => setGrid((g) => !g)} active={grid}>
+              <IconButton label="Grid and level" onClick={toggleGrid} active={grid}>
                 <Grid3x3 className="h-5 w-5" />
               </IconButton>
               <IconButton
@@ -683,25 +864,70 @@ export function CameraCapture({
 
         {/* Error / permission state */}
         {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-black px-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-canvas-line">
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-5 overflow-y-auto bg-black px-8 py-10 text-center"
+            role="alert"
+          >
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-canvas-line">
               <Camera className="h-7 w-7 text-muted" />
             </div>
-            <p className="max-w-xs text-sm text-muted">{error}</p>
-            <div className="flex gap-3">
+            <div className="max-w-sm space-y-2">
+              <p className="text-base font-medium text-paper">{error.message}</p>
+              {error.help && <p className="text-sm leading-relaxed text-muted">{error.help}</p>}
+            </div>
+            <div className="flex w-full max-w-xs flex-col gap-2.5">
               <button
                 onClick={() => void start()}
-                className="rounded-full bg-volt px-5 py-2.5 text-sm font-medium text-on-volt transition-transform active:scale-[0.96]"
+                className="min-h-11 rounded-full bg-volt px-5 text-sm font-medium text-on-volt transition-transform active:scale-[0.96]"
               >
                 Try again
               </button>
+              {/* CAM-1: the way round. The phone's own camera app, which needs
+                  no permission from this page, and the photo library. */}
               <button
-                onClick={cleanupAndClose}
-                className="rounded-full border border-canvas-line px-5 py-2.5 text-sm font-medium text-paper transition-transform active:scale-[0.96]"
+                onClick={() => nativeCameraRef.current?.click()}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-canvas-line px-5 text-sm font-medium text-paper transition-transform active:scale-[0.96]"
               >
+                <Camera className="h-4 w-4" aria-hidden="true" />
+                Use your phone&apos;s camera
+              </button>
+              {!disposable && (
+                <button
+                  onClick={() => libraryRef.current?.click()}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-canvas-line px-5 text-sm font-medium text-paper transition-transform active:scale-[0.96]"
+                >
+                  <Images className="h-4 w-4" aria-hidden="true" />
+                  Choose from your library
+                </button>
+              )}
+              <button onClick={cleanupAndClose} className="min-h-11 text-sm text-muted">
                 Close
               </button>
             </div>
+            <input
+              ref={nativeCameraRef}
+              type="file"
+              accept={allowVideo ? "image/*,video/*" : "image/*"}
+              capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                handOverFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+            {!disposable && (
+              <input
+                ref={libraryRef}
+                type="file"
+                accept="image/*,video/mp4,video/quicktime,video/webm"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  handOverFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+            )}
           </div>
         )}
 
@@ -824,12 +1050,20 @@ export function CameraCapture({
 
             {/* Shutter */}
             <button
-              onClick={handleShutter}
-              disabled={busy || countdown !== null || starting || rollSpent}
+              // Pointer for taps and holds (burst); a click with no pointer
+              // behind it is a keyboard or a screen reader, and shoots once.
+              onPointerDown={shutterDown}
+              onPointerUp={shutterUp}
+              onPointerCancel={shutterCancel}
+              onClick={(event) => {
+                if (event.detail === 0) handleShutter();
+              }}
+              onContextMenu={(event) => event.preventDefault()}
+              disabled={(busy && burstCount === null) || countdown !== null || starting || rollSpent}
               aria-label={
                 rollSpent ? "Roll finished" : mode === "photo" ? "Take photo" : recording ? "Stop recording" : "Record"
               }
-              className="group relative flex h-20 w-20 items-center justify-center rounded-full disabled:opacity-60"
+              className="group relative flex h-20 w-20 touch-none select-none items-center justify-center rounded-full disabled:opacity-60"
             >
               <span className="absolute inset-0 rounded-full border-4 border-white" />
               <span
@@ -854,16 +1088,21 @@ export function CameraCapture({
             </button>
           </div>
 
-          {/* Done bar */}
-          {shots.length > 0 && !recording && (
-            <button
-              onClick={finish}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-volt py-3 text-sm font-semibold text-on-volt transition-transform active:scale-[0.98]"
-            >
-              <Check className="h-4 w-4" />
-              Add {shots.length} {shots.length === 1 ? "item" : "items"}
-            </button>
-          )}
+          {/* Done bar. Its space is kept even when empty: appearing after the
+              first shot used to push the shutter up under a finger still on
+              it, so the next tap, or the end of a burst, landed on "Add". */}
+          <button
+            onClick={finish}
+            disabled={shots.length === 0 || recording || burstCount !== null}
+            aria-hidden={shots.length === 0 || recording}
+            tabIndex={shots.length === 0 || recording ? -1 : undefined}
+            className={`mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-volt py-3 text-sm font-semibold text-on-volt transition-transform active:scale-[0.98] ${
+              shots.length === 0 || recording ? "invisible" : ""
+            }`}
+          >
+            <Check className="h-4 w-4" />
+            Add {shots.length} {shots.length === 1 ? "item" : "items"}
+          </button>
         </div>
       )}
 

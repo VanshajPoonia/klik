@@ -259,6 +259,21 @@ The **Privacy Policy** gained a paragraph for this too, under "What we collect f
 - [ ] Set challenges, took one from a phone, and saw the tick, the count and the leaderboard
 - [ ] Read the challenges paragraph in `/privacy`
 
+And the **camera**, on a phone, from any gallery's Camera button:
+
+- **Burst:** press and hold the round shutter. It keeps shooting ("Burst 8" at the top)
+  until you let go. Add them, and in the gallery they stack as one photo with a count.
+- **Level:** tap the grid button at the top. On an iPhone it asks to use motion the first
+  time; allow it. A line across the middle follows the horizon and turns yellow when the
+  phone is straight.
+- **Selfies:** take one with writing behind you. The preview is a mirror; the saved photo
+  reads the right way round.
+- **Blocked camera:** in Safari, tap aA, Website Settings, set Camera to Deny, and open the
+  camera again. It explains how to undo that, and offers your phone's own camera and your
+  library instead. Set it back to Allow afterwards.
+
+- [ ] Tried a burst, the level, a selfie with writing, and the blocked-camera screen
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

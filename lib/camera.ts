@@ -258,3 +258,109 @@ export function extensionForMime(mime: string): string {
   if (mime.includes("webm")) return "webm";
   return "bin";
 }
+
+/**
+ * CAM-1: when a photo was taken, as the zone-less wall clock the upload path
+ * carries (`YYYY-MM-DDTHH:MM:SS`, the shape EXIF gives). Photos from the
+ * in-app camera have no EXIF, so without this they reached AI-1 with no
+ * capture time, and a burst shot in the app could never stack.
+ */
+export function wallClock(date: Date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
+
+/**
+ * CAM-1: how far to turn a line on screen so it lies along the real horizon,
+ * from a `deviceorientation` reading and the screen's rotation.
+ *
+ * Worked from gravity rather than from gamma alone, which only means "tilt"
+ * while the phone is flat: the world's up vector in device coordinates is
+ * (-sin g cos b, sin b, cos g cos b), whatever alpha is. Its part in the
+ * screen's plane is turned by the screen's own rotation into the page's axes,
+ * and the angle of that from straight up is the line's rotation, clockwise
+ * positive, as CSS `rotate()` reads it.
+ *
+ * `flat` when the phone faces the floor or the sky, where a horizon means
+ * nothing and the reading swings wildly.
+ */
+export function levelAngle(
+  beta: number,
+  gamma: number,
+  screenAngle = 0,
+): { degrees: number; flat: boolean } {
+  const rad = Math.PI / 180;
+  const b = beta * rad;
+  const g = gamma * rad;
+  const ux = -Math.sin(g) * Math.cos(b);
+  const uy = Math.sin(b);
+  const uz = Math.cos(g) * Math.cos(b);
+  // The device turned counter-clockwise by `screenAngle`, and the page with it
+  // the other way, so the up vector is turned forward by the same amount.
+  const a = screenAngle * rad;
+  const x = ux * Math.cos(a) - uy * Math.sin(a);
+  const y = ux * Math.sin(a) + uy * Math.cos(a);
+  const degrees = Math.atan2(x, y) / rad;
+  return { degrees: Object.is(degrees, -0) ? 0 : degrees, flat: Math.abs(uz) > 0.85 };
+}
+
+/** Within this of level, the line turns to the accent colour. */
+export const LEVEL_TOLERANCE_DEGREES = 1;
+
+export interface CameraFailure {
+  message: string;
+  /** How to fix it on this kind of device, when there is a way. */
+  help: string | null;
+}
+
+/**
+ * CAM-1: what to tell someone whose camera did not open, and how they get it
+ * back on the device they are holding. Every case also gets the phone's own
+ * camera and the photo library as a way round, so nobody is stuck.
+ */
+export function cameraFailure(error: unknown, userAgent: string): CameraFailure {
+  const name = (error as { name?: string } | null)?.name ?? "";
+  const ios = /iPhone|iPad|iPod/i.test(userAgent) || (/Macintosh/i.test(userAgent) && /Mobile/i.test(userAgent));
+  const android = /Android/i.test(userAgent);
+  // Instagram, Facebook, TikTok, Snapchat and LINE open links in a browser of
+  // their own, and most of those never ask for the camera.
+  const inApp = /Instagram|FBAN|FBAV|FB_IAB|TikTok|Snapchat|Line\//i.test(userAgent);
+
+  if (name === "unsupported") {
+    return inApp
+      ? {
+          message: "This app's built-in browser can't open the camera.",
+          help: "Open the page in Safari or Chrome from the menu, or use your phone's camera below.",
+        }
+      : { message: "This browser can't open the camera here.", help: null };
+  }
+  if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError") {
+    if (inApp) {
+      return {
+        message: "This app's built-in browser blocked the camera.",
+        help: "Open the page in Safari or Chrome from the menu, or use your phone's camera below.",
+      };
+    }
+    return {
+      message: "Camera access is blocked for this page.",
+      help: ios
+        ? "In Safari, tap aA in the address bar, then Website Settings, and set Camera to Allow. Then tap Try again."
+        : android
+          ? "Tap the icon at the left of the address bar, then Permissions, and allow Camera. Then tap Try again."
+          : "Click the camera icon in the address bar and allow it, then try again.",
+    };
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError" || name === "OverconstrainedError") {
+    return { message: "No camera was found on this device.", help: null };
+  }
+  if (name === "NotReadableError" || name === "TrackStartError" || name === "AbortError") {
+    return {
+      message: "Another app is using the camera.",
+      help: "Close the other app or video call, then tap Try again.",
+    };
+  }
+  return { message: "The camera didn't start.", help: "Tap Try again, or use your phone's camera below." };
+}
