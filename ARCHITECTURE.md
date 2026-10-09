@@ -306,6 +306,8 @@ Folder share links. Any AI that needs a model. The canvas print studio (the QR s
 
 **Kiosks, 2026-10-09 (VEN-2).** `kiosks` rows (`drizzle/0033_kiosks.sql`) each own a `guests` row, and a paired tablet holds an ordinary guest cookie with a `kioskId` claim; it never holds a user session. `resolveEventViewer` checks the claim against the row on every request and returns `kioskId`, so a switched-off kiosk is no guest at all, and the routes that delete (`DELETE /api/e/[slug]/media/[mediaId]`, `DELETE /api/e/[slug]/me`) refuse a kiosk outright. The gallery page redirects a kiosk to `/e/[slug]/kiosk`, `claimGuestCookies` skips it, and registration files its photos into the kiosk's folder whatever the client sends. The browser upload path now lives in `lib/upload-client.ts`, shared by the gallery and the kiosk.
 
+**Photo challenges, 2026-10-09 (GRW-3).** `challenges` rows (soft-deleted) and `media.challenge_id`, set at registration from a live challenge of the event or dropped. `challengeBoard` in `lib/challenges.ts` is the whole read: per-challenge counts and the leaderboard through the visitor rule of `mediaVisibilityFilter`, the viewer's own ticks without it. The change sync's resync payload is now built in one place (`resyncPayload`), and carries the board; a delta carries it only when it carries photos. `events.leaderboard_enabled` is withheld from guests like `moments_enabled`, because the server decides what it implies.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

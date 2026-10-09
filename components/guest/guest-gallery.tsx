@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { nanoid } from "nanoid";
-import { Camera, Heart, Layers, MessageCircle, Play } from "lucide-react";
+import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
@@ -22,6 +22,7 @@ import type { CapturedItem } from "@/components/guest/camera-capture";
 import { encodeMediaCursor } from "@/lib/media-cursor";
 import { mergeGalleryChanges } from "@/lib/gallery-sync";
 import { childrenOf, flattenFolders, folderPath, inFolder } from "@/lib/folder-tree";
+import type { ChallengeBoard } from "@/lib/challenges";
 
 /** MED-4: a folder as the gallery holds it. See `galleryFolderPayload`. */
 interface GalleryFolder {
@@ -72,6 +73,8 @@ interface MediaItem {
   /** AI-1. The moment it was taken in, and the burst it stacks under. */
   momentId?: string | null;
   burstId?: string | null;
+  /** GRW-3. The challenge it was taken for. */
+  challengeId?: string | null;
 }
 
 interface UploadProgress {
@@ -84,6 +87,8 @@ interface PendingUpload {
   /** Set when the file is already at final size and quality (camera captures),
    * letting the uploader skip a redundant decode/re-encode. */
   prepared?: { width: number; height: number };
+  /** GRW-3: taken from a challenge card. */
+  challengeId?: string | null;
 }
 
 interface FailedUpload extends PendingUpload {
@@ -147,6 +152,7 @@ export function GuestGallery({
   canModerateComments = false,
   linked = null,
   linkedMissing = false,
+  board: initialBoard = null,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -171,6 +177,8 @@ export function GuestGallery({
   linked?: MediaItem | null;
   /** The link pointed at something this viewer cannot see, or that is gone. */
   linkedMissing?: boolean;
+  /** GRW-3: the host's photo challenges, their counts, and the leaderboard. */
+  board?: ChallengeBoard | null;
 }) {
   const [shotsLeft, setShotsLeft] = useState(disposable?.shotsLeft ?? 0);
   // MED-9. Held as state because the host can switch either on while phones
@@ -232,6 +240,15 @@ export function GuestGallery({
   const [moments, setMoments] = useState<GalleryMoment[]>(initialMoments);
   const [chosenMomentId, setChosenMomentId] = useState<string | null>(null);
   const [uploadAlbumId, setUploadAlbumId] = useState<string>("");
+  // GRW-3. Kept fresh by the sync, which sends it with any change to photos.
+  const [board, setBoard] = useState<ChallengeBoard>(initialBoard ?? { challenges: [], done: [], leaderboard: null });
+  // Ticks earned on this phone since the board was last sent.
+  const [doneHere, setDoneHere] = useState<ReadonlySet<string>>(() => new Set());
+  const [chosenChallengeId, setChosenChallengeId] = useState<string | null>(null);
+  // The card a camera or file picker was opened from. A ref, not state: it is
+  // read once, when the files come back, and must not tag the next upload.
+  const challengeRef = useRef<string | null>(null);
+  const challengeInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -311,8 +328,10 @@ export function GuestGallery({
           features?: { reactions: boolean; comments: boolean };
           folders?: GalleryFolder[];
           moments?: GalleryMoment[];
+          board?: ChallengeBoard;
         } = await res.json();
         if (data.folders) setFolders(data.folders);
+        if (data.board) setBoard(data.board);
         if (data.moments) setMoments(data.moments);
         if (data.resync) {
           if (data.features) setFeatures(data.features);
@@ -356,7 +375,7 @@ export function GuestGallery({
   }, [applyChanges, event.slug, reloadFirstPage, syncedAt]);
 
   const uploadOne = useCallback(
-    async ({ file, prepared }: PendingUpload) => {
+    async ({ file, prepared, challengeId }: PendingUpload) => {
       const mediaId = nanoid();
 
       setUploading((current) => [...current, { id: mediaId, progress: 0 }]);
@@ -368,6 +387,7 @@ export function GuestGallery({
           file,
           prepared,
           albumId: uploadAlbumId || null,
+          challengeId: challengeId ?? null,
           maxVideoSeconds,
           onProgress: (percentage) =>
             setUploading((current) =>
@@ -378,12 +398,16 @@ export function GuestGallery({
         // Shown straight away from the registration response rather than
         // waiting for the next poll, so the uploader sees their own photo land.
         if (registered.media) applyChanges([registered.media as MediaItem], []);
+        // The tick shows now, not at the next sync. Only if the server kept the
+        // challenge, which it drops when the host removed it meanwhile.
+        const kept = (registered.media as MediaItem | undefined)?.challengeId;
+        if (kept) setDoneHere((current) => (current.has(kept) ? current : new Set(current).add(kept)));
         if (disposable && !isOwner) setShotsLeft((left) => Math.max(0, left - 1));
         syncNow.current();
       } catch {
         // One file failing shouldn't block the rest of the batch, but it should
         // never disappear silently either.
-        setFailed((current) => [...current, { id: mediaId, file, prepared }]);
+        setFailed((current) => [...current, { id: mediaId, file, prepared, challengeId }]);
       } finally {
         setUploading((current) => current.filter((item) => item.id !== mediaId));
         setRemaining((count) => Math.max(0, count - 1));
@@ -408,9 +432,9 @@ export function GuestGallery({
   );
 
   const handleFiles = useCallback(
-    (files: FileList | null) => {
+    (files: FileList | null, challengeId: string | null = null) => {
       if (!files) return;
-      uploadFiles(Array.from(files).map((file) => ({ file })));
+      uploadFiles(Array.from(files).map((file) => ({ file, challengeId })));
     },
     [uploadFiles],
   );
@@ -418,7 +442,7 @@ export function GuestGallery({
   const retryFailed = useCallback(() => {
     // Kept out of the state updater: those must stay pure, or StrictMode's
     // double-invoke would queue every retry twice.
-    const pending = failed.map(({ file, prepared }) => ({ file, prepared }));
+    const pending = failed.map(({ file, prepared, challengeId }) => ({ file, prepared, challengeId }));
     setFailed([]);
     uploadFiles(pending);
   }, [failed, uploadFiles]);
@@ -533,6 +557,13 @@ export function GuestGallery({
     );
   }, []);
 
+  /** GRW-3: opens the camera or the picker for one challenge card. */
+  const startChallenge = useCallback((challengeId: string, from: "camera" | "library") => {
+    challengeRef.current = challengeId;
+    if (from === "camera") setCameraOpen(true);
+    else challengeInputRef.current?.click();
+  }, []);
+
   const [leaving, setLeaving] = useState<"idle" | "confirm" | "working">("idle");
   const [leaveError, setLeaveError] = useState<string | null>(null);
   /** Everything this guest added, and their name, erased in one go. The Privacy
@@ -559,9 +590,18 @@ export function GuestGallery({
   const activeMomentId =
     chosenMomentId && moments.some((moment) => moment.id === chosenMomentId) ? chosenMomentId : null;
   const inFolderItems = activeFolderId ? inFolder(items, tabFolders, activeFolderId) : items;
-  const visibleItems = activeMomentId
+  const inMomentItems = activeMomentId
     ? inFolderItems.filter((item) => item.momentId === activeMomentId)
     : inFolderItems;
+  // GRW-3: a challenge card, pressed, shows the photos taken for it.
+  const activeChallengeId =
+    chosenChallengeId && board.challenges.some((challenge) => challenge.id === chosenChallengeId) ? chosenChallengeId : null;
+  const visibleItems = activeChallengeId
+    ? inMomentItems.filter((item) => item.challengeId === activeChallengeId)
+    : inMomentItems;
+  const doneChallenges = new Set([...board.done, ...doneHere]);
+  const canTakeChallenge = event.uploadsEnabled && !(cameraOnly && shotsLeft === 0);
+
   // AI-1: a burst shows as its first photo with a count. Only when that photo
   // is itself on screen; otherwise the rest show as they are.
   const shownIds = new Set(visibleItems.map((item) => item.id));
@@ -670,7 +710,10 @@ export function GuestGallery({
                 </select>
               )}
               <Button
-                onClick={() => setCameraOpen(true)}
+                onClick={() => {
+                  challengeRef.current = null;
+                  setCameraOpen(true);
+                }}
                 className="gap-2"
                 disabled={cameraOnly && shotsLeft === 0}
               >
@@ -690,6 +733,20 @@ export function GuestGallery({
                 className="hidden"
                 onChange={(event) => {
                   handleFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+              {/* GRW-3: the same picker, for a challenge card, so a photo
+                  chosen here is tagged and one from "Add media" never is. */}
+              <input
+                ref={challengeInputRef}
+                type="file"
+                accept="image/*,video/mp4,video/quicktime,video/webm"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  handleFiles(event.target.files, challengeRef.current);
+                  challengeRef.current = null;
                   event.target.value = "";
                 }}
               />
@@ -770,6 +827,98 @@ export function GuestGallery({
           </div>
         )}
 
+        {board.challenges.length > 0 && (
+          <section className="mb-6" aria-labelledby="challenges-heading">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <h2 id="challenges-heading" className="text-sm font-semibold text-paper">
+                Photo challenges
+              </h2>
+              {!isOwner && (
+                <span className="text-xs tabular-nums text-muted">
+                  {board.challenges.filter((challenge) => doneChallenges.has(challenge.id)).length} of{" "}
+                  {board.challenges.length} done
+                </span>
+              )}
+            </div>
+            <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+              {board.challenges.map((challenge) => {
+                const done = doneChallenges.has(challenge.id);
+                const pressed = activeChallengeId === challenge.id;
+                return (
+                  <div
+                    key={challenge.id}
+                    className={`flex w-60 shrink-0 flex-col justify-between gap-3 rounded-2xl border bg-canvas-raised p-3 ${
+                      pressed ? "border-volt" : "border-canvas-line"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setChosenChallengeId(pressed ? null : challenge.id)}
+                      aria-pressed={pressed}
+                      className="text-left"
+                    >
+                      <span className="flex items-start gap-2">
+                        {done ? (
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-volt" aria-label="Done" />
+                        ) : (
+                          <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+                        )}
+                        <span className="text-sm leading-snug text-paper">{challenge.prompt}</span>
+                      </span>
+                      <span className="mt-1.5 block pl-6 text-xs text-muted">
+                        {challenge.count} {challenge.count === 1 ? "photo" : "photos"}
+                        {challenge.count > 0 ? (pressed ? ", showing them" : ", tap to see") : ""}
+                      </span>
+                    </button>
+                    {canTakeChallenge && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startChallenge(challenge.id, "camera")}
+                          className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-volt px-3 text-sm font-medium text-on-volt transition-transform active:scale-95"
+                        >
+                          <Camera className="h-4 w-4" aria-hidden="true" />
+                          {done ? "Take another" : "Take it"}
+                        </button>
+                        {!cameraOnly && (
+                          <button
+                            type="button"
+                            onClick={() => startChallenge(challenge.id, "library")}
+                            aria-label={`Choose a photo for: ${challenge.prompt}`}
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-canvas-line text-paper"
+                          >
+                            <ImagePlus className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {board.leaderboard && board.leaderboard.length > 0 && (
+          <section
+            className="mb-6 max-w-sm rounded-2xl border border-canvas-line bg-canvas-raised p-4"
+            aria-labelledby="leaderboard-heading"
+          >
+            <h2 id="leaderboard-heading" className="text-sm font-semibold text-paper">
+              Most photos shared
+            </h2>
+            <ol className="mt-2 space-y-1.5">
+              {board.leaderboard.map((row, index) => (
+                <li key={`${index}:${row.name}`} className="flex items-center gap-3 text-sm">
+                  <span className={`w-5 tabular-nums ${index === 0 ? "text-volt" : "text-muted"}`}>{index + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-paper">{row.name}</span>
+                  <span className="tabular-nums text-muted">{row.count}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
         {moments.length > 1 && (
           <nav className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Moments">
             {[{ id: null, name: "Any time" }, ...moments].map((moment) => {
@@ -840,7 +989,9 @@ export function GuestGallery({
               ? disposable && !isOwner && !disposable.developed
                 ? "The roll is still in the camera. Everyone's photos appear here together when it develops."
                 : "No photos or videos yet. Be the first to add one."
-              : "Nothing in this folder has loaded yet. Scroll for more, or try another folder."}
+              : activeChallengeId
+                ? "Nobody has taken this one yet. Be the first."
+                : "Nothing in this folder has loaded yet. Scroll for more, or try another folder."}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -1039,10 +1190,14 @@ export function GuestGallery({
               captured.map(({ file, width, height }) => ({
                 file,
                 prepared: width && height ? { width, height } : undefined,
+                challengeId: challengeRef.current,
               })),
             )
           }
-          onClose={() => setCameraOpen(false)}
+          onClose={() => {
+            challengeRef.current = null;
+            setCameraOpen(false);
+          }}
         />
       )}
 

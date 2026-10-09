@@ -64,6 +64,8 @@ const TABLES = [
   // Before `media`, `albums`, `guests` and `events`, all of which it references.
   "media_shares",
   "media",
+  // GRW-3, after `media`, which points at it, and before `events`.
+  "challenges",
   "event_co_hosts",
   "albums",
   "guests",

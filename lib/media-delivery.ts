@@ -32,6 +32,7 @@ export function toPublicMedia(
     commentCount?: number;
     momentId?: string | null;
     burstId?: string | null;
+    challengeId?: string | null;
   },
   slug: string,
 ) {
@@ -59,6 +60,8 @@ export function toPublicMedia(
     // AI-1. Which moment it was taken in, and the burst it stacks under.
     momentId: item.momentId ?? null,
     burstId: item.burstId ?? null,
+    // GRW-3. The challenge it was taken for, so a card can show its photos.
+    challengeId: item.challengeId ?? null,
   };
 }
 

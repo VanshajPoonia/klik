@@ -35,7 +35,7 @@
 - Passkeys (ACC-6). Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09. Hearts and comments (MED-9) shipped the same day.
 - Folder share links (album scope). Nested folders **are** built (MED-4, 2026-10-09), and per-photo visibility, share links and revocable access are too: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
-- A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09).
+- A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3, the same day).
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
 - Error tracking (F-9 shipped structured logging and email alerts; Sentry is wired but has no DSN). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
@@ -855,6 +855,8 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 - Gate behind Premium and Venue. It is the most shareable artefact the product can produce and a genuinely good reason to pay the extra $50.
 
 ### GRW-3. Photo challenges
+**DONE 2026-10-09** (`drizzle/0034_challenges.sql`, `lib/challenges.ts`, `components/dashboard/challenges-panel.tsx`, `test/challenges.dbtest.ts`). On every plan. The host sets up to 12 prompts in **Settings** (six starters offered, reorderable, a removed one is soft-deleted so its photos keep pointing at it) and can turn on a leaderboard. Guests see a row of cards above the gallery: "Take it" opens the camera, the picture button the photo picker, and the photo is tagged with that challenge (`media.challenge_id`, set at upload, dropped rather than failing if the host removed the prompt meanwhile). A card shows its count and a tick once this guest has taken it, their own waiting photos included, and tapping it shows everyone's photos for it. **Counts and the leaderboard read only what a visitor could see**, through `mediaVisibilityFilter`, so a hidden photo is never counted and a disposable roll gives nothing away before it develops. The leaderboard is off by default and lists the top five **by the name they gave**: a guest with no name, a kiosk (a queue of people who would win every time) and the host's team are never on it. The board comes with page loads, with every resync, and with any delta that carries photos, never with an empty poll. A kiosk takes no part in challenges. The Privacy Policy says all of this.
+
 **Size:** M. The organizer sets prompts ("a photo with someone you just met", "the worst dance move"). Guests see them as cards in the upload sheet, completed prompts get a checkmark, and a leaderboard shows top contributors. At weddings this reliably multiplies upload volume, which is the metric that makes the gallery worth paying for.
 
 ### GRW-4. Public profile at /u/[username]

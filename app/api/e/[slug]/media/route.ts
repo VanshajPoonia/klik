@@ -27,6 +27,7 @@ import { renderThumbnail } from "@/lib/thumbnail";
 import { enqueue, enqueueMomentsRefresh, enqueueThumbnail, enqueueVideoScrub, kickJobRunner } from "@/lib/jobs";
 import { claimUsageWarning } from "@/lib/notices";
 import { spendShot } from "@/lib/disposable";
+import { liveChallengeId } from "@/lib/challenges";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
 import {
   SIGNATURE_BYTES,
@@ -57,6 +58,8 @@ const registerSchema = z.object({
   thumbPathname: z.string().min(1).optional(),
   contentHash: z.string().optional(),
   albumId: z.string().min(10).max(64).nullable().optional(),
+  // GRW-3: the challenge card it was taken from.
+  challengeId: z.string().min(1).max(64).nullable().optional(),
   // True when the browser already resized/re-encoded the photo before
   // upload, which skips redundant server-side recompression of the same file.
   clientCompressed: z.boolean().optional(),
@@ -479,6 +482,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
   }
 
+  // GRW-3: a challenge the host removed while this was uploading is dropped,
+  // not fatal. A kiosk takes no part: it is not a guest who can win one.
+  const challengeId = viewer.kioskId ? null : await liveChallengeId(event.id, input.challengeId);
+
   const [row] = await db
     .insert(media)
     .values({
@@ -486,6 +493,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       eventId: event.id,
       guestId: viewer.ownerSession ? null : viewer.guestId,
       albumId: input.albumId ?? null,
+      challengeId,
       kind,
       status: event.moderation && !viewer.ownerSession ? "pending" : "approved",
       blobUrl,

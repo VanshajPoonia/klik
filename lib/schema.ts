@@ -300,6 +300,9 @@ export const events = pgTable(
     commentsEnabled: boolean("comments_enabled").notNull().default(false),
     // AI-1: whether guests see the gallery grouped into moments.
     momentsEnabled: boolean("moments_enabled").notNull().default(true),
+    // GRW-3: a ranked list of who has shared most, by display name. Off until
+    // the host turns it on. See lib/challenges.ts.
+    leaderboardEnabled: boolean("leaderboard_enabled").notNull().default(false),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -486,6 +489,8 @@ export const media = pgTable(
     // lib/moments.ts and drizzle/0032_moments.sql.
     momentId: text("moment_id").references((): AnyPgColumn => albums.id, { onDelete: "set null" }),
     burstId: text("burst_id"),
+    // GRW-3: the challenge it was taken for, set at upload and never after.
+    challengeId: text("challenge_id").references((): AnyPgColumn => challenges.id, { onDelete: "set null" }),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),
@@ -946,6 +951,28 @@ export const jobs = pgTable("jobs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
+
+/**
+ * GRW-3: a prompt the host sets for guests to take a photo of. Soft-deleted,
+ * so photos taken for a removed prompt still point at it. See
+ * drizzle/0034_challenges.sql and lib/challenges.ts.
+ */
+export const challenges = pgTable(
+  "challenges",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    prompt: text("prompt").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  // challenges_event_idx is partial and lives in drizzle/0034 (constraint 4).
+);
+
+export type Challenge = typeof challenges.$inferSelect;
 
 /**
  * VEN-2: a tablet at the venue that only takes photos. Its uploads belong to

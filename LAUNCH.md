@@ -246,6 +246,19 @@ The **Privacy Policy** gained one paragraph for this, under "What we collect fro
 - [ ] Paired a tablet as a kiosk, took a photo on it, and switched it off
 - [ ] Read the kiosk paragraph in `/privacy`
 
+And **photo challenges**, on any event. Open the event's **Settings** tab: the
+**Photo challenges** card is on the right. Tap two or three of the suggestions (or write
+your own), tick "Show a leaderboard in the gallery" if you want one, and press **Save
+challenges**. On your phone, open the gallery as a guest with a name: a row of challenge
+cards sits above the photos. Press **Take it** on one, take a photo, and the card gets a
+tick and a count. Tap the card to see only its photos. If you turned the leaderboard on,
+your name appears under "Most photos shared".
+
+The **Privacy Policy** gained a paragraph for this too, under "What we collect from guests".
+
+- [ ] Set challenges, took one from a phone, and saw the tick, the count and the leaderboard
+- [ ] Read the challenges paragraph in `/privacy`
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

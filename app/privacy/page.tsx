@@ -85,6 +85,13 @@ export default function PrivacyPage() {
         the photo sees the comment, with the guest&apos;s display name for that gallery beside it.
       </p>
       <p>
+        If the organizer sets <strong>photo challenges</strong>, a photo taken for one is marked with
+        it, and everyone in the gallery sees how many photos each challenge has. If the organizer also
+        turns on the <strong>leaderboard</strong>, the five guests who have shared the most are listed
+        in the gallery by their display name, with how many photos they shared. A guest who gave no
+        name is never listed.
+      </p>
+      <p>
         An organizer can also set up a <strong>kiosk</strong>: a tablet at the venue that only takes
         photos for the gallery. A photo taken on it is stored like any other upload, against the kiosk
         rather than the person who took it, and the kiosk shows the consent notice below on its start

@@ -36,6 +36,7 @@ import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
 import { linkedMediaId } from "@/lib/media-share";
 import { activeKiosk } from "@/lib/kiosks";
+import { challengeBoard } from "@/lib/challenges";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -163,7 +164,7 @@ export default async function GuestEventPage({
     event,
     viewerReactor,
   );
-  const [folders, moments, coverRows, linkedRows] = await Promise.all([
+  const [folders, moments, coverRows, linkedRows, board] = await Promise.all([
     // MED-4. A roll that has not developed shows guests nothing, folders
     // included: a tab per folder would say what is coming.
     canUseAlbums(plan.key) && (isOwner || !rollUndeveloped(event))
@@ -183,6 +184,8 @@ export default async function GuestEventPage({
     linkedId && !initialMedia.some((item) => item.id === linkedId)
       ? fetchGalleryMedia(event.id, { isOwner, guestId: guestSession?.guestId, event, id: linkedId, limit: 1 })
       : Promise.resolve([]),
+    // GRW-3. Counted as everyone sees them; the ticks are this guest's own.
+    challengeBoard(event, { guestId: isOwner ? null : (guestSession?.guestId ?? null) }),
   ]);
   const linked =
     initialMedia.find((item) => item.id === linkedId) ??
@@ -243,6 +246,7 @@ export default async function GuestEventPage({
       signedIn={Boolean(signedInUserId)}
       canModerateComments={Boolean(actor && can(actor.role, "media.moderate"))}
       linked={linked}
+      board={board}
       linkedMissing={Boolean(linkedId && !linked)}
     />
   );

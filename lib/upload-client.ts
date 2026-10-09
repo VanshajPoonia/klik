@@ -65,6 +65,8 @@ export interface GalleryUpload {
    * letting the uploader skip a redundant decode/re-encode. */
   prepared?: { width: number; height: number };
   albumId?: string | null;
+  /** GRW-3: the challenge card it was taken from. */
+  challengeId?: string | null;
   maxVideoSeconds: number;
   onProgress?: (percentage: number) => void;
 }
@@ -87,6 +89,7 @@ export async function uploadToGallery({
   file,
   prepared,
   albumId = null,
+  challengeId = null,
   maxVideoSeconds,
   onProgress = () => {},
 }: GalleryUpload): Promise<{ media?: unknown }> {
@@ -203,6 +206,7 @@ export async function uploadToGallery({
       clientCompressed: Boolean(compressed) || Boolean(prepared),
       capturedAt: capturedAt ?? undefined,
       albumId: albumId || null,
+      challengeId: challengeId || null,
     }),
   });
   const registered = await registerRes.json().catch(() => ({}));

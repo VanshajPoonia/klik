@@ -36,6 +36,7 @@ import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { UsageMeter, type UsageSummary } from "@/components/dashboard/usage-meter";
 import { ReportedComments, type ReportedCommentRow } from "@/components/dashboard/reported-comments";
 import { KioskPanel } from "@/components/dashboard/kiosk-panel";
+import { ChallengesPanel } from "@/components/dashboard/challenges-panel";
 
 type Tab = "gallery" | "insights" | "links" | "settings" | "qr" | "trash";
 
@@ -57,6 +58,7 @@ export function EventDashboard({
   canManageTrash = false,
   canModerateComments = false,
   canManageKiosks = false,
+  canManageChallenges = false,
   reportedComments = [],
   usage = null,
   addressing = null,
@@ -88,6 +90,8 @@ export function EventDashboard({
   canModerateComments?: boolean;
   /** VEN-2: set up and switch off kiosks, on a plan that has them. */
   canManageKiosks?: boolean;
+  /** GRW-3: set the photo challenges and the leaderboard switch. */
+  canManageChallenges?: boolean;
   reportedComments?: ReportedCommentRow[];
   usage?: UsageSummary | null;
   addressing?: { origin: string; formerSlugs: string[] } | null;
@@ -713,8 +717,9 @@ export function EventDashboard({
               clients={clients}
               addressing={addressing}
             />
-            {(canManageCoHosts || activity) && (
+            {(canManageCoHosts || activity || canManageChallenges) && (
               <div className="space-y-5">
+                {canManageChallenges && <ChallengesPanel eventId={event.id} />}
                 {canManageCoHosts && (
                   <CoHostManager
                     eventId={event.id}

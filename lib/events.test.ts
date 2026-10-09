@@ -56,6 +56,7 @@ const row: Event = {
   reactionsEnabled: true,
   commentsEnabled: true,
   momentsEnabled: true,
+  leaderboardEnabled: false,
 };
 
 /**
@@ -125,6 +126,8 @@ const WITHHELD: Record<string, string> = {
   // AI-1. The server sends no moments when it is off, so the flag says nothing
   // a guest can use.
   momentsEnabled: "decides what the server sends, never needed raw",
+  // GRW-3. The server sends no leaderboard when it is off, for the same reason.
+  leaderboardEnabled: "decides what the server sends, never needed raw",
 };
 
 describe("toPublicEvent", () => {

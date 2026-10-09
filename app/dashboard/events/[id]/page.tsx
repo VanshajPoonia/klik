@@ -137,6 +137,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canManageTrash={can(actor.role, "trash.manage")}
         canModerateComments={canModerateComments}
         canManageKiosks={canUseKiosk(plan.key) && can(actor.role, "event.settings")}
+        canManageChallenges={can(actor.role, "event.settings")}
         moments={moments.map((moment) => ({ id: moment.id, name: moment.name }))}
         reportedComments={commentReports.map((row) => ({
           commentId: row.commentId,

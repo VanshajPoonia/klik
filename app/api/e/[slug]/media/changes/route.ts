@@ -8,6 +8,7 @@ import { canViewMedia, rollUndeveloped } from "@/lib/media-access";
 import { toGalleryMedia } from "@/lib/gallery-media";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
+import { challengeBoard } from "@/lib/challenges";
 import { eventPlan } from "@/lib/license";
 import { canUseAlbums } from "@/lib/plans";
 import type { Event } from "@/lib/schema";
@@ -56,6 +57,20 @@ async function folderUpdate(event: Event, isManager: boolean) {
   return galleryFolderPayload(event.id, { isManager });
 }
 
+/**
+ * Everything a phone starting over needs beside the media: the switches
+ * (MED-9), the folders (MED-4), the moments (AI-1) and the challenges (GRW-3).
+ * Each of those changes by stamping the event, which is what sends a resync.
+ */
+async function resyncPayload(event: Event, at: string, isManager: boolean, guestId: string | null) {
+  const [folders, moments, board] = await Promise.all([
+    folderUpdate(event, isManager),
+    !isManager && rollUndeveloped(event) ? Promise.resolve([]) : galleryMoments(event, { isManager }),
+    challengeBoard(event, { guestId }),
+  ]);
+  return { at, resync: true, features: galleryFeatures(event), folders, moments, board };
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const sinceParam = new URL(request.url).searchParams.get("since");
@@ -86,17 +101,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   if (event.updatedAt > since) {
     // MED-9: the switches travel with the resync, so turning hearts or
     // comments on reaches phones already open without a reload.
-    return NextResponse.json(
-      {
-        at,
-        resync: true,
-        features: galleryFeatures(event),
-        folders: await folderUpdate(event, isManager),
-        // AI-1: a refresh of the moments stamps the event, so it arrives here.
-        moments: !isManager && rollUndeveloped(event) ? [] : await galleryMoments(event, { isManager }),
-      },
-      { headers: noStore },
-    );
+    return NextResponse.json(await resyncPayload(event, at, isManager, viewer.guestId), { headers: noStore });
   }
 
   const from = new Date(since.getTime() - OVERLAP_MS);
@@ -104,17 +109,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // changing, because it is a time passing. When that moment falls inside this
   // poll's window, the phone starts over and gets the whole reveal at once.
   if (event.disposableMode && event.developsAt && event.developsAt > from && event.developsAt <= new Date(at)) {
-    return NextResponse.json(
-      {
-        at,
-        resync: true,
-        features: galleryFeatures(event),
-        folders: await folderUpdate(event, isManager),
-        // AI-1: a refresh of the moments stamps the event, so it arrives here.
-        moments: !isManager && rollUndeveloped(event) ? [] : await galleryMoments(event, { isManager }),
-      },
-      { headers: noStore },
-    );
+    return NextResponse.json(await resyncPayload(event, at, isManager, viewer.guestId), { headers: noStore });
   }
   if (event.mediaChangedAt <= from) {
     return NextResponse.json({ at, upserts: [], removed: [] }, { headers: noStore });
@@ -127,17 +122,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     .orderBy(asc(media.changedAt))
     .limit(MAX_CHANGES + 1);
   if (changed.length > MAX_CHANGES) {
-    return NextResponse.json(
-      {
-        at,
-        resync: true,
-        features: galleryFeatures(event),
-        folders: await folderUpdate(event, isManager),
-        // AI-1: a refresh of the moments stamps the event, so it arrives here.
-        moments: !isManager && rollUndeveloped(event) ? [] : await galleryMoments(event, { isManager }),
-      },
-      { headers: noStore },
-    );
+    return NextResponse.json(await resyncPayload(event, at, isManager, viewer.guestId), { headers: noStore });
   }
 
   const mediaViewer = { isManager: Boolean(viewer.ownerSession), guestId: viewer.guestId };
@@ -159,5 +144,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     reactorFor({ guestId: viewer.guestId, userId: viewer.ownerSession?.user?.id ?? null }),
   );
 
-  return NextResponse.json({ at, upserts, removed }, { headers: noStore });
+  // GRW-3: counts and the leaderboard move only when photos do, so they come
+  // with a delta that carries something, never with an empty poll.
+  const board = upserts.length > 0 || removed.length > 0 ? await challengeBoard(event, { guestId: viewer.guestId }) : undefined;
+  return NextResponse.json({ at, upserts, removed, board }, { headers: noStore });
 }
