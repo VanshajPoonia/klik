@@ -3,6 +3,8 @@ import { z } from "zod";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events, media } from "@/lib/schema";
+import { listFolders } from "@/lib/folders";
+import { descendantIds } from "@/lib/folder-tree";
 import { requireEventCapability } from "@/lib/roles";
 import { createExport, listExports } from "@/lib/exports";
 import { kickJobRunner } from "@/lib/jobs";
@@ -89,7 +91,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { mediaIds, albumId } = parsed.data;
   let label = "Everything";
+  // MED-4: a folder downloads with everything inside it, subfolders included.
+  let folderIds: string[] = [];
   if (albumId) {
+    folderIds = [...descendantIds(await listFolders(event.id), albumId)];
     const [album] = await db
       .select({ name: albums.name })
       .from(albums)
@@ -110,7 +115,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         eq(media.eventId, event.id),
         eq(media.status, "approved"),
         isNull(media.deletedAt),
-        ...(albumId ? [eq(media.albumId, albumId)] : []),
+        ...(albumId ? [inArray(media.albumId, folderIds)] : []),
         ...(mediaIds ? [inArray(media.id, mediaIds)] : []),
       ),
     )

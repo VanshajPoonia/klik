@@ -36,7 +36,7 @@ export function onboardingEmail({
   const steps: Array<[string, string]> = [
     [
       "Pick your plan",
-      `Klik Event covers one occasion, Premium adds albums, co-hosts and your own colors, and Venue is for running several events a month. Prices and the full comparison are on the plans page.`,
+      `Klik Event covers one occasion, Premium adds folders, co-hosts and your own colors, and Venue is for running several events a month. Prices and the full comparison are on the plans page.`,
     ],
     [
       "Pay through Stripe",

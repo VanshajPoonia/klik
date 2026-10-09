@@ -10,7 +10,8 @@ import { MediaGrid, type DashboardMedia } from "@/components/dashboard/media-gri
 import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
 import { LicenseBanner, type EventLicenseSummary } from "@/components/dashboard/license-banner";
-import { AlbumManager } from "@/components/dashboard/album-manager";
+import { FolderBrowser, type DashboardFolder, type FolderView } from "@/components/dashboard/folder-browser";
+import { flattenFolders, inFolder } from "@/lib/folder-tree";
 import { CoHostManager, type CoHost, type PendingInvite } from "@/components/dashboard/co-host-manager";
 import { TeamActivity } from "@/components/dashboard/team-activity";
 import { TransferOffer } from "@/components/dashboard/transfer-offer";
@@ -101,8 +102,37 @@ export function EventDashboard({
   // cannot go stale when the list behind it changes.
   const [shareMediaId, setShareMediaId] = useState<string | null>(null);
 
+  // MED-4. The folder tree is held here because the grid, the selection bar
+  // and the browser all read it, and any of them can change what is in it.
+  const [folders, setFolders] = useState<DashboardFolder[]>(() =>
+    albums.map((album) => ({
+      id: album.id,
+      name: album.name,
+      parentId: album.parentId,
+      position: album.position,
+      coverMediaId: album.coverMediaId,
+      createdAt: album.createdAt,
+    })),
+  );
+  const [chosenView, setChosenView] = useState<FolderView>("all");
+
   const pending = mediaItems.filter((item) => item.status === "pending");
   const approved = mediaItems.filter((item) => item.status === "approved");
+  // A folder deleted while open drops back to everything.
+  const folderView: FolderView =
+    chosenView === "all" || chosenView === "unfiled" || folders.some((folder) => folder.id === chosenView)
+      ? chosenView
+      : "all";
+  const currentFolder = folderView !== "all" && folderView !== "unfiled" ? folderView : null;
+  // Inside a folder, what is filed there itself; what is in folders beneath it
+  // is a click away on their cards.
+  const shownApproved =
+    folderView === "all"
+      ? approved
+      : folderView === "unfiled"
+        ? inFolder(approved, folders, null)
+        : inFolder(approved, folders, folderView, { deep: false });
+  const showFolders = canManageAlbums || folders.length > 0;
   const rejected = mediaItems.filter((item) => item.status === "rejected");
   const selectedItems = approved.filter((item) => selectedIds.has(item.id));
   const selectedDownloadParts = buildDownloadBatches(selectedItems);
@@ -325,6 +355,24 @@ export function EventDashboard({
     }
   }
 
+  /** MED-4: the host picks a folder's cover from what is in it. */
+  async function setFolderCover(folderId: string, mediaId: string) {
+    setMediaError(null);
+    const response = await fetch(`/api/events/${event.id}/albums/${folderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coverMediaId: mediaId }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      const data = response ? await response.json().catch(() => null) : null;
+      setMediaError(data?.error ?? "Could not set the cover.");
+      return;
+    }
+    setFolders((current) =>
+      current.map((folder) => (folder.id === folderId ? { ...folder, coverMediaId: mediaId } : folder)),
+    );
+  }
+
   /** TRS-1: the host looked at a reported photo and is keeping it. Reports on
    *  something they delete are closed by the delete itself being the answer. */
   async function clearReports(mediaId: string) {
@@ -497,7 +545,7 @@ export function EventDashboard({
                   onOpen={setLightboxId}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
-                  albums={canManageAlbums ? albums : undefined}
+                  albums={canManageAlbums ? folders : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
                   onShare={canManageShares ? setShareMediaId : undefined}
@@ -515,13 +563,17 @@ export function EventDashboard({
                       <button
                         type="button"
                         onClick={() =>
-                          selectedIds.size === approved.length
+                          shownApproved.length > 0 && shownApproved.every((item) => selectedIds.has(item.id))
                             ? clearSelection()
-                            : setSelectedIds(new Set(approved.map((item) => item.id)))
+                            : setSelectedIds(new Set(shownApproved.map((item) => item.id)))
                         }
                         className="min-h-10 rounded-full px-3 text-sm text-volt transition-colors hover:text-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
                       >
-                        {selectedIds.size === approved.length ? "Deselect all" : "Select all"}
+                        {shownApproved.length > 0 && shownApproved.every((item) => selectedIds.has(item.id))
+                          ? "Deselect all"
+                          : folderView === "all"
+                            ? "Select all"
+                            : "Select all here"}
                       </button>
                     )}
                     <button
@@ -546,13 +598,33 @@ export function EventDashboard({
                   </div>
                 )}
               </div>
+              {showFolders && (
+                <div className="mb-5">
+                  <FolderBrowser
+                    eventId={event.id}
+                    folders={folders}
+                    onFoldersChange={setFolders}
+                    items={approved}
+                    view={folderView}
+                    onViewChange={setChosenView}
+                    canManage={canManageAlbums}
+                    onDropMedia={(ids, folderId) => void runBulk({ action: "move", albumId: folderId }, ids)}
+                  />
+                </div>
+              )}
               {approved.length === 0 ? (
                 <Card className="text-center text-sm text-muted">
                   No approved photos or videos yet. Share the QR code to get started.
                 </Card>
+              ) : shownApproved.length === 0 ? (
+                <Card className="text-center text-sm text-muted">
+                  {folderView === "unfiled"
+                    ? "Everything is in a folder."
+                    : "Nothing is filed directly in this folder. Drag photos onto it, or select some and move them here."}
+                </Card>
               ) : (
                 <MediaGrid
-                  items={approved}
+                  items={shownApproved}
                   onDelete={deleteMedia}
                   onClearReports={clearReports}
                   onOpen={setLightboxId}
@@ -561,10 +633,18 @@ export function EventDashboard({
                   onSelectionToggle={toggleSelection}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
-                  albums={canManageAlbums ? albums : undefined}
+                  albums={canManageAlbums ? folders : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
                   onShare={canManageShares ? setShareMediaId : undefined}
+                  // A selected tile drags the whole selection with it.
+                  dragIds={
+                    canManageAlbums && folders.length > 0
+                      ? (id) => (selectionMode && selectedIds.has(id) ? [...selectedIds] : [id])
+                      : undefined
+                  }
+                  coverId={currentFolder ? (folders.find((folder) => folder.id === currentFolder)?.coverMediaId ?? null) : null}
+                  onSetCover={canManageAlbums && currentFolder ? (id) => void setFolderCover(currentFolder, id) : undefined}
                 />
               )}
             </section>
@@ -581,7 +661,7 @@ export function EventDashboard({
                   onOpen={setLightboxId}
                   downloadBaseUrl={downloadBaseUrl}
                   busyIds={busyIds}
-                  albums={canManageAlbums ? albums : undefined}
+                  albums={canManageAlbums ? folders : undefined}
                   onAlbumChange={canManageAlbums ? setAlbum : undefined}
                   onVisibilityChange={setVisibility}
                   onShare={canManageShares ? setShareMediaId : undefined}
@@ -608,21 +688,8 @@ export function EventDashboard({
               clients={clients}
               addressing={addressing}
             />
-            {(canManageAlbums || canManageCoHosts || activity) && (
+            {(canManageCoHosts || activity) && (
               <div className="space-y-5">
-                {canManageAlbums && (
-                  <AlbumManager
-                    eventId={event.id}
-                    initialAlbums={albums}
-                    onDeleted={(albumId) =>
-                      setMediaItems((items) =>
-                        items.map((item) =>
-                          item.albumId === albumId ? { ...item, albumId: null } : item,
-                        ),
-                      )
-                    }
-                  />
-                )}
                 {canManageCoHosts && (
                   <CoHostManager
                     eventId={event.id}
@@ -711,12 +778,13 @@ export function EventDashboard({
             <option value="private">Hide from guests</option>
             <option value="gallery">Show in the gallery</option>
             <option value="link">Link only</option>
-            {canManageAlbums && albums.length > 0 && (
+            {canManageAlbums && folders.length > 0 && (
               <optgroup label="Move to folder">
-                <option value="move:none">Main gallery</option>
-                {albums.map((album) => (
-                  <option key={album.id} value={`move:${album.id}`}>
-                    {album.name}
+                <option value="move:none">No folder</option>
+                {flattenFolders(folders).map((folder) => (
+                  <option key={folder.id} value={`move:${folder.id}`}>
+                    {"\u00a0\u00a0\u00a0".repeat(folder.depth - 1)}
+                    {folder.name}
                   </option>
                 ))}
               </optgroup>

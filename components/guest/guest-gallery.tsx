@@ -24,6 +24,18 @@ import { Lightbox } from "@/components/guest/lightbox";
 import type { CapturedItem } from "@/components/guest/camera-capture";
 import { encodeMediaCursor } from "@/lib/media-cursor";
 import { mergeGalleryChanges } from "@/lib/gallery-sync";
+import { childrenOf, flattenFolders, folderPath, inFolder } from "@/lib/folder-tree";
+
+/** MED-4: a folder as the gallery holds it. See `galleryFolderPayload`. */
+interface GalleryFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  position: number;
+  createdAt: string;
+  /** Something a guest can see is in it. Only filled folders get a tab. */
+  filled: boolean;
+}
 
 // The camera carries the looks engine and its pixel passes. Most guests never
 // open it, so it stays out of the initial bundle until they do.
@@ -161,7 +173,7 @@ export function GuestGallery({
   isOwner,
   initialMedia,
   syncedAt,
-  albums = [],
+  folders: initialFolders = [],
   coverUrl = null,
   canSlideshow = false,
   showBranding = true,
@@ -176,7 +188,7 @@ export function GuestGallery({
   initialMedia: MediaItem[];
   /** When the server read `initialMedia`. The first poll asks what changed since. */
   syncedAt: string;
-  albums?: Array<{ id: string; name: string }>;
+  folders?: GalleryFolder[];
   coverUrl?: string | null;
   canSlideshow?: boolean;
   showBranding?: boolean;
@@ -241,7 +253,10 @@ export function GuestGallery({
   // at once, so the per-image histogram pass belongs in the lightbox, not here.
   const gridFilter = enhanced ? VIEW_ENHANCE_FILTER : undefined;
   const [loadingMore, setLoadingMore] = useState(false);
-  const [activeAlbumId, setActiveAlbumId] = useState<string>("all");
+  // MED-4. Kept fresh by the sync, which sends folders whenever they or what
+  // is in them may have changed.
+  const [folders, setFolders] = useState<GalleryFolder[]>(initialFolders);
+  const [chosenFolderId, setChosenFolderId] = useState<string | null>(null);
   const [uploadAlbumId, setUploadAlbumId] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -256,6 +271,19 @@ export function GuestGallery({
 
   const applyChanges = useCallback((upserts: MediaItem[], removed: string[]) => {
     setItems((current) => mergeGalleryChanges(current, upserts, removed, hasMoreRef.current));
+    // MED-4: a photo everyone can see, landing in a folder whose tab is hidden
+    // for being empty, fills it and every folder above it.
+    const landed = upserts
+      .filter((item) => item.albumId && item.status === "approved" && item.visibility === "gallery")
+      .map((item) => item.albumId as string);
+    if (landed.length > 0) {
+      setFolders((current) => {
+        const fill = new Set(landed.flatMap((id) => folderPath(current, id).map((folder) => folder.id)));
+        return current.some((folder) => fill.has(folder.id) && !folder.filled)
+          ? current.map((folder) => (fill.has(folder.id) ? { ...folder, filled: true } : folder))
+          : current;
+      });
+    }
   }, []);
 
   /** Starts over from the first page, for when a delta would not be honest:
@@ -307,7 +335,9 @@ export function GuestGallery({
           upserts?: MediaItem[];
           removed?: string[];
           features?: { reactions: boolean; comments: boolean };
+          folders?: GalleryFolder[];
         } = await res.json();
+        if (data.folders) setFolders(data.folders);
         if (data.resync) {
           if (data.features) setFeatures(data.features);
           await reloadFirstPage();
@@ -660,10 +690,19 @@ export function GuestGallery({
     window.location.reload();
   }, [event.slug]);
 
-  const visibleItems =
-    activeAlbumId === "all"
-      ? items
-      : items.filter((item) => item.albumId === activeAlbumId);
+  // Tabs are for folders with something in them; a folder that empties or
+  // goes away under someone browsing it drops them back to everything.
+  const tabFolders = folders.filter((folder) => folder.filled);
+  const activeFolderId = chosenFolderId && tabFolders.some((folder) => folder.id === chosenFolderId) ? chosenFolderId : null;
+  const activePath = folderPath(tabFolders, activeFolderId);
+  const visibleItems = activeFolderId ? inFolder(items, tabFolders, activeFolderId) : items;
+  // One row of tabs per level, down to the folder being browsed and one below.
+  const tabRows: Array<{ parentId: string | null; selected: string | null }> = [{ parentId: null, selected: activePath[0]?.id ?? null }];
+  for (let level = 0; level < activePath.length; level += 1) {
+    const parent = activePath[level];
+    if (childrenOf(tabFolders, parent.id).length === 0) break;
+    tabRows.push({ parentId: parent.id, selected: activePath[level + 1]?.id ?? null });
+  }
 
   // Premium galleries pick their own colors. Keep text, borders, and buttons
   // readable whatever was chosen. The camera and viewer sit outside the content
@@ -717,17 +756,18 @@ export function GuestGallery({
           </div>
           {event.uploadsEnabled && (
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {albums.length > 0 && (
+              {folders.length > 0 && (
                 <select
-                  aria-label="Upload to album"
-                  value={uploadAlbumId}
+                  aria-label="Add to folder"
+                  value={folders.some((folder) => folder.id === uploadAlbumId) ? uploadAlbumId : ""}
                   onChange={(event) => setUploadAlbumId(event.target.value)}
                   className="min-h-11 rounded-full border border-canvas-line bg-canvas px-4 text-sm text-paper"
                 >
-                  <option value="">Main gallery</option>
-                  {albums.map((album) => (
-                    <option key={album.id} value={album.id}>
-                      {album.name}
+                  <option value="">No folder</option>
+                  {flattenFolders(folders).map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {"\u00a0\u00a0\u00a0".repeat(folder.depth - 1)}
+                      {folder.name}
                     </option>
                   ))}
                 </select>
@@ -833,33 +873,45 @@ export function GuestGallery({
           </div>
         )}
 
-        {albums.length > 0 && (
-          <nav className="mb-6 flex gap-2 overflow-x-auto pb-1" aria-label="Gallery albums">
-            <button
-              onClick={() => setActiveAlbumId("all")}
-              aria-pressed={activeAlbumId === "all"}
-              className={`min-h-11 shrink-0 rounded-full border px-4 text-sm transition-colors ${
-                activeAlbumId === "all"
-                  ? "border-transparent bg-volt text-on-volt"
-                  : "border-canvas-line text-muted hover:text-paper"
-              }`}
-            >
-              All media
-            </button>
-            {albums.map((album) => (
-              <button
-                key={album.id}
-                onClick={() => setActiveAlbumId(album.id)}
-                aria-pressed={activeAlbumId === album.id}
-                className={`min-h-11 shrink-0 rounded-full border px-4 text-sm transition-colors ${
-                  activeAlbumId === album.id
-                    ? "border-transparent bg-volt text-on-volt"
-                    : "border-canvas-line text-muted hover:text-paper"
-                }`}
-              >
-                {album.name}
-              </button>
-            ))}
+        {tabFolders.length > 0 && (
+          <nav className="mb-6 space-y-2" aria-label="Folders">
+            {tabRows.map((row, level) => {
+              const options = childrenOf(tabFolders, row.parentId);
+              const parentName = row.parentId ? tabFolders.find((folder) => folder.id === row.parentId)?.name : null;
+              const tab = (key: string, label: string, pressed: boolean, onSelect: () => void) => (
+                <button
+                  key={key}
+                  onClick={onSelect}
+                  aria-pressed={pressed}
+                  className={`min-h-11 shrink-0 rounded-full border px-4 text-sm transition-colors ${
+                    pressed
+                      ? "border-transparent bg-volt text-on-volt"
+                      : "border-canvas-line text-muted hover:text-paper"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+              return (
+                <div
+                  key={row.parentId ?? "top"}
+                  className={`flex gap-2 overflow-x-auto pb-1 ${level > 0 ? "border-l-2 border-canvas-line pl-3" : ""}`}
+                  role="group"
+                  aria-label={parentName ? `Inside ${parentName}` : "Folders"}
+                >
+                  {/* The first tab of a lower row is the whole of its parent. */}
+                  {tab(
+                    `${row.parentId ?? "top"}:all`,
+                    parentName ? `All of ${parentName}` : "Everything",
+                    row.selected === null && activeFolderId === row.parentId,
+                    () => setChosenFolderId(row.parentId),
+                  )}
+                  {options.map((folder) =>
+                    tab(folder.id, folder.name, row.selected === folder.id, () => setChosenFolderId(folder.id)),
+                  )}
+                </div>
+              );
+            })}
           </nav>
         )}
 
@@ -869,7 +921,7 @@ export function GuestGallery({
               ? disposable && !isOwner && !disposable.developed
                 ? "The roll is still in the camera. Everyone's photos appear here together when it develops."
                 : "No photos or videos yet. Be the first to add one."
-              : "No media has been added to this album yet."}
+              : "Nothing in this folder has loaded yet. Scroll for more, or try another folder."}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">

@@ -282,7 +282,7 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 **The entitlement ledger, 2026-10-08.** See constraint 3 and `BILLING.md`. Grants are made on `/admin` with a reason; payments never grant anything themselves.
 
-Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding. Passkeys.
+Folder share links. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding. Passkeys.
 
 **Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
 
@@ -297,6 +297,8 @@ Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG
 **Video location removal, 2026-10-09 (MED-8).** Videos are scrubbed in place by the `media.scrub_video` job; `media.metadata_state` says where each one is, and `videoHeldBack` in `lib/media-access.ts` keeps a pending or failed one to its uploader. The Privacy Policy now says so.
 
 **Hearts and comments, 2026-10-09 (MED-9).** Both off per event (`events.reactions_enabled`, `events.comments_enabled`). A heart needs only the guest cookie, or the host's account; a comment needs an account. Counts live on `media.reaction_count` and `media.comment_count`, kept by triggers in `drizzle/0030_reactions_and_comments.sql`, and they move `media.changed_at`, so phones receive new counts through the existing change sync rather than a second channel. `reacted` is added per viewer by `withViewerReactions` in `lib/reactions.ts` at each of the three places a gallery payload is built. Comments come down by being hidden, with `hidden_reason` saying by whom; comment reports are their own table so they never hide the photo underneath, and appear on the event page and on `/admin`.
+
+**Folders, 2026-10-09 (MED-4).** Still the `albums` table, now a tree: `parent_id`, `position` and `cover_media_id`, with the shape held by the `albums_check_tree` trigger in `drizzle/0031_folders.sql` (same event, no cycles, three levels counting the moved subtree, under a per-event advisory lock). The arithmetic is `lib/folder-tree.ts`, pure and shared by the dashboard, the gallery and the routes; reads and writes are `lib/folders.ts`. A folder change stamps `events.updated_at`, so open galleries resync and receive the new folders with it. A photo stays in one folder; "inside" means anywhere beneath when browsing from above, and "Unfiled" includes photos whose folder is in the trash.
 
 `ROADMAP.md` has all of it with task IDs and an order.
 

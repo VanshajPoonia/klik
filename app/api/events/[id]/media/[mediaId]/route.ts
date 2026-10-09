@@ -67,7 +67,7 @@ export async function PATCH(
     const plan = eventPlan(event!);
     if (!canUseAlbums(plan.key)) {
       return NextResponse.json(
-        { error: "Multiple albums are available on the Klik Premium plan" },
+        { error: "Folders are part of Klik Premium" },
         { status: 403 },
       );
     }
@@ -76,7 +76,7 @@ export async function PATCH(
       .from(albums)
       .where(and(eq(albums.id, parsed.data.albumId), eq(albums.eventId, id), isNull(albums.deletedAt)))
       .limit(1);
-    if (!album) return NextResponse.json({ error: "Album not found" }, { status: 404 });
+    if (!album) return NextResponse.json({ error: "That folder is not in this event any more" }, { status: 404 });
   }
 
   const [updated] = await db

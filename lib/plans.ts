@@ -103,7 +103,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "Everything in Klik Event",
       "12-month upload window",
       "Room for about 5,000 photos (100 GB)",
-      "Multiple albums within an event",
+      "Folders within an event, nested three deep",
       "Multiple organizers or co-hosts",
       "Custom gallery colors and cover",
       "Custom QR sign templates",

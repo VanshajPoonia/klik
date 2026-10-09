@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { findEventBySlug } from "@/lib/slugs";
-import { albums, guests, media } from "@/lib/schema";
+import { guests, media } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
 import { eventUsage } from "@/lib/usage";
@@ -33,6 +33,7 @@ import { can } from "@/lib/permissions";
 import { auth } from "@/lib/auth";
 import { claimGuestCookies } from "@/lib/guest-accounts";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
+import { galleryFolderPayload } from "@/lib/folders";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -142,9 +143,11 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     event,
     reactorFor({ guestId: guestSession?.guestId ?? null, userId: managerSession?.user?.id ?? null }),
   );
-  const [albumRows, coverRows] = await Promise.all([
-    canUseAlbums(plan.key)
-      ? db.select().from(albums).where(and(eq(albums.eventId, event.id), isNull(albums.deletedAt))).orderBy(albums.createdAt)
+  const [folders, coverRows] = await Promise.all([
+    // MED-4. A roll that has not developed shows guests nothing, folders
+    // included: a tab per folder would say what is coming.
+    canUseAlbums(plan.key) && (isOwner || !rollUndeveloped(event))
+      ? galleryFolderPayload(event.id, { isManager: isOwner })
       : Promise.resolve([]),
     canCustomizeGallery(plan.key) && event.coverMediaId
       ? db
@@ -197,7 +200,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       isOwner={isOwner}
       initialMedia={initialMedia}
       syncedAt={syncedAt}
-      albums={albumRows}
+      folders={folders}
       coverUrl={coverUrl}
       canSlideshow={canUseSlideshow(plan.key)}
       maxVideoSeconds={plan.maxVideoSeconds}

@@ -199,6 +199,17 @@ Terms' "Your content stays yours" and "What you must not upload or write".
 - [ ] Hid a comment, and saw a reported one on the event page and `/admin`
 - [ ] Re-read the comment paragraphs in `/privacy` and `/terms`
 
+And **folders**, which replaced albums on Premium and Venue events. On a laptop, open a
+Premium event's gallery tab: make a folder ("Ceremony"), open it, make one inside it
+("Vows"), and drag a few photos onto each card. Select several and drag them together.
+Inside a folder, press "Use as folder cover" on a photo. Then on your phone, open the
+gallery as a guest: a row of folder tabs appears, and a second row when you open
+"Ceremony". Delete "Ceremony" on the laptop and restore it from the **Trash** tab: both
+folders come back, with their photos in place.
+
+- [ ] Made nested folders, dragged photos into them, and saw the tabs on a phone
+- [ ] Deleted and restored a folder with a folder inside it
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

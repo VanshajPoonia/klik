@@ -90,7 +90,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           })),
         ),
       ),
-    db.select().from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt))).orderBy(albums.createdAt),
+    db.select().from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt), eq(albums.kind, "manual"))).orderBy(albums.position, albums.createdAt),
     db
       .select({
         id: users.id,

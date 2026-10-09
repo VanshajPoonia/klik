@@ -4,9 +4,13 @@ import { db } from "@/lib/db";
 import { findEventBySlug } from "@/lib/slugs";
 import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
-import { canViewMedia } from "@/lib/media-access";
+import { canViewMedia, rollUndeveloped } from "@/lib/media-access";
 import { toGalleryMedia } from "@/lib/gallery-media";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
+import { galleryFolderPayload } from "@/lib/folders";
+import { eventPlan } from "@/lib/license";
+import { canUseAlbums } from "@/lib/plans";
+import type { Event } from "@/lib/schema";
 
 /**
  * What changed in a gallery since a phone last asked.
@@ -40,6 +44,18 @@ function galleryFeatures(event: { reactionsEnabled: boolean; commentsEnabled: bo
   return { reactions: event.reactionsEnabled, comments: event.commentsEnabled };
 }
 
+/**
+ * MED-4: the folder list, sent with a resync, which is how a folder change
+ * arrives (the folder routes stamp the event). A photo landing in an empty
+ * folder is not a folder change; the phone marks that tab filled itself, from
+ * the delta, rather than every poll at a busy wedding costing two queries.
+ */
+async function folderUpdate(event: Event, isManager: boolean) {
+  if (!canUseAlbums(eventPlan(event).key)) return undefined;
+  if (!isManager && rollUndeveloped(event)) return [];
+  return galleryFolderPayload(event.id, { isManager });
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const sinceParam = new URL(request.url).searchParams.get("since");
@@ -56,6 +72,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const at = new Date(clock?.dbNow ?? Date.now()).toISOString();
 
   const viewer = await resolveEventViewer(event);
+  const isManager = Boolean(viewer.ownerSession);
   if (!viewer.access.allowed) {
     return NextResponse.json({ error: viewer.access.reason }, { status: 403, headers: noStore });
   }
@@ -69,7 +86,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   if (event.updatedAt > since) {
     // MED-9: the switches travel with the resync, so turning hearts or
     // comments on reaches phones already open without a reload.
-    return NextResponse.json({ at, resync: true, features: galleryFeatures(event) }, { headers: noStore });
+    return NextResponse.json(
+      { at, resync: true, features: galleryFeatures(event), folders: await folderUpdate(event, isManager) },
+      { headers: noStore },
+    );
   }
 
   const from = new Date(since.getTime() - OVERLAP_MS);
@@ -77,7 +97,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // changing, because it is a time passing. When that moment falls inside this
   // poll's window, the phone starts over and gets the whole reveal at once.
   if (event.disposableMode && event.developsAt && event.developsAt > from && event.developsAt <= new Date(at)) {
-    return NextResponse.json({ at, resync: true, features: galleryFeatures(event) }, { headers: noStore });
+    return NextResponse.json(
+      { at, resync: true, features: galleryFeatures(event), folders: await folderUpdate(event, isManager) },
+      { headers: noStore },
+    );
   }
   if (event.mediaChangedAt <= from) {
     return NextResponse.json({ at, upserts: [], removed: [] }, { headers: noStore });
@@ -90,7 +113,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     .orderBy(asc(media.changedAt))
     .limit(MAX_CHANGES + 1);
   if (changed.length > MAX_CHANGES) {
-    return NextResponse.json({ at, resync: true, features: galleryFeatures(event) }, { headers: noStore });
+    return NextResponse.json(
+      { at, resync: true, features: galleryFeatures(event), folders: await folderUpdate(event, isManager) },
+      { headers: noStore },
+    );
   }
 
   const mediaViewer = { isManager: Boolean(viewer.ownerSession), guestId: viewer.guestId };

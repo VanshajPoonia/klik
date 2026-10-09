@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { albums, events, media } from "@/lib/schema";
+import { events, media } from "@/lib/schema";
+import { restoreFolders, touchEvent, trashedFolders } from "@/lib/folders";
 import { requireEventCapability } from "@/lib/roles";
 import { mediaContentPath, mediaPosterPath } from "@/lib/media-delivery";
 
@@ -45,10 +46,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .select()
       .from(media)
       .where(and(eq(media.eventId, id), isNotNull(media.deletedAt))),
-    db
-      .select()
-      .from(albums)
-      .where(and(eq(albums.eventId, id), isNotNull(albums.deletedAt))),
+    // MED-4: as the host deleted them, a subfolder inside its parent's entry.
+    trashedFolders(id),
   ]);
 
   return NextResponse.json({
@@ -69,6 +68,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       name: album.name,
       deletedAt: album.deletedAt,
       purgesAt: album.deletedAt ? expiresAt(album.deletedAt) : null,
+      // Itself included: 3 means it and two folders inside it.
+      folderCount: album.folderCount,
     })),
   });
 }
@@ -114,18 +115,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .returning({ id: media.id })
     : [];
 
-  const restoredAlbumRows = albumIds.length
-    ? await db
-        .update(albums)
-        .set({ deletedAt: null })
-        .where(
-          and(inArray(albums.id, albumIds), eq(albums.eventId, id), isNotNull(albums.deletedAt)),
-        )
-        .returning({ id: albums.id })
-    : [];
+  // MED-4: a folder comes back with what was trashed with it, and with any
+  // trashed folder above it, so it is somewhere that can be reached.
+  const restoredAlbums = await restoreFolders(id, albumIds);
+  if (restoredAlbums > 0) await touchEvent(id);
 
   const restoredMedia = restoredMediaRows.length;
-  const restoredAlbums = restoredAlbumRows.length;
 
   return NextResponse.json({ ok: true, restoredMedia, restoredAlbums });
 }

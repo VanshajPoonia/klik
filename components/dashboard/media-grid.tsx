@@ -5,6 +5,7 @@ import {
   EyeOff,
   Flag,
   Heart,
+  Image as ImageIcon,
   Link2,
   MessageCircle,
   Play,
@@ -23,6 +24,10 @@ export type DashboardMedia = Media & Partial<SignedMediaUrls> & {
   openReports?: number;
 };
 import { VISIBILITY_OPTIONS } from "@/lib/media-access";
+import { flattenFolders, type FolderNode } from "@/lib/folder-tree";
+
+/** MED-4: what a drag of media carries, so drop targets ignore anything else. */
+export const MEDIA_DRAG_TYPE = "application/x-klik-media";
 
 /** Shown on the tile itself, because an organizer scanning a grid of two
  *  hundred photos should see which ones are hidden without opening each
@@ -51,6 +56,9 @@ export function MediaGrid({
   onVisibilityChange,
   onShare,
   onClearReports,
+  dragIds,
+  coverId,
+  onSetCover,
 }: {
   items: DashboardMedia[];
   onApprove?: (id: string) => void;
@@ -62,13 +70,19 @@ export function MediaGrid({
   onSelectionToggle?: (id: string) => void;
   downloadBaseUrl: string;
   busyIds?: Set<string>;
-  albums?: Array<{ id: string; name: string }>;
+  albums?: FolderNode[];
   onAlbumChange?: (id: string, albumId: string | null) => void;
   onVisibilityChange?: (id: string, visibility: MediaVisibility) => void;
   onShare?: (id: string) => void;
   /** Closes the open reports on one photo after the host has looked. */
   onClearReports?: (id: string) => void;
+  /** MED-4: what dragging this tile moves. Present makes tiles draggable. */
+  dragIds?: (id: string) => string[];
+  /** MED-4: the folder being browsed, and choosing its cover from it. */
+  coverId?: string | null;
+  onSetCover?: (id: string) => void;
 }) {
+  const folderOptions = albums ? flattenFolders(albums) : [];
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
       {items.map((item) => {
@@ -84,6 +98,17 @@ export function MediaGrid({
               selected ? "border-volt ring-2 ring-volt" : "border-canvas-line"
             }`}
             aria-busy={busy}
+            draggable={Boolean(dragIds) && !busy}
+            onDragStart={
+              dragIds
+                ? (event) => {
+                    const ids = dragIds(item.id);
+                    event.dataTransfer.setData(MEDIA_DRAG_TYPE, JSON.stringify(ids));
+                    event.dataTransfer.setData("text/plain", `${ids.length} item${ids.length === 1 ? "" : "s"}`);
+                    event.dataTransfer.effectAllowed = "move";
+                  }
+                : undefined
+            }
           >
             <button
               type="button"
@@ -200,17 +225,18 @@ export function MediaGrid({
             </button>
             {!selectionMode && albums && albums.length > 0 && onAlbumChange && (
               <label className="block border-t border-canvas-line bg-canvas-raised px-2 py-2">
-                <span className="sr-only">Album for this {item.kind}</span>
+                <span className="sr-only">Folder for this {item.kind}</span>
                 <select
-                  value={item.albumId ?? ""}
+                  value={item.albumId && folderOptions.some((folder) => folder.id === item.albumId) ? item.albumId : ""}
                   onChange={(event) => onAlbumChange(item.id, event.target.value || null)}
                   disabled={busy}
                   className="w-full rounded-lg border border-canvas-line bg-canvas px-2 py-1.5 text-xs text-paper"
                 >
-                  <option value="">Main gallery</option>
-                  {albums.map((album) => (
-                    <option key={album.id} value={album.id}>
-                      {album.name}
+                  <option value="">No folder</option>
+                  {folderOptions.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {"\u00a0\u00a0\u00a0".repeat(folder.depth - 1)}
+                      {folder.name}
                     </option>
                   ))}
                 </select>
@@ -244,6 +270,18 @@ export function MediaGrid({
               >
                 <Check className="h-3.5 w-3.5 text-volt" aria-hidden="true" />
                 Looked at it, keep it
+              </button>
+            )}
+            {!selectionMode && onSetCover && (
+              <button
+                type="button"
+                onClick={() => onSetCover(item.id)}
+                disabled={busy || coverId === item.id}
+                aria-pressed={coverId === item.id}
+                className="flex min-h-11 w-full items-center justify-center gap-1.5 border-t border-canvas-line bg-canvas-raised px-2 text-xs text-paper transition-colors hover:bg-canvas disabled:opacity-60"
+              >
+                <ImageIcon className="h-3.5 w-3.5 text-volt" aria-hidden="true" />
+                {coverId === item.id ? "Folder cover" : "Use as folder cover"}
               </button>
             )}
             {!selectionMode && onShare && (

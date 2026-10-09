@@ -10,6 +10,7 @@ import {
   index,
   primaryKey,
   jsonb,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { PlanKey } from "./plans";
 
@@ -360,6 +361,14 @@ export const albums = pgTable(
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // MED-4: folders nest, three levels at most. The shape is held by a trigger
+    // in drizzle/0031_folders.sql, not by the routes. See lib/folder-tree.ts.
+    parentId: text("parent_id").references((): AnyPgColumn => albums.id, { onDelete: "set null" }),
+    position: integer("position").notNull().default(0),
+    coverMediaId: text("cover_media_id").references((): AnyPgColumn => media.id, { onDelete: "set null" }),
+    // `smart` is AI-4's saved query; nothing makes one yet.
+    kind: text("kind").$type<"manual" | "smart">().notNull().default("manual"),
+    query: jsonb("query"),
     // Soft delete: media references an album with ON DELETE SET NULL, so a hard
     // delete silently unfiled every photo in it. Sorting 2,000 wedding photos
     // into folders is real work to lose to one mis-tap.

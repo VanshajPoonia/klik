@@ -213,18 +213,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
   if (input.albumId) {
     if (!canUseAlbums(plan.key)) {
-      return NextResponse.json(
-        { error: "Multiple albums are available on the Klik Premium plan" },
-        { status: 403 },
-      );
+      return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
     }
+    // Live folders only: one in the trash would take the photo with it, out of
+    // sight, the moment it landed.
     const [album] = await db
       .select({ id: albums.id })
       .from(albums)
-      .where(and(eq(albums.id, input.albumId), eq(albums.eventId, event.id)))
+      .where(and(eq(albums.id, input.albumId), eq(albums.eventId, event.id), isNull(albums.deletedAt)))
       .limit(1);
     if (!album) {
-      return NextResponse.json({ error: "Album not found" }, { status: 404 });
+      return NextResponse.json({ error: "That folder is not in this event any more" }, { status: 404 });
     }
   }
 

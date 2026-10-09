@@ -18,6 +18,8 @@ interface TrashedAlbum {
   id: string;
   name: string;
   purgesAt: string;
+  /** MED-4: itself and the folders trashed inside it. */
+  folderCount?: number;
 }
 
 /**
@@ -108,6 +110,12 @@ export function TrashPanel({ eventId }: { eventId: string }) {
             <li key={album.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <p className="text-sm text-paper">
                 Folder: {album.name}
+                {album.folderCount && album.folderCount > 1 ? (
+                  <span className="text-muted">
+                    {" "}
+                    and {album.folderCount - 1} {album.folderCount === 2 ? "folder" : "folders"} inside it
+                  </span>
+                ) : null}
                 <span className="text-muted"> · removed for good {date(album.purgesAt)}</span>
               </p>
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => void restore({ albumIds: [album.id] })}>
