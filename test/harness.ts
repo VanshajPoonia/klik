@@ -59,6 +59,8 @@ const TABLES = [
   "entitlements",
   "erasure_log",
   "rate_limits",
+  // VEN-2, before `guests`, `albums`, `events` and `users`.
+  "kiosks",
   // Before `media`, `albums`, `guests` and `events`, all of which it references.
   "media_shares",
   "media",

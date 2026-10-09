@@ -5,6 +5,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, guests, media } from "@/lib/schema";
+import { KIOSK_UPLOADS_PER_HOUR } from "@/lib/kiosks";
 import { canUpload } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
 import { GALLERY_FULL_MESSAGE, wouldExceedStorage } from "@/lib/usage";
@@ -107,8 +108,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Per-guest bucket on top of the per-IP one above, since a whole venue shares
   // one NAT address and would otherwise exhaust a single IP budget between them.
   // Organizers are exempt: they legitimately bulk-upload their own galleries.
+  // A kiosk is a queue of guests on one device, so it has a bigger bucket.
   if (!viewer.ownerSession && viewer.guestId) {
-    const guestLimit = await consume(`upload:guest:${viewer.guestId}`, 60, 60 * 60);
+    const perHour = viewer.kioskId ? KIOSK_UPLOADS_PER_HOUR : 60;
+    const guestLimit = await consume(`upload:guest:${viewer.guestId}`, perHour, 60 * 60);
     if (!guestLimit.allowed) return throttled(guestLimit.retryAfter);
   }
 
@@ -116,7 +119,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // here so a spent roll refuses before any bytes move; the shot itself is
   // spent at registration, by a conditional update that two racing uploads
   // cannot both pass.
-  if (event.disposableMode && !viewer.ownerSession && viewer.guestId) {
+  if (event.disposableMode && !viewer.ownerSession && viewer.guestId && !viewer.kioskId) {
     if (isVideoMime(mimeType)) {
       return NextResponse.json({ error: "This event is a disposable camera: photos only." }, { status: 403 });
     }

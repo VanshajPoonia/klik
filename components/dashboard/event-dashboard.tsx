@@ -35,6 +35,7 @@ import { TrashPanel } from "@/components/dashboard/trash-panel";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { UsageMeter, type UsageSummary } from "@/components/dashboard/usage-meter";
 import { ReportedComments, type ReportedCommentRow } from "@/components/dashboard/reported-comments";
+import { KioskPanel } from "@/components/dashboard/kiosk-panel";
 
 type Tab = "gallery" | "insights" | "links" | "settings" | "qr" | "trash";
 
@@ -55,6 +56,7 @@ export function EventDashboard({
   canDeleteEvent = false,
   canManageTrash = false,
   canModerateComments = false,
+  canManageKiosks = false,
   reportedComments = [],
   usage = null,
   addressing = null,
@@ -84,6 +86,8 @@ export function EventDashboard({
   canManageTrash?: boolean;
   /** MED-9: hide and show comments, which is moderating like approving photos. */
   canModerateComments?: boolean;
+  /** VEN-2: set up and switch off kiosks, on a plan that has them. */
+  canManageKiosks?: boolean;
   reportedComments?: ReportedCommentRow[];
   usage?: UsageSummary | null;
   addressing?: { origin: string; formerSlugs: string[] } | null;
@@ -738,16 +742,19 @@ export function EventDashboard({
               </p>
             </div>
           ) : (
-            <QrPanel
-              eventId={event.id}
-              slug={event.slug}
-              guestUrl={guestUrl}
-              eventName={event.name}
-              accent={canCustomizeGallery ? event.accentColor : "#edee00"}
-              template={canCustomizeQr ? event.qrTemplate : "classic"}
-              canDownloadSign={canDownloadQrSign}
-              canStyle={canCustomizeQr}
-            />
+            <div className="flex flex-wrap items-start gap-6">
+              <QrPanel
+                eventId={event.id}
+                slug={event.slug}
+                guestUrl={guestUrl}
+                eventName={event.name}
+                accent={canCustomizeGallery ? event.accentColor : "#edee00"}
+                template={canCustomizeQr ? event.qrTemplate : "classic"}
+                canDownloadSign={canDownloadQrSign}
+                canStyle={canCustomizeQr}
+              />
+              {canManageKiosks && <KioskPanel eventId={event.id} folders={canManageAlbums ? folders : []} />}
+            </div>
           ))}
       </div>
 

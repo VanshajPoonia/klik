@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { after } from "next/server";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -35,6 +35,7 @@ import { claimGuestCookies } from "@/lib/guest-accounts";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
 import { linkedMediaId } from "@/lib/media-share";
+import { activeKiosk } from "@/lib/kiosks";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -117,7 +118,15 @@ export default async function GuestEventPage({
   }
 
   const guestCookie = cookieStore.get(guestCookieName(event.id))?.value;
-  const guestSession = guestCookie ? await verifyGuestSession(guestCookie) : null;
+  let guestSession = guestCookie ? await verifyGuestSession(guestCookie) : null;
+  // VEN-2: a kiosk takes photos and does nothing else, so it is sent back to
+  // its own screen. One that has been switched off is nobody at all.
+  if (!isOwner && guestSession?.kioskId && guestSession.eventId === event.id) {
+    if (await activeKiosk({ kioskId: guestSession.kioskId, guestId: guestSession.guestId, eventId: event.id })) {
+      redirect(`/e/${event.slug}/kiosk`);
+    }
+    guestSession = null;
+  }
   const hasConsented = Boolean(guestSession && guestSession.eventId === event.id);
 
   if (!hasConsented && !isOwner) {

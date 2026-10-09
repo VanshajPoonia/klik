@@ -31,6 +31,11 @@ describe("describeActivity", () => {
     expect(line("comment.shown", "Kept by the host.")).toBe("kept a reported comment up");
   });
 
+  it("names the kiosk that was set up or switched off", () => {
+    expect(line("kiosk.created", "Entrance")).toBe("set up a kiosk, Entrance");
+    expect(line("kiosk.revoked", "")).toBe("switched off a kiosk");
+  });
+
   it("never passes an unknown action's detail through", () => {
     expect(line("plan.granted", "Comped. Internal reason.")).toBe("made a change");
   });

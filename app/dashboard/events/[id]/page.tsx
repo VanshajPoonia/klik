@@ -21,6 +21,7 @@ import {
   canUseAlbums,
   canUseCoHosts,
   canUseSlideshow,
+  canUseKiosk,
   canUseVenueHub,
 } from "@/lib/plans";
 import { withProtectedMediaUrl } from "@/lib/media-delivery";
@@ -135,6 +136,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canManageShares={can(actor.role, "shares.manage")}
         canManageTrash={can(actor.role, "trash.manage")}
         canModerateComments={canModerateComments}
+        canManageKiosks={canUseKiosk(plan.key) && can(actor.role, "event.settings")}
         moments={moments.map((moment) => ({ id: moment.id, name: moment.name }))}
         reportedComments={commentReports.map((row) => ({
           commentId: row.commentId,

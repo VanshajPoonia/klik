@@ -30,7 +30,8 @@ export async function claimGuestCookies(
   for (const cookie of cookieList) {
     if (!cookie.name.startsWith(GUEST_COOKIE_PREFIX)) continue;
     const session = await verifyGuestSession(cookie.value);
-    if (session && cookie.name === guestCookieName(session.eventId)) guestIds.push(session.guestId);
+    // VEN-2: a kiosk's guest is many people, and never anybody's account.
+    if (session && !session.kioskId && cookie.name === guestCookieName(session.eventId)) guestIds.push(session.guestId);
   }
   if (guestIds.length === 0) return 0;
   const claimed = await db

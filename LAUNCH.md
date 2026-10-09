@@ -231,6 +231,21 @@ a guest can still save and send **their own** uploads. The setting now says so.
 
 - [ ] Sent a photo, posted a story image and scanned its QR, and opened a copied link
 
+And **kiosks**, on a Premium or Venue event. On your laptop, open the event's **QR code**
+tab: a **Kiosks** card sits beside the QR code. Name one ("Entrance") and press **Set up a
+kiosk**. Scan the code it shows with an iPad or a spare phone that is **not signed in to
+Klik**, tap **Make it a kiosk**, and allow the camera. Take a photo with the countdown,
+press **Add to the gallery**, and check it appears in the gallery (or the moderation
+queue). Leave it alone for a minute and it goes back to the start screen. Then press
+**Switch off** on the laptop and try to take another: the tablet says it has been switched
+off. Before a real event, lock the tablet to the page: on an iPad, Settings, Accessibility,
+Guided Access.
+
+The **Privacy Policy** gained one paragraph for this, under "What we collect from guests".
+
+- [ ] Paired a tablet as a kiosk, took a photo on it, and switched it off
+- [ ] Read the kiosk paragraph in `/privacy`
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

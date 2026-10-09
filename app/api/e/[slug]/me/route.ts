@@ -28,6 +28,10 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!guestSession || guestSession.eventId !== event.id) {
     return NextResponse.json({ error: "No guest session for this gallery" }, { status: 401 });
   }
+  // VEN-2: a kiosk's "own" uploads are everyone who stood in front of it.
+  if (guestSession.kioskId) {
+    return NextResponse.json({ error: "A kiosk cannot do this." }, { status: 403 });
+  }
 
   let result;
   try {

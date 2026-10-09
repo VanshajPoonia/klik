@@ -211,6 +211,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!viewer.ownerSession && !viewer.guestId) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
+  // VEN-2: a kiosk's photos go where the host said, whatever the tablet sends,
+  // and to no folder when that one has gone, rather than failing at the door.
+  if (viewer.kioskId) {
+    const [folder] =
+      viewer.kioskAlbumId && canUseAlbums(plan.key)
+        ? await db
+            .select({ id: albums.id })
+            .from(albums)
+            .where(and(eq(albums.id, viewer.kioskAlbumId), eq(albums.eventId, event.id), isNull(albums.deletedAt)))
+            .limit(1)
+        : [];
+    input.albumId = folder?.id ?? null;
+  }
   if (input.albumId) {
     if (!canUseAlbums(plan.key)) {
       return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
@@ -421,7 +434,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   // CAM-4: spend one shot from the guest's roll, or refuse. Conditional, so two
   // uploads racing for the last frame cannot both have it. Spent here, after
   // every other check, so a rejected file never costs a shot.
-  if (event.disposableMode && !viewer.ownerSession && viewer.guestId) {
+  // A kiosk is the venue's camera, shared by the whole queue, so it has no roll.
+  if (event.disposableMode && !viewer.ownerSession && viewer.guestId && !viewer.kioskId) {
     const spent = kind === "photo" && (await spendShot(viewer.guestId, event.shotsPerGuest));
     if (!spent) {
       await deleteBlobs([input.pathname]).catch(() => {});

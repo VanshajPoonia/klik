@@ -8,6 +8,7 @@ import {
   integer,
   real,
   index,
+  uniqueIndex,
   primaryKey,
   jsonb,
   type AnyPgColumn,
@@ -946,6 +947,37 @@ export const jobs = pgTable("jobs", {
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
+/**
+ * VEN-2: a tablet at the venue that only takes photos. Its uploads belong to
+ * `guest_id`, an ordinary guest row, so they are moderated, counted and
+ * erasable like any other. See drizzle/0033_kiosks.sql and lib/kiosks.ts.
+ */
+export const kiosks = pgTable(
+  "kiosks",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    guestId: text("guest_id")
+      .notNull()
+      .references(() => guests.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    albumId: text("album_id").references(() => albums.id, { onDelete: "set null" }),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // A one-time code, hashed, for the tablet to pair with. Cleared on use.
+    pairCodeHash: text("pair_code_hash"),
+    pairExpiresAt: timestamp("pair_expires_at", { withTimezone: true }),
+    pairedAt: timestamp("paired_at", { withTimezone: true }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  // kiosks_pair_code_idx is partial and lives in drizzle/0033 (constraint 4).
+  (table) => [index("kiosks_event_idx").on(table.eventId), uniqueIndex("kiosks_guest_idx").on(table.guestId)],
+);
+
+export type Kiosk = typeof kiosks.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

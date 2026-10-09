@@ -304,6 +304,8 @@ Folder share links. Any AI that needs a model. The canvas print studio (the QR s
 
 **Sharing from the gallery, 2026-10-09 (CAM-3).** All on the viewer's phone and nothing stored: `lib/media-share.ts` fetches the file (signed URL first, then the authorized route, never with cookies across origins), draws the smaller copy and the story image, and makes the QR code from the gallery address with the `qrcode` package loaded on demand. A link to a photo is `/e/<slug>?m=<id>`; the page reads it with `fetchGalleryMedia`'s `id` option, which is the grid's query and visibility rule narrowed to one row, so a link can never show more than the grid. The download route lets a guest save their own upload when the host has downloads off.
 
+**Kiosks, 2026-10-09 (VEN-2).** `kiosks` rows (`drizzle/0033_kiosks.sql`) each own a `guests` row, and a paired tablet holds an ordinary guest cookie with a `kioskId` claim; it never holds a user session. `resolveEventViewer` checks the claim against the row on every request and returns `kioskId`, so a switched-off kiosk is no guest at all, and the routes that delete (`DELETE /api/e/[slug]/media/[mediaId]`, `DELETE /api/e/[slug]/me`) refuse a kiosk outright. The gallery page redirects a kiosk to `/e/[slug]/kiosk`, `claimGuestCookies` skips it, and registration files its photos into the kiosk's folder whatever the client sends. The browser upload path now lives in `lib/upload-client.ts`, shared by the gallery and the kiosk.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

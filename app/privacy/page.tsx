@@ -84,6 +84,13 @@ export default function PrivacyPage() {
         comment needs a signed-in guest, and stores what they wrote and when; everyone who can see
         the photo sees the comment, with the guest&apos;s display name for that gallery beside it.
       </p>
+      <p>
+        An organizer can also set up a <strong>kiosk</strong>: a tablet at the venue that only takes
+        photos for the gallery. A photo taken on it is stored like any other upload, against the kiosk
+        rather than the person who took it, and the kiosk shows the consent notice below on its start
+        screen to everyone who uses it. Because a kiosk is shared, a photo taken on one is removed by
+        asking the organizer, who can take down anything in the gallery.
+      </p>
 
       <h3>What the consent notice says</h3>
       <p>

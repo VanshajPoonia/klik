@@ -152,6 +152,11 @@ export function canUseSlideshow(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }
 
+/** VEN-2: a tablet at the venue that only takes photos. Same tiers as the live display. */
+export function canUseKiosk(planKey: PlanKey): boolean {
+  return planKey === "premium" || planKey === "venue";
+}
+
 export function canUseAlbums(planKey: PlanKey): boolean {
   return planKey === "premium";
 }

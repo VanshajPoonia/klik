@@ -34,6 +34,11 @@ export async function DELETE(
   if (!viewer.guestId) {
     return NextResponse.json({ error: "Join the gallery to manage your uploads" }, { status: 401 });
   }
+  // VEN-2: every photo a kiosk took is "its own", and anyone can walk up to
+  // it. Taking photos down is the host's job, from the dashboard.
+  if (viewer.kioskId) {
+    return NextResponse.json({ error: "A kiosk cannot delete photos." }, { status: 403 });
+  }
 
   const result = await eraseGuestUpload(viewer.guestId, event.id, mediaId);
   // 404 whether it does not exist or is somebody else's: a 403 would confirm

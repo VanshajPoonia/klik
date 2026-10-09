@@ -4,6 +4,8 @@ import { env } from "./env";
 export interface GuestSession {
   guestId: string;
   eventId: string;
+  /** VEN-2: this device is a kiosk. Checked against `kiosks` on every use. */
+  kioskId?: string;
 }
 
 // Validated at boot by lib/env.ts, so this no longer throws on the first guest
@@ -30,7 +32,11 @@ export async function verifyGuestSession(token: string): Promise<GuestSession | 
     if (typeof payload.guestId !== "string" || typeof payload.eventId !== "string") {
       return null;
     }
-    return { guestId: payload.guestId, eventId: payload.eventId };
+    return {
+      guestId: payload.guestId,
+      eventId: payload.eventId,
+      ...(typeof payload.kioskId === "string" ? { kioskId: payload.kioskId } : {}),
+    };
   } catch {
     return null;
   }

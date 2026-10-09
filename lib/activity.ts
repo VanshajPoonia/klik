@@ -26,6 +26,8 @@ const TEAM_VISIBLE = [
   "event.transferred",
   "comment.hidden",
   "comment.shown",
+  "kiosk.created",
+  "kiosk.revoked",
 ] as const satisfies readonly AuditAction[];
 
 export interface ActivityEntry {
@@ -101,6 +103,10 @@ export function describeActivity(
       return "hid a comment";
     case "comment.shown":
       return detail.startsWith("Kept") ? "kept a reported comment up" : "showed a hidden comment again";
+    case "kiosk.created":
+      return detail ? `set up a kiosk, ${detail}` : "set up a kiosk";
+    case "kiosk.revoked":
+      return detail ? `switched off a kiosk, ${detail}` : "switched off a kiosk";
     default:
       return "made a change";
   }

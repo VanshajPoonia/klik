@@ -33,12 +33,14 @@ export type AuditAction =
   | "event.transfer_withdrawn"
   | "event.transferred"
   | "comment.hidden"
-  | "comment.shown";
+  | "comment.shown"
+  | "kiosk.created"
+  | "kiosk.revoked";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;
   action: AuditAction;
-  targetType: "user" | "event" | "media" | "entitlement" | "report" | "comment";
+  targetType: "user" | "event" | "media" | "entitlement" | "report" | "comment" | "kiosk";
   targetId?: string | null;
   eventId?: string | null;
   detail?: string | null;
