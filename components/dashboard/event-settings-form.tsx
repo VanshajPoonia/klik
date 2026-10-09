@@ -109,6 +109,8 @@ export function EventSettingsForm({
   const [isActive, setIsActive] = useState(event.isActive);
   const [downloadsEnabled, setDownloadsEnabled] = useState(event.downloadsEnabled);
   const [uploadsEnabled, setUploadsEnabled] = useState(event.uploadsEnabled);
+  const [reactionsEnabled, setReactionsEnabled] = useState(event.reactionsEnabled);
+  const [commentsEnabled, setCommentsEnabled] = useState(event.commentsEnabled);
   const [expiresAt, setExpiresAt] = useState(toDateInputValue(event.expiresAt));
   const [clientName, setClientName] = useState(event.clientName ?? "");
   const [clientEmail, setClientEmail] = useState(event.clientEmail ?? "");
@@ -169,6 +171,8 @@ export function EventSettingsForm({
           isActive,
           downloadsEnabled,
           uploadsEnabled,
+          reactionsEnabled,
+          commentsEnabled,
           expiresAt: endOfDayIso(expiresAt),
           clientId: canManageClients ? clientId || null : undefined,
           clientName: canManageClients ? clientName || null : undefined,
@@ -435,6 +439,20 @@ export function EventSettingsForm({
           onChange={(event) => setDownloadsEnabled(event.target.checked)}
         >
           Guests can download photos and videos
+        </Checkbox>
+        <Checkbox
+          checked={reactionsEnabled}
+          onChange={(event) => setReactionsEnabled(event.target.checked)}
+          hint="A heart under each photo, and a double tap. No account needed, and you see the counts here."
+        >
+          Guests can heart photos
+        </Checkbox>
+        <Checkbox
+          checked={commentsEnabled}
+          onChange={(event) => setCommentsEnabled(event.target.checked)}
+          hint="Guests sign in with their email to comment, so nobody is anonymous. You can hide any comment, and three reports hide one until you look."
+        >
+          Guests can comment
         </Checkbox>
       </div>
 

@@ -24,6 +24,8 @@ const TEAM_VISIBLE = [
   "event.transfer_offered",
   "event.transfer_withdrawn",
   "event.transferred",
+  "comment.hidden",
+  "comment.shown",
 ] as const satisfies readonly AuditAction[];
 
 export interface ActivityEntry {
@@ -95,6 +97,10 @@ export function describeActivity(
       return detail.startsWith("Declined") ? "declined the offer of the event" : "withdrew the offer of the event";
     case "event.transferred":
       return "took over the event";
+    case "comment.hidden":
+      return "hid a comment";
+    case "comment.shown":
+      return detail.startsWith("Kept") ? "kept a reported comment up" : "showed a hidden comment again";
     default:
       return "made a change";
   }

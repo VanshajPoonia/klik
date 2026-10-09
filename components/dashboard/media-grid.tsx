@@ -1,5 +1,18 @@
 import Image from "next/image";
-import { Check, Download, EyeOff, Flag, Link2, Play, Share2, ShieldAlert, Trash2, X } from "lucide-react";
+import {
+  Check,
+  Download,
+  EyeOff,
+  Flag,
+  Heart,
+  Link2,
+  MessageCircle,
+  Play,
+  Share2,
+  ShieldAlert,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { Media, MediaVisibility } from "@/lib/schema";
 import type { SignedMediaUrls } from "@/lib/media-urls";
 
@@ -142,6 +155,26 @@ export function MediaGrid({
                 <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-paper backdrop-blur">
                   <badge.Icon className="h-3 w-3" aria-hidden="true" />
                   {badge.label}
+                </span>
+              )}
+              {/* MED-9. What guests made of it, where the selection tick goes
+                  when selecting, which is when it is not wanted. */}
+              {!selectionMode && (item.reactionCount > 0 || item.commentCount > 0) && (
+                <span className="absolute right-2 top-2 flex items-center gap-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium tabular-nums text-paper backdrop-blur">
+                  {item.reactionCount > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Heart className="h-3 w-3" aria-hidden="true" />
+                      {item.reactionCount}
+                      <span className="sr-only">{item.reactionCount === 1 ? "heart" : "hearts"}</span>
+                    </span>
+                  )}
+                  {item.commentCount > 0 && (
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="h-3 w-3" aria-hidden="true" />
+                      {item.commentCount}
+                      <span className="sr-only">{item.commentCount === 1 ? "comment" : "comments"}</span>
+                    </span>
+                  )}
                 </span>
               )}
               {selectionMode && (

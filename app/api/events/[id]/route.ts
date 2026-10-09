@@ -45,6 +45,9 @@ const patchSchema = z.object({
   isActive: z.boolean().optional(),
   downloadsEnabled: z.boolean().optional(),
   uploadsEnabled: z.boolean().optional(),
+  // MED-9. Any plan: a gallery people talk about is the product working.
+  reactionsEnabled: z.boolean().optional(),
+  commentsEnabled: z.boolean().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
   // CAM-4. Developing early is `developsAt: <now>`; there is no separate verb,
   // because "develop now" and "develop at this time" are the same setting.

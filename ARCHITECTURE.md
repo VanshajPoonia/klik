@@ -40,7 +40,7 @@ Three kinds of people use it, and they authenticate in three completely differen
 
 ---
 
-## 3. Eight constraints that will bite you
+## 3. Nine constraints that will bite you
 
 These are not style preferences. Each one has already caused a bug or came within one commit of causing one.
 
@@ -61,6 +61,8 @@ The fix is all three: the linux binaries are explicit `optionalDependencies`, `n
 **7. A signed URL is a bearer token for its whole window.** Since 2026-10-08 a gallery page signs its tiles in the request that ran the access rule (section 8), and those URLs live 15 to 30 minutes. Hiding or deleting a photo stops new URLs being issued for it at once and removes the tile from every phone within one poll, but a URL already handed out keeps working until it expires. Anything that must stop **instantly**, which today means share-link revocation, must not be batched this way; `/s/[token]` still authorizes per request.
 
 **8. Drizzle wraps every database error, so `error.code` is always undefined.** Since 0.45 a failed query throws a `DrizzleQueryError` whose message is the SQL text and whose `cause` is the driver's error, which is where the SQLSTATE and a trigger's `RAISE` message actually are. Found 2026-10-08: four "someone got there first" branches checked `error.code === "23505"` or `error.message.includes(...)` directly and had never once matched, so signup's username retry, the admin quick-create retry, the featured-event race and the Venue live-limit refusal all surfaced as 500s. Use `pgErrorCode`, `isUniqueViolation` and `raisedBy` from `lib/db-errors.ts`, which walk the cause chain.
+
+**9. In a single-table select list, Drizzle drops the table name from columns, including inside a subquery.** A selected field written as an `sql` fragment such as `EXISTS (SELECT 1 FROM "comment_reports" r WHERE r."comment_id" = ${mediaComments.id})`, in a query that reads only `media_comments`, renders the column as a bare `"id"`. Inside the subquery that means `r.id`, so the check compares a row with itself. The same query with a join, or the same fragment in `WHERE`, is qualified and correct, which is why it passes most tests and fails in the one path that reads a single table. Found 2026-10-09 in MED-9's child-safety check. In a correlated subquery, write the outer table's column out by name (`"media_comments"."id"`), as `lib/comments.ts` does.
 
 ---
 
@@ -280,7 +282,7 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 **The entitlement ledger, 2026-10-08.** See constraint 3 and `BILLING.md`. Grants are made on `/admin` with a reason; payments never grant anything themselves.
 
-Guest accounts and guest event history. Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding, and video metadata stripping with it.
+Nested folders. Any AI. The canvas print studio (the QR sign is a hard-coded SVG string). Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding. Passkeys.
 
 **Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
 
@@ -293,6 +295,8 @@ Guest accounts and guest event history. Nested folders. Any AI. The canvas print
 **Guest accounts, 2026-10-09 (ACC-1 to ACC-5).** A guest is still a cookie and still needs no account. When they have one, `guests.user_id` links the two: set on join while signed in, claimed from cookies on `/me` and on gallery load, and resumed on a new phone. Email sign-in sends a six-digit code, limited in the Auth.js route wrapper. `users.organizer_intent_at` separates people who came to run events from guests keeping a gallery, and the admin signup queue reads it. Passkeys (ACC-6) are not built.
 
 **Video location removal, 2026-10-09 (MED-8).** Videos are scrubbed in place by the `media.scrub_video` job; `media.metadata_state` says where each one is, and `videoHeldBack` in `lib/media-access.ts` keeps a pending or failed one to its uploader. The Privacy Policy now says so.
+
+**Hearts and comments, 2026-10-09 (MED-9).** Both off per event (`events.reactions_enabled`, `events.comments_enabled`). A heart needs only the guest cookie, or the host's account; a comment needs an account. Counts live on `media.reaction_count` and `media.comment_count`, kept by triggers in `drizzle/0030_reactions_and_comments.sql`, and they move `media.changed_at`, so phones receive new counts through the existing change sync rather than a second channel. `reacted` is added per viewer by `withViewerReactions` in `lib/reactions.ts` at each of the three places a gallery payload is built. Comments come down by being hidden, with `hidden_reason` saying by whom; comment reports are their own table so they never hide the photo underneath, and appear on the event page and on `/admin`.
 
 `ROADMAP.md` has all of it with task IDs and an order.
 

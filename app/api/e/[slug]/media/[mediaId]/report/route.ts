@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq, isNull } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { findEventBySlug } from "@/lib/slugs";
-import { events, media, REPORT_REASONS } from "@/lib/schema";
-import { resolveEventViewer } from "@/lib/event-viewer";
-import { canViewMedia } from "@/lib/media-access";
+import { REPORT_REASONS } from "@/lib/schema";
+import { resolveVisibleMedia } from "@/lib/media-viewer";
 import { fileReport } from "@/lib/reports";
 import { clientIp, consume } from "@/lib/ratelimit";
 
@@ -35,30 +31,17 @@ export async function POST(
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a reason" }, { status: 400 });
 
-  const event = (await findEventBySlug(slug))?.event;
-  if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const viewer = await resolveEventViewer(event);
-  if (!viewer.access.allowed || (!viewer.guestId && !viewer.ownerSession)) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  const [item] = await db
-    .select()
-    .from(media)
-    .where(and(eq(media.id, mediaId), eq(media.eventId, event.id), isNull(media.deletedAt)))
-    .limit(1);
-  if (!item || !canViewMedia(item, { isManager: Boolean(viewer.ownerSession), guestId: viewer.guestId }, event)) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const found = await resolveVisibleMedia(slug, mediaId);
+  if (!found) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const result = await fileReport({
-    eventId: event.id,
-    mediaId,
+    eventId: found.event.id,
+    mediaId: found.item.id,
     reason: parsed.data.reason,
     note: parsed.data.note,
     reporter: {
-      guestId: viewer.guestId,
-      userId: viewer.ownerSession?.user?.id ?? null,
+      guestId: found.guestId,
+      userId: found.managerUserId,
       ip: clientIp(request),
     },
   });

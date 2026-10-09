@@ -9,6 +9,7 @@ import { getAppUrl } from "@/lib/env";
 import { eventLicenseState, eventPlan } from "@/lib/license";
 import { getAccountEntitlements } from "@/lib/entitlements";
 import { openReportCounts } from "@/lib/reports";
+import { COMMENT_REPORT_LABELS, reportedComments, type CommentReportReason } from "@/lib/comments";
 import { eventUsage } from "@/lib/usage";
 import { listFormerSlugs } from "@/lib/slugs";
 import {
@@ -55,7 +56,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   // owner alone removes people and hands the event over.
   const isOwner = actor.role === "owner";
   const canManageTeam = canUseCoHosts(plan.key) && can(actor.role, "cohosts.manage");
-  const [reportCounts, formerSlugs, invites, activity, offeredBy] = await Promise.all([
+  const canModerateComments = can(actor.role, "media.moderate");
+  const [reportCounts, formerSlugs, invites, activity, offeredBy, commentReports] = await Promise.all([
     openReportCounts(event.id),
     listFormerSlugs(event.id),
     canManageTeam ? openInvites(event.id) : Promise.resolve([]),
@@ -69,6 +71,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           .limit(1)
           .then(([owner]) => owner?.name ?? (owner?.username ? `@${owner.username}` : "The owner"))
       : Promise.resolve(null),
+    canModerateComments ? reportedComments(event.id) : Promise.resolve([]),
   ]);
   const [mediaRows, albumRows, coHostRows, clientRows, held] = await Promise.all([
     db
@@ -128,6 +131,17 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canManageCoHosts={canManageTeam}
         canManageShares={can(actor.role, "shares.manage")}
         canManageTrash={can(actor.role, "trash.manage")}
+        canModerateComments={canModerateComments}
+        reportedComments={commentReports.map((row) => ({
+          commentId: row.commentId,
+          mediaId: row.mediaId,
+          body: row.body,
+          authorName: row.authorName,
+          hidden: row.hidden,
+          reasons: row.reasons.map((reason) => COMMENT_REPORT_LABELS[reason as CommentReportReason] ?? reason),
+          count: row.count,
+          safetyHold: row.safetyHold,
+        }))}
         addressing={plan.key !== "event" ? { origin: getAppUrl(), formerSlugs } : null}
         usage={(() => {
           const usage = eventUsage(event, plan);

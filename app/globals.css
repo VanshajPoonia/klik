@@ -202,3 +202,18 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .klik-live-fade { animation: none; }
 }
+
+/* MED-9: the heart that rises out of a photo when it is double-tapped. */
+@keyframes klik-heart-burst {
+  0% { opacity: 0; transform: scale(0.4); }
+  25% { opacity: 1; transform: scale(1.15); }
+  45% { transform: scale(0.95); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+.klik-heart-burst {
+  animation: klik-heart-burst 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .klik-heart-burst { animation: klik-live-fade 400ms ease-out both; }
+}

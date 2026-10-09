@@ -38,6 +38,7 @@ import { isPlausibleCaptureTime, readCaptureTime } from "@/lib/exif";
 import { log, reportError } from "@/lib/observability";
 import { mediaContentPath } from "@/lib/media-delivery";
 import { toGalleryMedia } from "@/lib/gallery-media";
+import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { canUseAlbums } from "@/lib/plans";
 
 // sharp/heic-convert need native/WASM Node bindings, never the edge runtime.
@@ -162,7 +163,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   });
 
   return NextResponse.json({
-    media: await toGalleryMedia(rows, event.slug),
+    media: await withViewerReactions(
+      await toGalleryMedia(rows, event.slug),
+      event,
+      reactorFor({ guestId: viewer.guestId, userId: viewer.ownerSession?.user?.id ?? null }),
+    ),
     // Meaningless in since-mode (the client only reads `media` there); it
     // already knows to keep polling since* regardless of what this says.
     nextCursor: !since && rows.length === limit ? encodeMediaCursor(rows[rows.length - 1]) : null,

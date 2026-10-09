@@ -28,6 +28,8 @@ export function toPublicMedia(
     mine?: boolean;
     posterPathname?: string | null;
     durationS?: number | null;
+    reactionCount?: number;
+    commentCount?: number;
   },
   slug: string,
 ) {
@@ -48,6 +50,10 @@ export function toPublicMedia(
     // decode it; the grid falls back to loading video metadata in that case.
     posterUrl: item.posterPathname ? mediaPosterPath(slug, item.id) : null,
     durationS: item.durationS ?? null,
+    // MED-9. Sent whether or not the event has them on; the gallery decides
+    // whether to draw them from the event's own switches.
+    reactionCount: item.reactionCount ?? 0,
+    commentCount: item.commentCount ?? 0,
   };
 }
 

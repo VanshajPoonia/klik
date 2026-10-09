@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
+import { Heart, MessageCircle, Play } from "lucide-react";
 
 interface Insights {
   galleryOpens: number;
@@ -12,6 +14,9 @@ interface Insights {
   timeline: Array<{ bucket: string; uploads: number }>;
   bucketSize: "hour" | "day";
   topContributors: Array<{ name: string; uploads: number }>;
+  hearts?: number;
+  comments?: number;
+  mostLoved?: Array<{ id: string; kind: "photo" | "video"; hearts: number; comments: number }>;
 }
 
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
@@ -44,7 +49,7 @@ function StatTile({ label, value }: { label: string; value: number }) {
  * chart, and the guests who shared the most. Every value is also reachable as
  * text: the chart has a table view and each column a focusable tooltip.
  */
-export function InsightsPanel({ eventId }: { eventId: string }) {
+export function InsightsPanel({ eventId, slug }: { eventId: string; slug: string }) {
   const [data, setData] = useState<Insights | null>(null);
   const [failed, setFailed] = useState(false);
   const [asTable, setAsTable] = useState(false);
@@ -65,6 +70,7 @@ export function InsightsPanel({ eventId }: { eventId: string }) {
   if (!data) return <p className="text-sm text-muted">Counting…</p>;
 
   const total = data.photos + data.videos;
+  const social = (data.hearts ?? 0) > 0 || (data.comments ?? 0) > 0;
   const max = Math.max(1, ...data.timeline.map((row) => row.uploads));
   const slot = data.timeline.length > 0 ? Math.max(8, Math.min(40, 720 / data.timeline.length)) : 40;
   const barWidth = Math.min(24, slot - 2);
@@ -86,11 +92,14 @@ export function InsightsPanel({ eventId }: { eventId: string }) {
             {figure(data.photos)} photos, {figure(data.videos)} videos
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className={`grid grid-cols-2 gap-3 ${social ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
           <StatTile label="Gallery opens" value={data.galleryOpens} />
           <StatTile label="Guests joined" value={data.guestsJoined} />
           <StatTile label="Guests who shared" value={data.contributors} />
           <StatTile label="Share link opens" value={data.shareOpens} />
+          {/* MED-9. Only once there is something to count. */}
+          {social && <StatTile label="Hearts" value={data.hearts ?? 0} />}
+          {social && <StatTile label="Comments" value={data.comments ?? 0} />}
         </div>
       </section>
 
@@ -201,6 +210,47 @@ export function InsightsPanel({ eventId }: { eventId: string }) {
           </div>
         )}
       </section>
+
+      {data.mostLoved && data.mostLoved.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-paper">Guests&apos; favourites</h2>
+          <ol className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+            {data.mostLoved.map((item, index) => (
+              <li key={item.id} className="relative aspect-square overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised">
+                <Image
+                  src={`/api/e/${encodeURIComponent(slug)}/media/${encodeURIComponent(item.id)}/content?thumb=1`}
+                  alt={`Number ${index + 1}, with ${item.hearts} ${item.hearts === 1 ? "heart" : "hearts"}`}
+                  fill
+                  unoptimized
+                  loading="lazy"
+                  sizes="160px"
+                  className="object-cover"
+                />
+                {item.kind === "video" && (
+                  <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-paper">
+                    <Play className="h-3 w-3" aria-hidden="true" />
+                  </span>
+                )}
+                <span
+                  className="absolute bottom-1.5 left-1.5 flex items-center gap-2 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-medium tabular-nums text-paper"
+                  aria-hidden="true"
+                >
+                  <span className="flex items-center gap-1">
+                    <Heart className="h-3 w-3 fill-volt text-volt" />
+                    {item.hearts}
+                  </span>
+                  {item.comments > 0 && (
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="h-3 w-3" />
+                      {item.comments}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {data.topContributors.length > 0 && (
         <section className="space-y-3">

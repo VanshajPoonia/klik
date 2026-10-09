@@ -97,9 +97,10 @@ export default function TermsPage() {
 
       <h2>Your content stays yours</h2>
       <p>
-        <strong>You own what you upload. We claim no ownership of it.</strong> You grant us only the
-        permission we need to operate the service: to store your photos, to process them so they
-        display properly, and to show them to the people you have given access to. That permission
+        <strong>You own what you upload, and what you write in a comment. We claim no ownership of
+        it.</strong> You grant us only the permission we need to operate the service: to store your
+        photos and comments, to process them so they display properly, and to show them to the
+        people who have access to the gallery. That permission
         ends when you delete the content or close your account.
       </p>
       <p>
@@ -107,8 +108,8 @@ export default function TermsPage() {
         you first, and we do not use them to train machine learning models.
       </p>
 
-      <h2>What you must not upload</h2>
-      <p>Do not upload anything that:</p>
+      <h2>What you must not upload or write</h2>
+      <p>Do not upload, or write in a comment, anything that:</p>
       <ul>
         <li>You do not have the right to share. A photographer you hired usually owns their photos.</li>
         <li>Shows a person in a way they have not agreed to, or that would humiliate or endanger them.</li>
@@ -118,7 +119,8 @@ export default function TermsPage() {
       </ul>
       <p>
         Organizers are responsible for their guests. If you print a QR code and put it on a table,
-        you are the person deciding who can upload.
+        you are the person deciding who can upload. If you turn on comments, you can hide any of
+        them, and we may hide or remove a comment that breaks these rules.
       </p>
 
       <h2>Copyright and the DMCA</h2>

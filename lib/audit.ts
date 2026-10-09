@@ -31,12 +31,14 @@ export type AuditAction =
   | "team.changed"
   | "event.transfer_offered"
   | "event.transfer_withdrawn"
-  | "event.transferred";
+  | "event.transferred"
+  | "comment.hidden"
+  | "comment.shown";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;
   action: AuditAction;
-  targetType: "user" | "event" | "media" | "entitlement" | "report";
+  targetType: "user" | "event" | "media" | "entitlement" | "report" | "comment";
   targetId?: string | null;
   eventId?: string | null;
   detail?: string | null;

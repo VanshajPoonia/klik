@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Download, X, MonitorPlay } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ import { ExportsPanel } from "@/components/dashboard/exports-panel";
 import { TrashPanel } from "@/components/dashboard/trash-panel";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { UsageMeter, type UsageSummary } from "@/components/dashboard/usage-meter";
+import { ReportedComments, type ReportedCommentRow } from "@/components/dashboard/reported-comments";
 
 type Tab = "gallery" | "insights" | "links" | "settings" | "qr" | "trash";
 
@@ -45,6 +47,8 @@ export function EventDashboard({
   canUseVenueHub = false,
   canDeleteEvent = false,
   canManageTrash = false,
+  canModerateComments = false,
+  reportedComments = [],
   usage = null,
   addressing = null,
   license = { state: "live", canGoLive: false, requestedAt: null },
@@ -70,6 +74,9 @@ export function EventDashboard({
   canUseVenueHub?: boolean;
   canDeleteEvent?: boolean;
   canManageTrash?: boolean;
+  /** MED-9: hide and show comments, which is moderating like approving photos. */
+  canModerateComments?: boolean;
+  reportedComments?: ReportedCommentRow[];
   usage?: UsageSummary | null;
   addressing?: { origin: string; formerSlugs: string[] } | null;
   license?: EventLicenseSummary;
@@ -83,6 +90,7 @@ export function EventDashboard({
   clients?: VenueClient[];
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
+  const router = useRouter();
   const [mediaItems, setMediaItems] = useState(initialMedia);
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
   const [lightboxId, setLightboxId] = useState<string | null>(null);
@@ -472,6 +480,9 @@ export function EventDashboard({
                 {mediaError}
               </div>
             )}
+            {canModerateComments && (
+              <ReportedComments slug={event.slug} rows={reportedComments} onOpenMedia={setLightboxId} />
+            )}
             {pending.length > 0 && (
               <section>
                 <h2 className="mb-4 text-xs font-medium tracking-wide text-muted uppercase">
@@ -627,7 +638,7 @@ export function EventDashboard({
           </div>
         )}
         {tab === "trash" && canManageTrash && <TrashPanel eventId={event.id} />}
-        {tab === "insights" && <InsightsPanel eventId={event.id} />}
+        {tab === "insights" && <InsightsPanel eventId={event.id} slug={event.slug} />}
         {tab === "qr" &&
           (license.state === "draft" ? (
             // ACT-3: no QR code before the event is live. One printed now
@@ -791,6 +802,27 @@ export function EventDashboard({
           canSlideshow={canSlideshow}
           downloadBaseUrl={downloadBaseUrl}
           onShare={canManageShares ? setShareMediaId : undefined}
+          // MED-9. The count, not the button: hearting is for the gallery, and
+          // this is where the host manages it. Comments open with moderation.
+          social={
+            event.reactionsEnabled || event.commentsEnabled
+              ? {
+                  slug: event.slug,
+                  reactions: event.reactionsEnabled,
+                  comments: event.commentsEnabled,
+                  canModerate: canModerateComments,
+                  signInHref: null,
+                  // The reported-comments card above the grid reads the server.
+                  onModerated: () => router.refresh(),
+                  onCommentCount: (id, count) =>
+                    setMediaItems((current) =>
+                      current.map((item) =>
+                        item.id === id && item.commentCount !== count ? { ...item, commentCount: count } : item,
+                      ),
+                    ),
+                }
+              : undefined
+          }
         />
       )}
 

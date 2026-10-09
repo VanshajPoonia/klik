@@ -25,6 +25,12 @@ describe("describeActivity", () => {
     expect(line("event.transfer_withdrawn", "Withdrawn by the owner.")).toBe("withdrew the offer of the event");
   });
 
+  it("says what happened to a comment, never what it said", () => {
+    expect(line("comment.hidden", "Hidden by the host.")).toBe("hid a comment");
+    expect(line("comment.shown", "Shown again by the host.")).toBe("showed a hidden comment again");
+    expect(line("comment.shown", "Kept by the host.")).toBe("kept a reported comment up");
+  });
+
   it("never passes an unknown action's detail through", () => {
     expect(line("plan.granted", "Comped. Internal reason.")).toBe("made a change");
   });

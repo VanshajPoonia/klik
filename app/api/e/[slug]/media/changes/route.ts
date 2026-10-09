@@ -6,6 +6,7 @@ import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { canViewMedia } from "@/lib/media-access";
 import { toGalleryMedia } from "@/lib/gallery-media";
+import { reactorFor, withViewerReactions } from "@/lib/reactions";
 
 /**
  * What changed in a gallery since a phone last asked.
@@ -35,6 +36,10 @@ const MAX_CHANGES = 300;
 
 const noStore = { "Cache-Control": "private, no-store" };
 
+function galleryFeatures(event: { reactionsEnabled: boolean; commentsEnabled: boolean }) {
+  return { reactions: event.reactionsEnabled, comments: event.commentsEnabled };
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const sinceParam = new URL(request.url).searchParams.get("since");
@@ -62,7 +67,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // media row: moderation switched on, or a host turning off "uploaders see
   // their own hidden photos". Those stamp the event, so the phone starts over.
   if (event.updatedAt > since) {
-    return NextResponse.json({ at, resync: true }, { headers: noStore });
+    // MED-9: the switches travel with the resync, so turning hearts or
+    // comments on reaches phones already open without a reload.
+    return NextResponse.json({ at, resync: true, features: galleryFeatures(event) }, { headers: noStore });
   }
 
   const from = new Date(since.getTime() - OVERLAP_MS);
@@ -70,7 +77,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // changing, because it is a time passing. When that moment falls inside this
   // poll's window, the phone starts over and gets the whole reveal at once.
   if (event.disposableMode && event.developsAt && event.developsAt > from && event.developsAt <= new Date(at)) {
-    return NextResponse.json({ at, resync: true }, { headers: noStore });
+    return NextResponse.json({ at, resync: true, features: galleryFeatures(event) }, { headers: noStore });
   }
   if (event.mediaChangedAt <= from) {
     return NextResponse.json({ at, upserts: [], removed: [] }, { headers: noStore });
@@ -83,7 +90,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     .orderBy(asc(media.changedAt))
     .limit(MAX_CHANGES + 1);
   if (changed.length > MAX_CHANGES) {
-    return NextResponse.json({ at, resync: true }, { headers: noStore });
+    return NextResponse.json({ at, resync: true, features: galleryFeatures(event) }, { headers: noStore });
   }
 
   const mediaViewer = { isManager: Boolean(viewer.ownerSession), guestId: viewer.guestId };
@@ -96,9 +103,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     .filter((item) => !visibleIds.has(item.id) && item.createdAt <= since)
     .map((item) => item.id);
 
-  const upserts = await toGalleryMedia(
-    visible.map((item) => ({ ...item, mine: viewer.guestId != null && item.guestId === viewer.guestId })),
-    event.slug,
+  const upserts = await withViewerReactions(
+    await toGalleryMedia(
+      visible.map((item) => ({ ...item, mine: viewer.guestId != null && item.guestId === viewer.guestId })),
+      event.slug,
+    ),
+    event,
+    reactorFor({ guestId: viewer.guestId, userId: viewer.ownerSession?.user?.id ?? null }),
   );
 
   return NextResponse.json({ at, upserts, removed }, { headers: noStore });

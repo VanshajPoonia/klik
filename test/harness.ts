@@ -50,6 +50,10 @@ const TABLES = [
   "event_slugs",
   "slug_reservations",
   "media_reports",
+  // MED-9, before `media`, `guests` and `users`.
+  "comment_reports",
+  "media_comments",
+  "media_reactions",
   "exports",
   // Before `events`, which points back at it.
   "entitlements",

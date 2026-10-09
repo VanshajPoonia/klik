@@ -19,7 +19,14 @@ export interface EventInsights {
   timeline: Array<{ bucket: string; uploads: number }>;
   bucketSize: "hour" | "day";
   topContributors: Array<{ name: string; uploads: number }>;
+  /** MED-9: hearts and visible comments across live media. */
+  hearts: number;
+  comments: number;
+  /** The most hearted, most first, for "guests' favourites". */
+  mostLoved: Array<{ id: string; kind: "photo" | "video"; hearts: number; comments: number }>;
 }
+
+const MOST_LOVED = 6;
 
 /** Hourly up to three days of activity, then daily, so the chart stays readable. */
 const HOURLY_SPAN_HOURS = 72;
@@ -34,6 +41,8 @@ export async function eventInsights(eventId: string): Promise<EventInsights> {
         photos: sql<number>`count(*) filter (where ${media.kind} = 'photo')`.mapWith(Number),
         videos: sql<number>`count(*) filter (where ${media.kind} = 'video')`.mapWith(Number),
         contributors: countDistinct(media.guestId),
+        hearts: sql<number>`coalesce(sum(${media.reactionCount}), 0)`.mapWith(Number),
+        comments: sql<number>`coalesce(sum(${media.commentCount}), 0)`.mapWith(Number),
       })
       .from(media)
       .where(live),
@@ -56,7 +65,7 @@ export async function eventInsights(eventId: string): Promise<EventInsights> {
   // because it is one of two fixed words, never input.
   const bucket = sql`date_trunc(${sql.raw(bucketSize === "day" ? "'day'" : "'hour'")}, ${media.createdAt})`;
 
-  const [timelineRows, contributorRows] = await Promise.all([
+  const [timelineRows, contributorRows, lovedRows] = await Promise.all([
     db
       .select({ bucket: sql<string>`${bucket}`, uploads: count() })
       .from(media)
@@ -71,6 +80,12 @@ export async function eventInsights(eventId: string): Promise<EventInsights> {
       .groupBy(guests.id, guests.displayName)
       .orderBy(desc(count()))
       .limit(5),
+    db
+      .select({ id: media.id, kind: media.kind, hearts: media.reactionCount, comments: media.commentCount })
+      .from(media)
+      .where(and(live, sql`${media.reactionCount} > 0`))
+      .orderBy(desc(media.reactionCount), desc(media.createdAt))
+      .limit(MOST_LOVED),
   ]);
 
   return {
@@ -86,6 +101,9 @@ export async function eventInsights(eventId: string): Promise<EventInsights> {
     ),
     bucketSize,
     topContributors: contributorRows.map((row) => ({ name: row.name?.trim() || "A guest", uploads: row.uploads })),
+    hearts: uploads?.hearts ?? 0,
+    comments: uploads?.comments ?? 0,
+    mostLoved: lovedRows,
   };
 }
 

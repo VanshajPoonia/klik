@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Download,
   Flag,
+  Heart,
   Pause,
   Play,
   Share2,
@@ -15,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
+import { CommentButton, CommentsSheet, HeartButton } from "@/components/guest/media-social";
 
 export interface LightboxItem {
   id: string;
@@ -28,7 +30,30 @@ export interface LightboxItem {
   posterUrl?: string | null;
   /** The guest's own upload, which they may delete (MED-6). */
   mine?: boolean;
+  /** MED-9. Counts from the media row; `reacted` is this viewer's own heart. */
+  reactionCount?: number;
+  commentCount?: number;
+  reacted?: boolean;
 }
+
+/** MED-9: what the viewer shows and allows of hearts and comments. */
+export interface LightboxSocial {
+  slug: string;
+  reactions: boolean;
+  comments: boolean;
+  /** Hearting, as opposed to seeing the count. Absent in the dashboard. */
+  onReact?: (id: string, on: boolean) => void;
+  /** The team: sees hidden comments and can hide or show them. */
+  canModerate: boolean;
+  /** Where a guest signs in to comment; null for the team. */
+  signInHref: string | null;
+  /** The sheet's fresh count, before the next sync brings it. */
+  onCommentCount?: (id: string, count: number) => void;
+  /** After the team hides or shows a comment, for anything else on the page. */
+  onModerated?: () => void;
+}
+
+const DOUBLE_TAP_MS = 300;
 
 const SWIPE_THRESHOLD = 50;
 
@@ -71,6 +96,7 @@ export function Lightbox({
   onShare,
   onDeleteOwn,
   onReport,
+  social,
 }: {
   items: LightboxItem[];
   index: number;
@@ -91,8 +117,10 @@ export function Lightbox({
   /** Guest side: reports something they did not upload (TRS-1). Resolves to an
    *  error message, or null when the report was taken. */
   onReport?: (id: string, reason: ReportReason, note: string) => Promise<string | null>;
+  social?: LightboxSocial;
 }) {
   const touchStartX = useRef<number | null>(null);
+  const lastTap = useRef(0);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [slideshowPlaying, setSlideshowPlaying] = useState(false);
   // Keyed by media id rather than reset on change, so nothing has to call
@@ -114,6 +142,11 @@ export function Lightbox({
   const [reportNote, setReportNote] = useState("");
   const [reportState, setReportState] = useState<"idle" | "sending" | "sent">("idle");
   const [reportError, setReportError] = useState<string | null>(null);
+  // MED-9. Keyed by id like the panels above, so a swipe closes the thread
+  // rather than leaving the last photo's comments over the next one.
+  const [commentsFor, setCommentsFor] = useState<string | null>(null);
+  const [burst, setBurst] = useState<{ id: string; key: number } | null>(null);
+  const commentsOpen = Boolean(item && commentsFor === item.id);
   const photoUrl = item
     ? item.src && !expiredIds.has(item.id)
       ? item.src
@@ -157,8 +190,16 @@ export function Lightbox({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowLeft") go(-1);
+      // Escape closes the comments first, then the viewer.
+      if (e.key === "Escape") {
+        if (commentsOpen) setCommentsFor(null);
+        else onClose();
+        return;
+      }
+      // Typing a comment or a report note must not change the photo.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "ArrowRight") go(1);
       else if (e.code === "Space" && canSlideshow && items.length > 1) {
         e.preventDefault();
@@ -167,16 +208,16 @@ export function Lightbox({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canSlideshow, go, items.length, onClose]);
+  }, [canSlideshow, commentsOpen, go, items.length, onClose]);
 
   useEffect(() => {
-    if (!slideshowPlaying || items.length < 2 || !item) return;
+    if (!slideshowPlaying || commentsOpen || items.length < 2 || !item) return;
     const delay = item.kind === "video" ? 12_000 : 6_000;
     const timer = window.setTimeout(() => {
       onIndexChange((index + 1) % items.length);
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [index, item, items.length, onIndexChange, slideshowPlaying]);
+  }, [commentsOpen, index, item, items.length, onIndexChange, slideshowPlaying]);
 
   // Move focus into the viewer, and hand it back to the tile that opened it.
   useEffect(() => {
@@ -195,6 +236,15 @@ export function Lightbox({
   }, []);
 
   if (!item) return null;
+
+  const canHeart = Boolean(social?.reactions && social.onReact);
+  /** Double-tap or double-click on a photo hearts it, and never un-hearts. */
+  const heartFromPhoto = () => {
+    if (!canHeart || item.kind !== "photo") return;
+    setBurst({ id: item.id, key: Date.now() });
+    if (!item.reacted) social?.onReact?.(item.id, true);
+  };
+  const showSocialBar = Boolean(social && (social.reactions || social.comments));
 
   return (
     <div
@@ -330,6 +380,21 @@ export function Lightbox({
         ) : (
           <Image
             key={item.id}
+            onDoubleClick={heartFromPhoto}
+            onTouchEnd={(e) => {
+              // A second tap in the same spot, quickly. A swipe moves too far
+              // to count, so changing photos never hearts one by accident.
+              const start = touchStartX.current;
+              const moved = start === null ? 0 : Math.abs(e.changedTouches[0].clientX - start);
+              if (moved > 10) return;
+              const now = e.timeStamp;
+              if (now - lastTap.current < DOUBLE_TAP_MS) {
+                lastTap.current = 0;
+                heartFromPhoto();
+              } else {
+                lastTap.current = now;
+              }
+            }}
             src={enhancedUrl ?? photoUrl ?? item.blobUrl}
             onError={() => {
               if (item.src && !expiredIds.has(item.id)) {
@@ -340,8 +405,32 @@ export function Lightbox({
             fill
             unoptimized
             sizes="100vw"
-            className="object-contain"
+            className="touch-manipulation object-contain"
             priority
+          />
+        )}
+
+        {burst?.id === item.id && (
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
+            <Heart
+              key={burst.key}
+              onAnimationEnd={() => setBurst(null)}
+              className="klik-heart-burst h-28 w-28 fill-volt text-volt drop-shadow-lg"
+            />
+          </span>
+        )}
+
+        {social?.comments && commentsOpen && (
+          <CommentsSheet
+            key={item.id}
+            slug={social.slug}
+            mediaId={item.id}
+            kind={item.kind}
+            canModerate={social.canModerate}
+            signInHref={social.signInHref}
+            onClose={() => setCommentsFor(null)}
+            onVisibleCountChange={(count) => social.onCommentCount?.(item.id, count)}
+            onModerated={social.onModerated}
           />
         )}
 
@@ -495,6 +584,28 @@ export function Lightbox({
           </button>
         )}
       </div>
+
+      {showSocialBar && social && (
+        <div className="flex shrink-0 items-center gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+          {social.reactions && (
+            <HeartButton
+              kind={item.kind}
+              count={item.reactionCount ?? 0}
+              reacted={Boolean(item.reacted)}
+              onToggle={canHeart ? () => social.onReact?.(item.id, !item.reacted) : undefined}
+            />
+          )}
+          {social.comments && (
+            <CommentButton
+              count={item.commentCount ?? 0}
+              onOpen={() => {
+                setSlideshowPlaying(false);
+                setCommentsFor(commentsOpen ? null : item.id);
+              }}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

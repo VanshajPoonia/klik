@@ -32,7 +32,7 @@
 - Granting a plan automatically. **Deliberately**, confirmed 2026-10-08: payments keep human approval. The ledger has a `source` column so automating it later is one webhook handler.
 - Any usage measurement. Nothing counts storage, media, or guests, so nothing can warn about limits.
 - Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt. Usernames are still generated at signup, and since ID-2 can be changed on `/dashboard/account`.
-- Passkeys (ACC-6). Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09.
+- Passkeys (ACC-6). Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09. Hearts and comments (MED-9) shipped the same day.
 - Nested folders (MED-4). Per-photo visibility, share links and revocable access **are** built: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
 - Any AI beyond client-side CSS filters.
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
@@ -660,6 +660,8 @@ Still open here:
 - Add an organizer setting "keep full photo metadata", default off, for the professional-photographer case where EXIF is part of the deliverable.
 
 ### MED-9. Reactions and comments
+**DONE 2026-10-09** (`drizzle/0030_reactions_and_comments.sql`, `lib/reactions.ts`, `lib/comments.ts`, `test/social.dbtest.ts`). Two switches in event settings, both off. A heart under each photo in the lightbox, and a double tap; the host can heart from their own gallery as their account. Comments in a sheet over the photo, for signed-in guests, with a Host badge on the team's. The team hides and shows comments (`media.moderate`), a guest deletes their own, and a hidden comment stays visible to its author, marked. Comment reports are a table of their own: three reporters hide the comment, a child-safety report hides it at once and alerts `ALERT_EMAIL`, and only Klik can show that one again. Reported comments appear on the event page and in a second queue on `/admin`. Insights gained hearts, comments and "guests' favourites". Counts are denormalised on `media` and ride the change sync. Erasing a guest takes their hearts and, if they signed in, their comments at that event.
+
 **Size:** M. **Depends on:** ACC-5. **Decided 2026-09-30 (C-5).**
 - **Reactions are open to anonymous guests.** The existing per-event guest cookie attributes them well enough, and a heart is close to unabusable. One reaction per guest per item, toggleable.
 - **Comments require a signed-in account** (ACC-2), because free-text from anonymous strangers is a moderation queue you will have to staff.

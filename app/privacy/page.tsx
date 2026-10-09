@@ -77,6 +77,13 @@ export default function PrivacyPage() {
         and link the galleries they join while signed in, and the ones this device joined before,
         to it. Signing in is never needed to view, upload or download.
       </p>
+      <p>
+        If the organizer turns them on, a guest can also <strong>heart</strong> a photo and{" "}
+        <strong>comment</strong> on it. A heart is recorded against the guest&apos;s cookie for that
+        gallery, and other guests see only how many hearts a photo has, never whose they are. A
+        comment needs a signed-in guest, and stores what they wrote and when; everyone who can see
+        the photo sees the comment, with the guest&apos;s display name for that gallery beside it.
+      </p>
 
       <h3>What the consent notice says</h3>
       <p>
@@ -196,11 +203,17 @@ export default function PrivacyPage() {
         A guest can delete anything they uploaded. The organizer can also remove it, which is what
         the consent notice tells guests before they upload.
       </p>
+      <p>
+        A comment is seen by everyone who can see the photo it is on. Its author can delete it. The
+        organizer can hide it, and so can we after reports; a hidden comment is kept, visible only to
+        its author, the organizer and us, so it can be reviewed and shown again if the report was
+        wrong.
+      </p>
 
       <h2>Your choices</h2>
       <p>
-        <strong>Guests:</strong> remove everything you added to a gallery, and your name, from the
-        bottom of that gallery at any time. If you signed in, you can do the same for any event
+        <strong>Guests:</strong> remove everything you added to a gallery, your name, hearts and
+        comments included, from the bottom of that gallery at any time. If you signed in, you can do the same for any event
         from &ldquo;Your galleries&rdquo;, and deleting your account removes everything you shared
         everywhere. Otherwise write to us at{" "}
         <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a> and tell us which event.

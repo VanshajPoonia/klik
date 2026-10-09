@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { nanoid } from "nanoid";
-import { Camera, Play } from "lucide-react";
+import { Camera, Heart, MessageCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
@@ -49,6 +49,10 @@ interface MediaItem {
   mine: boolean;
   /** Date over RSC, ISO string over JSON - normalize before using. */
   createdAt: string | Date;
+  /** MED-9. Absent on payloads from before it shipped. */
+  reactionCount?: number;
+  commentCount?: number;
+  reacted?: boolean;
 }
 
 interface UploadProgress {
@@ -165,6 +169,7 @@ export function GuestGallery({
   galleryFull = false,
   disposable = null,
   signedIn = false,
+  canModerateComments = false,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -182,8 +187,16 @@ export function GuestGallery({
   disposable?: { shotsPerGuest: number; shotsLeft: number; developsAt: string | null; developed: boolean } | null;
   /** ACC-4: whether this guest is signed in, which only changes one line of copy. */
   signedIn?: boolean;
+  /** MED-9: a team member whose role may hide comments. */
+  canModerateComments?: boolean;
 }) {
   const [shotsLeft, setShotsLeft] = useState(disposable?.shotsLeft ?? 0);
+  // MED-9. Held as state because the host can switch either on while phones
+  // are open; the change sync brings the new values with its resync.
+  const [features, setFeatures] = useState({
+    reactions: event.reactionsEnabled,
+    comments: event.commentsEnabled,
+  });
   // A disposable is shot in the moment, so guests use the camera and not their
   // camera roll. The host can still add from anywhere.
   const cameraOnly = Boolean(disposable) && !isOwner;
@@ -288,9 +301,15 @@ export function GuestGallery({
           delay = POLL_SLOW_MS;
           return;
         }
-        const data: { at: string; resync?: boolean; upserts?: MediaItem[]; removed?: string[] } =
-          await res.json();
+        const data: {
+          at: string;
+          resync?: boolean;
+          upserts?: MediaItem[];
+          removed?: string[];
+          features?: { reactions: boolean; comments: boolean };
+        } = await res.json();
         if (data.resync) {
+          if (data.features) setFeatures(data.features);
           await reloadFirstPage();
           delay = POLL_FAST_MS;
         } else {
@@ -585,6 +604,43 @@ export function GuestGallery({
     },
     [event.slug],
   );
+
+  /**
+   * MED-9: hearts or un-hearts, on screen at once and on the server after. The
+   * server's count wins when it answers, since others are hearting too; a
+   * failure puts the heart back where it was.
+   */
+  const react = useCallback(
+    async (mediaId: string, on: boolean) => {
+      const patch = (fields: (item: MediaItem) => Partial<MediaItem>) =>
+        setItems((current) => current.map((item) => (item.id === mediaId ? { ...item, ...fields(item) } : item)));
+      patch((item) => ({
+        reacted: on,
+        reactionCount: Math.max(0, (item.reactionCount ?? 0) + (on ? 1 : -1) * (item.reacted === on ? 0 : 1)),
+      }));
+      const res = await fetch(`/api/e/${event.slug}/media/${mediaId}/reaction`, { method: on ? "PUT" : "DELETE" }).catch(
+        () => null,
+      );
+      if (res?.ok) {
+        const body: { reacted: boolean; count: number } = await res.json();
+        patch(() => ({ reacted: body.reacted, reactionCount: body.count }));
+      } else {
+        // Only undoes what the optimistic step did, if it is still showing.
+        patch((item) =>
+          item.reacted === on
+            ? { reacted: !on, reactionCount: Math.max(0, (item.reactionCount ?? 0) + (on ? -1 : 1)) }
+            : {},
+        );
+      }
+    },
+    [event.slug],
+  );
+
+  const setCommentCount = useCallback((mediaId: string, count: number) => {
+    setItems((current) =>
+      current.map((item) => (item.id === mediaId && item.commentCount !== count ? { ...item, commentCount: count } : item)),
+    );
+  }, []);
 
   const [leaving, setLeaving] = useState<"idle" | "confirm" | "working">("idle");
   const [leaveError, setLeaveError] = useState<string | null>(null);
@@ -893,6 +949,27 @@ export function GuestGallery({
                     Only you can see this
                   </span>
                 )}
+                {/* MED-9. Only when there is something to count, so a quiet
+                    gallery is not a grid of zeros. */}
+                {((features.reactions && (item.reactionCount ?? 0) > 0) ||
+                  (features.comments && (item.commentCount ?? 0) > 0)) && (
+                  <span className="absolute bottom-1.5 left-1.5 flex items-center gap-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium tabular-nums text-paper backdrop-blur">
+                    {features.reactions && (item.reactionCount ?? 0) > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Heart className={`h-3 w-3 ${item.reacted ? "fill-volt text-volt" : ""}`} aria-hidden="true" />
+                        {item.reactionCount}
+                        <span className="sr-only">{item.reactionCount === 1 ? "heart" : "hearts"}</span>
+                      </span>
+                    )}
+                    {features.comments && (item.commentCount ?? 0) > 0 && (
+                      <span className="flex items-center gap-1">
+                        <MessageCircle className="h-3 w-3" aria-hidden="true" />
+                        {item.commentCount}
+                        <span className="sr-only">{item.commentCount === 1 ? "comment" : "comments"}</span>
+                      </span>
+                    )}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1004,6 +1081,19 @@ export function GuestGallery({
           onEnhancedChange={setEnhancePreference}
           onDeleteOwn={isOwner ? undefined : deleteOwn}
           onReport={isOwner ? undefined : reportItem}
+          social={
+            features.reactions || features.comments
+              ? {
+                  slug: event.slug,
+                  reactions: features.reactions,
+                  comments: features.comments,
+                  onReact: (id, on) => void react(id, on),
+                  canModerate: canModerateComments,
+                  signInHref: isOwner ? null : `/login?next=${encodeURIComponent(`/e/${event.slug}`)}`,
+                  onCommentCount: setCommentCount,
+                }
+              : undefined
+          }
         />
       )}
     </div>

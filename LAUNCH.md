@@ -182,6 +182,23 @@ data is removed" and "Your choices" sections before you rely on it.
 
 - [ ] Re-read the three changed sections of `/privacy`
 
+And **hearts and comments**. They are off on every event until you turn them on: open
+an event's **Settings** tab, tick "Guests can heart photos" and "Guests can comment",
+and save. Then, on your phone, open the gallery as a guest, open a photo, and tap the
+heart (or double-tap the photo). Tap the speech bubble, sign in with your email when it
+asks, and write a comment. On your laptop, open the same event's gallery tab: the photo
+shows its counts, and opening it shows the comment with a **Hide** link. Report the
+comment from a third browser to see it reach the **Reported comments** card on the event
+page and on `/admin`.
+
+The **Privacy Policy and Terms** changed again the same day, for comments: the Privacy
+Policy's "What we collect from guests", "Who can see a photo" and "Your choices", and the
+Terms' "Your content stays yours" and "What you must not upload or write".
+
+- [ ] Turned on hearts and comments for a test event, hearted and commented from a phone
+- [ ] Hid a comment, and saw a reported one on the event page and `/admin`
+- [ ] Re-read the comment paragraphs in `/privacy` and `/terms`
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "./db";
-import { erasureLog, events, guests, media, users, eventInvites } from "./schema";
+import { erasureLog, events, guests, media, mediaComments, users, eventInvites } from "./schema";
 import { deleteBlobs } from "./storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys, type MediaObjectRow } from "./media-objects";
 import { deleteEventExports, deleteExportsContaining } from "./exports";
@@ -148,6 +148,18 @@ export async function eraseGuest(
   // Any export holding one of their uploads goes too: leaving their photos in a
   // ZIP for a week is not an erasure. Exports that never held them stay.
   await deleteExportsContaining(eventId, rows.map((row) => row.id));
+  // MED-9: what a signed-in guest wrote here goes with what they shot. Their
+  // hearts need nothing: the foreign key takes them with the guest row.
+  const [guest] = await db
+    .select({ userId: guests.userId })
+    .from(guests)
+    .where(and(eq(guests.id, guestId), eq(guests.eventId, eventId)))
+    .limit(1);
+  if (guest?.userId) {
+    await db
+      .delete(mediaComments)
+      .where(and(eq(mediaComments.userId, guest.userId), eq(mediaComments.eventId, eventId)));
+  }
   await db.delete(guests).where(and(eq(guests.id, guestId), eq(guests.eventId, eventId)));
 
   // A deleted guest's uploads are gone, so any event still pointing at one of

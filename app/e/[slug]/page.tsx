@@ -28,9 +28,11 @@ import {
   canUseSlideshow,
   removesKlikBranding,
 } from "@/lib/plans";
-import { requireEventManagerSession } from "@/lib/roles";
+import { resolveEventActor } from "@/lib/roles";
+import { can } from "@/lib/permissions";
 import { auth } from "@/lib/auth";
 import { claimGuestCookies } from "@/lib/guest-accounts";
+import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -64,7 +66,11 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   if (!event) notFound();
   const plan = eventPlan(event);
 
-  const managerSession = await requireEventManagerSession(event.id, event.ownerId);
+  // The actor rather than the bare session, so the gallery can offer each team
+  // member what their role allows: a contributor sees hidden comments, as they
+  // see private photos, but only a moderator or above can hide one (MED-9).
+  const actor = await resolveEventActor(event.id, event.ownerId);
+  const managerSession = actor?.session ?? null;
   const isOwner = Boolean(managerSession);
 
   const cookieStore = await cookies();
@@ -123,14 +129,18 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
   // Taken before the query, so anything that changes while it runs is sent
   // again by the first poll rather than falling between the two.
   const syncedAt = new Date().toISOString();
-  const initialMedia = await toGalleryMedia(
-    await fetchGalleryMedia(event.id, {
-      isOwner,
-      guestId: guestSession?.guestId,
-      event,
-      limit: 60,
-    }),
-    event.slug,
+  const initialMedia = await withViewerReactions(
+    await toGalleryMedia(
+      await fetchGalleryMedia(event.id, {
+        isOwner,
+        guestId: guestSession?.guestId,
+        event,
+        limit: 60,
+      }),
+      event.slug,
+    ),
+    event,
+    reactorFor({ guestId: guestSession?.guestId ?? null, userId: managerSession?.user?.id ?? null }),
   );
   const [albumRows, coverRows] = await Promise.all([
     canUseAlbums(plan.key)
@@ -195,6 +205,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       galleryFull={galleryFull && canUpload(event)}
       disposable={disposable}
       signedIn={Boolean(signedInUserId)}
+      canModerateComments={Boolean(actor && can(actor.role, "media.moderate"))}
     />
   );
 }

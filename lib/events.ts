@@ -140,6 +140,9 @@ export function toPublicEvent(event: Event) {
     isActive: event.isActive,
     downloadsEnabled: event.downloadsEnabled,
     uploadsEnabled: event.uploadsEnabled,
+    // MED-9: the gallery shows a heart and a comment button only when on.
+    reactionsEnabled: event.reactionsEnabled,
+    commentsEnabled: event.commentsEnabled,
     expiresAt: event.expiresAt,
     createdAt: event.createdAt,
   };

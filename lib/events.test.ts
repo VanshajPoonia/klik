@@ -53,6 +53,8 @@ const row: Event = {
   galleryOpens: 0,
   transferToUserId: null,
   transferOfferedAt: null,
+  reactionsEnabled: true,
+  commentsEnabled: true,
 };
 
 /**
@@ -73,6 +75,8 @@ const PUBLISHED = [
   "isActive",
   "downloadsEnabled",
   "uploadsEnabled",
+  "reactionsEnabled",
+  "commentsEnabled",
   "expiresAt",
   "createdAt",
 ] as const;

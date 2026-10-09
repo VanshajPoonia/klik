@@ -292,6 +292,10 @@ export const events = pgTable(
     // first; it is in drizzle/0026_team.sql.
     transferToUserId: text("transfer_to_user_id"),
     transferOfferedAt: timestamp("transfer_offered_at", { withTimezone: true }),
+    // MED-9: hearts (any guest) and comments (signed-in guests). Both off until
+    // the host turns them on. See lib/reactions.ts and lib/comments.ts.
+    reactionsEnabled: boolean("reactions_enabled").notNull().default(false),
+    commentsEnabled: boolean("comments_enabled").notNull().default(false),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -460,6 +464,11 @@ export const media = pgTable(
     // delete this row or its bytes: not the purge, not erasure, not the guest
     // who uploaded it. See lib/reports.ts. Only a superadmin clears it.
     legalHoldAt: timestamp("legal_hold_at", { withTimezone: true }),
+    // MED-9: hearts, and comments guests can see (hidden ones excluded). Kept
+    // by triggers in drizzle/0030 and never written by app code, so a count is
+    // read from the row a grid already has instead of counted per tile.
+    reactionCount: integer("reaction_count").notNull().default(0),
+    commentCount: integer("comment_count").notNull().default(0),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),
@@ -761,6 +770,70 @@ export const mediaReports = pgTable("media_reports", {
 });
 
 export type MediaReport = typeof mediaReports.$inferSelect;
+
+/**
+ * MED-9: one heart per person per item. `reactor` is `g:<guest id>` or
+ * `u:<user id>`, which a CHECK in drizzle/0030 holds to whichever id is set, so
+ * one primary key covers guests and the host alike.
+ */
+export const mediaReactions = pgTable(
+  "media_reactions",
+  {
+    mediaId: text("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    reactor: text("reactor").notNull(),
+    guestId: text("guest_id").references(() => guests.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<"heart">().notNull().default("heart"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.mediaId, table.reactor, table.kind] })],
+);
+
+export const COMMENT_HIDDEN_REASONS = ["host", "reports", "klik"] as const;
+export type CommentHiddenReason = (typeof COMMENT_HIDDEN_REASONS)[number];
+
+/** MED-9: a comment, which needs an account. See lib/comments.ts. */
+export const mediaComments = pgTable("media_comments", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  mediaId: text("media_id")
+    .notNull()
+    .references(() => media.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+  hiddenByUserId: text("hidden_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  hiddenReason: text("hidden_reason").$type<CommentHiddenReason>(),
+});
+
+export type MediaComment = typeof mediaComments.$inferSelect;
+
+/** MED-9: a report on a comment. Kept apart from media_reports; see drizzle/0030. */
+export const commentReports = pgTable("comment_reports", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id")
+    .notNull()
+    .references(() => events.id, { onDelete: "cascade" }),
+  commentId: text("comment_id")
+    .notNull()
+    .references(() => mediaComments.id, { onDelete: "cascade" }),
+  reporterGuestId: text("reporter_guest_id").references(() => guests.id, { onDelete: "set null" }),
+  reporterUserId: text("reporter_user_id").references(() => users.id, { onDelete: "set null" }),
+  reporterKey: text("reporter_key").notNull(),
+  reason: text("reason").$type<ReportReason>().notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolvedByUserId: text("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  resolution: text("resolution"),
+});
 
 /**
  * ADM-4: an append-only record of actions that change access, money or data,

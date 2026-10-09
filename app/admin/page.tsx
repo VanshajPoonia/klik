@@ -15,6 +15,8 @@ import { AdminNav } from "@/components/admin/admin-nav";
 import { ActivationRequests } from "@/components/admin/activation-requests";
 import { ReportsQueue } from "@/components/admin/reports-queue";
 import { REPORT_REASON_LABELS, listOpenReports } from "@/lib/reports";
+import { COMMENT_REPORT_LABELS, listOpenCommentReports, type CommentReportReason } from "@/lib/comments";
+import { CommentReportsQueue } from "@/components/admin/comment-reports-queue";
 import { EntitlementList, type EntitlementRow } from "@/components/admin/entitlement-list";
 import { eventLicenseState, type LicenseState } from "@/lib/license";
 import { ActivationEmailControl } from "@/components/admin/activation-email-control";
@@ -58,7 +60,7 @@ export default async function AdminPage() {
   if (!session?.user) redirect("/login");
   if (session.user.role !== "superadmin") redirect("/dashboard");
 
-  const [pending, signups, requests, reports] = await Promise.all([
+  const [pending, signups, requests, reports, commentReports] = await Promise.all([
     getPendingActivations(),
     getPendingSignups(),
     // ACT-4: drafts their organizer asked to have activated, soonest event first.
@@ -86,6 +88,7 @@ export default async function AdminPage() {
       )
       .orderBy(sql`${events.eventDate} ASC NULLS LAST`, asc(events.activationRequestedAt)),
     listOpenReports(),
+    listOpenCommentReports(),
   ]);
   const shortDate = (date: Date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
@@ -245,6 +248,22 @@ export default async function AdminPage() {
             eventSlug: row.eventSlug,
             held: row.held,
             reasons: row.reasons.map((reason) => REPORT_REASON_LABELS[reason]),
+            notes: row.notes,
+            count: row.count,
+            latest: shortDate(row.latest),
+          }))}
+        />
+        <CommentReportsQueue
+          rows={commentReports.map((row) => ({
+            commentId: row.commentId,
+            eventName: row.eventName,
+            eventSlug: row.eventSlug,
+            mediaId: row.mediaId,
+            body: row.body,
+            authorName: row.authorName,
+            hidden: row.hidden,
+            safetyHold: row.safetyHold,
+            reasons: row.reasons.map((reason) => COMMENT_REPORT_LABELS[reason as CommentReportReason] ?? reason),
             notes: row.notes,
             count: row.count,
             latest: shortDate(row.latest),
