@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { CreateMultipartUploadCommand, PutObjectCommand, UploadPartCommand } from "@aws-sdk/client-s3";
+import { CreateMultipartUploadCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -12,17 +12,9 @@ import { GALLERY_FULL_MESSAGE, wouldExceedStorage } from "@/lib/usage";
 import { MULTIPART_THRESHOLD, PART_SIZE, partSizes } from "@/lib/upload-parts";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { clientIp, consume } from "@/lib/ratelimit";
-import {
-  blobPathnameFor,
-  extensionForMime,
-  isAllowedMime,
-  isVideoMime,
-  maxBytesForMime,
-  posterPathnameFor,
-  r2,
-  thumbPathnameFor,
-} from "@/lib/storage";
+import { blobPathnameFor, extensionForMime, isAllowedMime, isVideoMime, maxBytesForMime, r2 } from "@/lib/storage";
 import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
+import { signPartUrls, signStillSlots } from "@/lib/upload-slots";
 
 const requestSchema = z.object({
   eventId: z.string().min(1),
@@ -151,20 +143,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       }),
     );
     const uploadId = created.UploadId!;
-    const urls = await Promise.all(
-      partSizes(sizeBytes).map((length, index) =>
-        getSignedUrl(
-          r2,
-          new UploadPartCommand({
-            Bucket: process.env.R2_BUCKET_NAME,
-            Key: pathname,
-            UploadId: uploadId,
-            PartNumber: index + 1,
-            ContentLength: length,
-          }),
-          { expiresIn: 60 * 60 },
-        ),
-      ),
+    const urls = await signPartUrls(
+      pathname,
+      uploadId,
+      partSizes(sizeBytes).map((length, index) => ({ number: index + 1, length })),
     );
     multipart = { uploadId, partSize: PART_SIZE, urls };
   }
@@ -183,51 +165,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
   const uploadUrl = multipart ? null : await getSignedUrl(r2, command, { expiresIn: 5 * 60 });
 
-  // Videos also get a presigned slot for the poster still the client pulled out
-  // of the file. Same ContentLength binding as the media object, so a poster
-  // slot cannot be used to smuggle a large upload past the plan cap.
-  let posterUploadUrl: string | null = null;
-  let posterPathname: string | null = null;
-  if (isVideoMime(mimeType) && parsed.data.posterBytes) {
-    posterPathname = posterPathnameFor(event.id, mediaId);
-    posterUploadUrl = await getSignedUrl(
-      r2,
-      new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: posterPathname,
-        ContentType: "image/jpeg",
-        ContentLength: parsed.data.posterBytes,
-      }),
-      { expiresIn: 5 * 60 },
-    );
-  }
+  // The poster still and the grid thumbnail the client made, each bound to
+  // its size the same way, so neither slot can carry a large upload.
+  const stills = await signStillSlots(event.id, mediaId, mimeType, parsed.data);
 
-  // And a slot for the grid thumbnail, photo or video alike. Same binding, for
-  // the same reason, and capped far below any real media file.
-  let thumbUploadUrl: string | null = null;
-  let thumbPathname: string | null = null;
-  if (parsed.data.thumbBytes) {
-    thumbPathname = thumbPathnameFor(event.id, mediaId);
-    thumbUploadUrl = await getSignedUrl(
-      r2,
-      new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: thumbPathname,
-        ContentType: "image/jpeg",
-        ContentLength: parsed.data.thumbBytes,
-      }),
-      { expiresIn: 5 * 60 },
-    );
-  }
-
-  return NextResponse.json({
-    uploadUrl,
-    multipart,
-    pathname,
-    maxBytes,
-    posterUploadUrl,
-    posterPathname,
-    thumbUploadUrl,
-    thumbPathname,
-  });
+  return NextResponse.json({ uploadUrl, multipart, pathname, maxBytes, ...stills });
 }

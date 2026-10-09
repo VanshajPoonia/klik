@@ -10,6 +10,9 @@ import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
 import { formatDuration } from "@/lib/video-poster";
 import { uploadToGallery } from "@/lib/upload-client";
+import { UploadTray } from "@/components/upload/upload-tray";
+import { useUploadQueue } from "@/components/upload/use-upload-queue";
+import type { AddedEvent } from "@/lib/upload-queue/page-queue";
 import {
   VIEW_ENHANCE_FILTER,
   getEnhancePreference,
@@ -77,11 +80,6 @@ interface MediaItem {
   challengeId?: string | null;
 }
 
-interface UploadProgress {
-  id: string;
-  progress: number;
-}
-
 interface PendingUpload {
   file: File;
   /** Set when the file is already at final size and quality (camera captures),
@@ -93,11 +91,6 @@ interface PendingUpload {
   capturedAt?: string;
 }
 
-interface FailedUpload extends PendingUpload {
-  id: string;
-}
-
-const UPLOAD_CONCURRENCY = 3;
 const MAX_FILES_PER_PICK = 20;
 const DEFAULT_BACKGROUND = "#050505";
 const PAGE_SIZE = 60;
@@ -129,12 +122,6 @@ function FallbackImage({
       }}
     />
   );
-}
-
-async function processInBatches<T>(items: T[], batchSize: number, run: (item: T) => Promise<void>) {
-  for (let i = 0; i < items.length; i += batchSize) {
-    await Promise.all(items.slice(i, i + batchSize).map(run));
-  }
 }
 
 export function GuestGallery({
@@ -182,7 +169,9 @@ export function GuestGallery({
   /** GRW-3: the host's photo challenges, their counts, and the leaderboard. */
   board?: ChallengeBoard | null;
 }) {
-  const [shotsLeft, setShotsLeft] = useState(disposable?.shotsLeft ?? 0);
+  // The server's count. What the guest sees also takes off shots still in the
+  // upload queue on this phone, which the server has not heard of yet.
+  const [shotsOnServer, setShotsOnServer] = useState(disposable?.shotsLeft ?? 0);
   // MED-9. Held as state because the host can switch either on while phones
   // are open; the change sync brings the new values with its resync.
   const [features, setFeatures] = useState({
@@ -211,12 +200,9 @@ export function GuestGallery({
     () => new Set(initialMedia.map((item) => item.id)),
   );
 
-  const [uploading, setUploading] = useState<UploadProgress[]>([]);
-  const [remaining, setRemaining] = useState(0);
   const [notice, setNotice] = useState<string | null>(
     linkedMissing ? "That photo is not in the gallery any more, or not yet. Here is everything else." : null,
   );
-  const [failed, setFailed] = useState<FailedUpload[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   // Tracked by id, not position: new photos stream in at the head every poll,
   // which would otherwise shift the open item out from under the viewer.
@@ -376,62 +362,45 @@ export function GuestGallery({
     };
   }, [applyChanges, event.slug, reloadFirstPage, syncedAt]);
 
-  const uploadOne = useCallback(
-    async ({ file, prepared, challengeId, capturedAt }: PendingUpload) => {
-      const mediaId = nanoid();
-
-      setUploading((current) => [...current, { id: mediaId, progress: 0 }]);
-      try {
-        const registered = await uploadToGallery({
-          eventId: event.id,
-          slug: event.slug,
-          mediaId,
-          file,
-          prepared,
-          albumId: uploadAlbumId || null,
-          challengeId: challengeId ?? null,
-          capturedAt: capturedAt ?? null,
-          maxVideoSeconds,
-          onProgress: (percentage) =>
-            setUploading((current) =>
-              current.map((item) => (item.id === mediaId ? { ...item, progress: percentage } : item)),
-            ),
-        });
-
-        // Shown straight away from the registration response rather than
-        // waiting for the next poll, so the uploader sees their own photo land.
-        if (registered.media) applyChanges([registered.media as MediaItem], []);
-        // The tick shows now, not at the next sync. Only if the server kept the
-        // challenge, which it drops when the host removed it meanwhile.
-        const kept = (registered.media as MediaItem | undefined)?.challengeId;
-        if (kept) setDoneHere((current) => (current.has(kept) ? current : new Set(current).add(kept)));
-        if (disposable && !isOwner) setShotsLeft((left) => Math.max(0, left - 1));
-        syncNow.current();
-      } catch {
-        // One file failing shouldn't block the rest of the batch, but it should
-        // never disappear silently either.
-        setFailed((current) => [...current, { id: mediaId, file, prepared, challengeId, capturedAt }]);
-      } finally {
-        setUploading((current) => current.filter((item) => item.id !== mediaId));
-        setRemaining((count) => Math.max(0, count - 1));
-      }
+  /**
+   * OPS-3: every pick goes into the upload queue, which keeps the files on this
+   * phone until they are in the gallery and survives the wifi dropping, the
+   * screen locking and the tab closing. This hears each one land, from this
+   * page or from whatever else on the phone sent it.
+   */
+  const onUploaded = useCallback(
+    ({ media: landed }: AddedEvent) => {
+      // Shown straight away from the registration response rather than
+      // waiting for the next poll, so the uploader sees their own photo land.
+      if (landed) applyChanges([landed as MediaItem], []);
+      // The tick shows now, not at the next sync. Only if the server kept the
+      // challenge, which it drops when the host removed it meanwhile.
+      const kept = (landed as MediaItem | null)?.challengeId;
+      if (kept) setDoneHere((current) => (current.has(kept) ? current : new Set(current).add(kept)));
+      if (disposable && !isOwner) setShotsOnServer((left) => Math.max(0, left - 1));
+      syncNow.current();
     },
-    [applyChanges, event.id, event.slug, maxVideoSeconds, uploadAlbumId],
+    [applyChanges, disposable, isOwner],
   );
+  const uploads = useUploadQueue(
+    { eventId: event.id, slug: event.slug, albumId: uploadAlbumId || null, maxVideoSeconds },
+    onUploaded,
+  );
+  const { enqueue, clear: clearUploads } = uploads;
+  const shotsLeft = Math.max(0, shotsOnServer - uploads.items.filter((item) => item.status !== "refused").length);
 
   const uploadFiles = useCallback(
-    (uploads: PendingUpload[]) => {
-      if (uploads.length === 0) return;
-      const batch = uploads.slice(0, MAX_FILES_PER_PICK);
+    (picked: PendingUpload[]) => {
+      if (picked.length === 0) return;
+      const batch = picked.slice(0, MAX_FILES_PER_PICK);
       setNotice(
-        uploads.length > batch.length
-          ? `Added the first ${batch.length} of ${uploads.length}. Pick the rest again once these finish.`
+        picked.length > batch.length
+          ? `Added the first ${batch.length} of ${picked.length}. Pick the rest again once these are on their way.`
           : null,
       );
-      setRemaining((count) => count + batch.length);
-      void processInBatches(batch, UPLOAD_CONCURRENCY, uploadOne);
+      void enqueue(batch).catch(() => setNotice("Those could not be added. Try picking them again."));
     },
-    [uploadOne],
+    [enqueue],
   );
 
   const handleFiles = useCallback(
@@ -441,14 +410,6 @@ export function GuestGallery({
     },
     [uploadFiles],
   );
-
-  const retryFailed = useCallback(() => {
-    // Kept out of the state updater: those must stay pure, or StrictMode's
-    // double-invoke would queue every retry twice.
-    const pending = failed.map(({ file, prepared, challengeId, capturedAt }) => ({ file, prepared, challengeId, capturedAt }));
-    setFailed([]);
-    uploadFiles(pending);
-  }, [failed, uploadFiles]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !cursor) return;
@@ -627,8 +588,10 @@ export function GuestGallery({
       setLeaving("confirm");
       return;
     }
+    // Nothing still waiting on this phone goes up after they asked for everything to go.
+    await clearUploads().catch(() => {});
     window.location.reload();
-  }, [event.slug]);
+  }, [clearUploads, event.slug]);
 
   // Tabs are for folders with something in them; a folder that empties or
   // goes away under someone browsing it drops them back to everything.
@@ -834,46 +797,20 @@ export function GuestGallery({
           </p>
         )}
 
-        {(remaining > 0 || notice) && (
-          <div className="mb-6 space-y-2" role="status" aria-live="polite">
-            {remaining > 0 && (
-              <p className="text-sm text-muted">
-                Uploading {remaining} {remaining === 1 ? "item" : "items"}…
-              </p>
-            )}
-            {uploading.map((item) => (
-              <div
-                key={item.id}
-                role="progressbar"
-                aria-label="Upload progress"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(item.progress)}
-                className="h-1.5 w-full overflow-hidden rounded-full bg-canvas-line"
-              >
-                <div
-                  className="h-full bg-volt transition-[width] duration-300"
-                  style={{ width: `${item.progress}%` }}
-                />
-              </div>
-            ))}
-            {notice && <p className="text-sm text-muted">{notice}</p>}
-          </div>
+        {notice && (
+          <p className="mb-6 text-sm text-muted" role="status">
+            {notice}
+          </p>
         )}
 
-        {failed.length > 0 && (
-          <div
-            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3"
-            role="alert"
-          >
-            <span className="text-sm text-red-300">
-              {failed.length} {failed.length === 1 ? "upload" : "uploads"} didn&apos;t go through.
-            </span>
-            <Button variant="ghost" size="sm" onClick={retryFailed}>
-              Retry
-            </Button>
-          </div>
-        )}
+        <UploadTray
+          items={uploads.items}
+          online={uploads.online}
+          durable={uploads.durable}
+          onRetry={(id) => void uploads.retry(id)}
+          onRetryNow={() => void uploads.retryNow()}
+          onRemove={(id) => void uploads.remove(id)}
+        />
 
         {board.challenges.length > 0 && (
           <section className="mb-6" aria-labelledby="challenges-heading">

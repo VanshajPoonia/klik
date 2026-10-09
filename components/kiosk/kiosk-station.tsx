@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { nanoid } from "nanoid";
-import { Camera, Expand, RotateCcw, SwitchCamera, X } from "lucide-react";
+import { AlertCircle, Camera, Expand, Loader2, RotateCcw, SwitchCamera, WifiOff, X } from "lucide-react";
 import { cameraSupported, capturePhoto, openStream, wallClock, type FacingMode } from "@/lib/camera";
 import { DEFAULT_LOOK, lookById } from "@/lib/image-enhance";
-import { UploadRefused, uploadToGallery } from "@/lib/upload-client";
+import { useUploadQueue } from "@/components/upload/use-upload-queue";
 
-type Step = "attract" | "camera" | "review" | "sending" | "done" | "error";
+type Step = "attract" | "camera" | "review" | "done";
 
 /**
  * How long each screen waits for someone before starting over. A guest who
@@ -19,9 +18,7 @@ const IDLE_MS: Record<Step, number | null> = {
   attract: null,
   camera: 60_000,
   review: 30_000,
-  sending: null,
   done: 12_000,
-  error: 30_000,
 };
 const COUNTDOWN_FROM = 3;
 
@@ -46,7 +43,9 @@ function cameraMessage(error: unknown): string {
 /**
  * VEN-2: the kiosk itself. A tablet at the venue that does one thing: a guest
  * taps, gets a three second countdown, keeps or retakes the shot, and it goes
- * to the gallery through the same upload path as every phone. Then it shows
+ * to the gallery through the same upload queue as every phone (OPS-3), so a
+ * guest never waits on the venue's wifi: the shot is kept on the tablet and
+ * sent from there, and the next guest can start straight away. Then it shows
  * the gallery's QR code and starts over for the next person.
  *
  * Nothing here can reach the gallery, settings or another page. The server
@@ -84,10 +83,13 @@ export function KioskStation({
   const [countdown, setCountdown] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
   const [shot, setShot] = useState<Shot | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [switchedOff, setSwitchedOff] = useState(false);
+  // The shot the done screen is about, so it can say whether it has landed.
+  const [sentId, setSentId] = useState<string | null>(null);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const uploads = useUploadQueue({ eventId, slug, albumId: null, maxVideoSeconds: 0 });
+  // The server refuses a kiosk the host switched off as unauthorised.
+  const switchedOff = uploads.items.some((item) => item.status401);
   const [activity, setActivity] = useState(0);
   // Bumped by "Try again", so the camera effect runs once more.
   const [attempt, setAttempt] = useState(0);
@@ -103,16 +105,14 @@ export function KioskStation({
 
   const startOver = useCallback(() => {
     setCountdown(null);
-    setError(null);
     setCameraError(null);
-    setProgress(0);
+    setSentId(null);
     discardShot();
     setStep("attract");
   }, [discardShot]);
 
   const openCamera = useCallback(() => {
     setCameraError(null);
-    setError(null);
     discardShot();
     setStep("camera");
   }, [discardShot]);
@@ -213,30 +213,15 @@ export function KioskStation({
 
   async function send() {
     if (!shot) return;
-    setStep("sending");
-    setProgress(0);
-    setError(null);
-    try {
-      await uploadToGallery({
-        eventId,
-        slug,
-        mediaId: nanoid(),
-        file: shot.file,
-        prepared: { width: shot.width, height: shot.height },
-        capturedAt: shot.capturedAt,
-        // The server files it where the host chose for this kiosk.
-        albumId: null,
-        maxVideoSeconds: 0,
-        onProgress: setProgress,
-      });
-      discardShot();
-      setStep("done");
-    } catch (failure) {
-      const status = failure instanceof UploadRefused ? Number(failure.detail.status) : 0;
-      if (status === 401) setSwitchedOff(true);
-      setError(failure instanceof Error ? failure.message : "The photo did not send.");
-      setStep("error");
-    }
+    // Kept on this tablet first, then sent: the guest is done the moment they
+    // tap, whatever the wifi is doing. The server files it where the host
+    // chose for this kiosk.
+    const [id] = await uploads.enqueue([
+      { file: shot.file, prepared: { width: shot.width, height: shot.height }, capturedAt: shot.capturedAt },
+    ]);
+    setSentId(id ?? null);
+    discardShot();
+    setStep("done");
   }
 
   async function leave() {
@@ -252,6 +237,22 @@ export function KioskStation({
       </main>
     );
   }
+
+  // Whether the shot just taken has landed, is on its way, or is waiting for the wifi.
+  const sentItem = sentId ? uploads.items.find((item) => item.id === sentId) : undefined;
+  const doneMessage = !sentItem
+    ? moderated
+      ? "Done. The host will add it shortly."
+      : "Done. It's in the gallery."
+    : sentItem.status === "refused"
+      ? "Saved on this tablet, but the gallery would not take it yet."
+      : uploads.online
+        ? "Done. It's on its way to the gallery."
+        : "Saved. It goes to the gallery as soon as the wifi is back.";
+
+  // For whoever looks after the tablet: what is still to send, and anything refused.
+  const waiting = uploads.items.filter((item) => item.status !== "refused");
+  const refused = uploads.items.filter((item) => item.status === "refused");
 
   return (
     <main
@@ -272,6 +273,56 @@ export function KioskStation({
           </span>
           <span className="max-w-xl text-base text-muted">It goes straight into the gallery for everyone here.</span>
         </button>
+      )}
+
+      {step === "attract" && (waiting.length > 0 || refused.length > 0) && (
+        <div className="absolute inset-x-0 top-0 flex justify-end p-6">
+          <div className="max-w-md rounded-2xl border border-canvas-line bg-canvas-raised/95 px-4 py-3 text-sm" role="status" aria-live="polite">
+            {refused.length > 0 ? (
+              <button type="button" onClick={() => setQueueOpen((open) => !open)} className="flex items-center gap-2 text-left text-paper" aria-expanded={queueOpen}>
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-300" aria-hidden="true" />
+                {refused.length} {refused.length === 1 ? "photo" : "photos"} could not be added
+              </button>
+            ) : (
+              <p className="flex items-center gap-2 text-muted">
+                {uploads.online ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-volt" aria-hidden="true" />
+                ) : (
+                  <WifiOff className="h-4 w-4 shrink-0" aria-hidden="true" />
+                )}
+                {uploads.online
+                  ? `Sending ${waiting.length} ${waiting.length === 1 ? "photo" : "photos"}`
+                  : `${waiting.length} ${waiting.length === 1 ? "photo" : "photos"} saved here, waiting for the wifi`}
+              </p>
+            )}
+            {queueOpen && refused.length > 0 && (
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-muted">{refused[0].message ?? "The gallery did not take them."}</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => refused.forEach((item) => void uploads.retry(item.id))}
+                    className="min-h-11 rounded-full bg-volt px-4 text-xs font-semibold text-on-volt"
+                  >
+                    Try again
+                  </button>
+                  {team && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        refused.forEach((item) => void uploads.remove(item.id));
+                        setQueueOpen(false);
+                      }}
+                      className="min-h-11 rounded-full border border-canvas-line px-4 text-xs text-muted"
+                    >
+                      {refused.length === 1 ? "Discard it" : "Discard them"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {step === "attract" && (
@@ -397,15 +448,6 @@ export function KioskStation({
         </div>
       )}
 
-      {step === "sending" && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-8" role="status">
-          <p className="font-display text-4xl text-paper">Sending it to the gallery…</p>
-          <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-canvas-line">
-            <div className="h-full bg-volt transition-[width] duration-300" style={{ width: `${Math.round(progress)}%` }} />
-          </div>
-        </div>
-      )}
-
       {step === "done" && (
         <button
           type="button"
@@ -413,35 +455,14 @@ export function KioskStation({
           className="flex flex-1 flex-col items-center justify-center gap-8 px-8 text-center"
           aria-label="Start again for the next guest"
         >
-          <span className="font-display text-5xl text-paper" role="status">
-            {moderated ? "Done. The host will add it shortly." : "Done. It's in the gallery."}
+          <span className="max-w-3xl font-display text-5xl text-paper" role="status">
+            {doneMessage}
           </span>
           {/* eslint-disable-next-line @next/next/no-img-element -- a data URL from the server */}
           <img src={qrDataUrl} alt={`QR code for ${shortUrl}`} className="h-56 w-56 rounded-2xl" />
           <span className="max-w-lg text-xl text-paper">Scan to see every photo, and add your own from your phone.</span>
           <span className="text-sm text-muted">Tap anywhere for the next guest</span>
         </button>
-      )}
-
-      {step === "error" && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-8 text-center" role="alert">
-          <p className="max-w-lg font-display text-3xl text-paper">That photo did not send.</p>
-          {error && <p className="max-w-lg text-muted">{error}</p>}
-          <div className="flex gap-3">
-            {shot && (
-              <button
-                type="button"
-                onClick={() => void send()}
-                className="min-h-14 rounded-full bg-volt px-8 text-lg font-semibold text-on-volt"
-              >
-                Try again
-              </button>
-            )}
-            <button type="button" onClick={startOver} className="min-h-14 rounded-full border border-canvas-line px-8 text-lg text-paper">
-              Start over
-            </button>
-          </div>
-        </div>
       )}
     </main>
   );

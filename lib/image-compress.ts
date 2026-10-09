@@ -42,7 +42,7 @@ function sharpen(ctx: CanvasRenderingContext2D, width: number, height: number) {
  * decode the file (e.g. HEIC on a non-Safari browser) - callers should fall
  * back to uploading the original and letting the server compress it instead.
  */
-export async function compressImageForUpload(file: File): Promise<CompressedImage | null> {
+export async function compressImageForUpload(file: Blob): Promise<CompressedImage | null> {
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
 

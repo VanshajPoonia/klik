@@ -37,6 +37,7 @@
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
+- An offline upload queue **is** built (OPS-3, 2026-10-10): every pick is kept on the device until it is in the gallery, survives a reload or a closed tab, resumes a half-sent video part by part, and drains in the background on Android. The kiosk uses it too.
 - The print studio **is** built (QR-4a to QR-4f, 2026-10-10): a canvas editor with eleven templates, print-ready PDF and PNG export, and the four print checks. The QR route's server-drawn sign is still there for Premium's one-click download.
 - Error tracking (F-9 shipped structured logging and email alerts; Sentry is wired but has no DSN). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
 
@@ -943,9 +944,9 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 **Why this split was worth making:** posters and the duration cap remove most of the pain for a fraction of the work, and they hold up on their own. The transcode is the expensive half and it can wait until there is revenue to justify the compute.
 
 ### OPS-2. Resumable uploads
-**DONE 2026-10-08** (`lib/upload-parts.ts`, `lib/multipart-client.ts`, `app/api/upload/complete/route.ts`). Files over 32 MB, which in practice means video, go up as 8 MB parts, three at a time. Each part URL binds its exact length, so the plan's size check still holds (verified against R2: an oversized part is refused with a 403). A failed part retries on its own with backoff, and while the phone reports itself offline it waits up to five minutes for the connection instead of spending its attempts. The server joins the parts using R2's own list of them rather than ETags from the browser, which a browser can read only if the bucket's CORS rule exposes them, and refuses to join unless every part is present at exactly the expected length. An abandoned upload is aborted by R2's default lifecycle rule after seven days.
+**DONE 2026-10-08** (`lib/upload-parts.ts`, `lib/upload-queue/transport.ts`, formerly `lib/multipart-client.ts`, `app/api/upload/complete/route.ts`). Files over 32 MB, which in practice means video, go up as 8 MB parts, three at a time. Each part URL binds its exact length, so the plan's size check still holds (verified against R2: an oversized part is refused with a 403). A failed part retries on its own with backoff, and while the phone reports itself offline it waits up to five minutes for the connection instead of spending its attempts. The server joins the parts using R2's own list of them rather than ETags from the browser, which a browser can read only if the bucket's CORS rule exposes them, and refuses to join unless every part is present at exactly the expected length. An abandoned upload is aborted by R2's default lifecycle rule after seven days.
 
-Not done: resuming across a page reload, which is OPS-3's territory.
+Resuming across a page reload: **DONE 2026-10-10** in OPS-3, through `POST /api/upload/parts`.
 
 **Size:** M. R2 supports S3 multipart. A 200 MB video that fails at 90 percent currently restarts. Chunk and resume.
 
@@ -991,6 +992,17 @@ Steps: create `klik-media-us` with a US jurisdiction; ~~create `klik-media-backu
 **Superseded 2026-10-07: everything stays on signed URLs, so there is no split to get right.** This paragraph was correct about the danger and wrong about the remedy. It assumed the public/private line could be drawn per gallery, but `canViewMedia` decides per object, so a public gallery can contain hidden photos and the split it describes does not exist at the granularity it assumes.
 
 ### OPS-3. Offline upload queue
+**DONE 2026-10-10** (`lib/upload-queue/`, `components/upload/`, `app/api/upload/parts/route.ts`, `scripts/build-upload-sw.mjs`). The full design is in `ARCHITECTURE.md` section 6. What a guest sees: a tray above the grid that says, per file, getting ready, sending, waiting for a connection, or refused and why, with Try again, Remove and "Don't send". What changed for a kiosk: a guest taps "Add to the gallery" and is done; the tablet sends in the background and says on its start screen what is waiting.
+
+Decisions worth knowing:
+- **The page does the work, the service worker only finishes it.** Background Sync exists in Chrome alone, and preparing a photo needs a canvas and a video element, which a worker does not have. So the page prepares, and the worker sends only prepared items. iPhones get a queue that survives everything except never opening the gallery again, which is as much as Safari allows.
+- **Files are kept prepared, not as picked,** so a 4 MB HEIC sits on the phone as the 1.5 MB JPEG that will be sent. A file the device has no room to keep stays in memory instead, and the tray says to keep the page open.
+- **A file the device will not hand over** (a cloud photo never downloaded) is refused at preparation with "Pick it again", rather than failing every send as if the wifi were down.
+- **Items refused for want of a session (401) get one more go each time a page opens,** since the guest may have joined again or the kiosk been paired again. Without this a re-paired kiosk would read an old refusal as "switched off".
+- Unsent items older than 30 days are dropped.
+
+Verified 2026-10-10 in headless Chrome with the real gallery and kiosk components against a scripted server: offline picks kept and shown, Chrome's own Background Sync draining them with the tab closed, a reopened gallery sending a queued photo, a server error retried without resending the file or spending a new signature, and a refusal shown and removed. Not verified against production uploads, because every live test event's upload window had closed; LAUNCH.md has the steps.
+
 **Size:** L. Venue wifi is reliably bad. A service worker queues uploads with IndexedDB and drains them when connectivity returns, with a visible queue state. Turns the worst real-world failure into a non-event.
 
 ---

@@ -131,7 +131,7 @@ This is the critical path and the most security-sensitive code in the repo. `POS
 2. **Client prepares.** The browser reads EXIF capture time off the original, then compresses via canvas, which strips metadata. Videos get a poster frame and a duration extracted on-device (`lib/video-poster.ts`), because asking a browser for `metadata` on an iPhone `.mov` means reaching to the end of the file for the moov atom.
 3. **Client uploads** straight to R2. Bytes never pass through a function.
 
-   **This step depends on the bucket's CORS policy, which is bucket configuration and lives nowhere in this repo.** The PUT sets `Content-Type` explicitly, which makes it a non-simple request, so the browser sends a preflight first. A bucket with no CORS rule fails that preflight and every upload dies as an `onerror` with status 0, which `putWithRetry` reads as a network blip and retries three times before giving up. Nothing in a build, a test or a type check can catch it, and the gallery still loads perfectly, so the only symptom is that uploads stop.
+   **This step depends on the bucket's CORS policy, which is bucket configuration and lives nowhere in this repo.** The PUT sets `Content-Type` explicitly, which makes it a non-simple request, so the browser sends a preflight first. A bucket with no CORS rule fails that preflight and every upload dies as an `onerror` with status 0, which reads exactly like a lost connection. Since OPS-3 the upload queue answers a lost connection by waiting and trying again, never by giving up, so the symptom is a tray on every phone that never empties. Nothing in a build, a test or a type check can catch it, and the gallery still loads perfectly, so the only symptom is that uploads stop.
 
    It bit us on 2026-10-07: OPS-4's new bucket was created through the API, the objects were copied and verified, production cut over cleanly, and uploads were broken until the policy was copied across. The rule needs `content-type` in `allowed.headers` and the app's origins in `allowed.origins`; `https://klik.kreativvantage.com` and `http://localhost:3000` today. **Any new bucket needs this set before it serves traffic.**
 4. **Register.** `/api/e/[slug]/media` then does, in order:
@@ -143,6 +143,16 @@ This is the critical path and the most security-sensitive code in the repo. `POS
    - Insert the row.
 
 **Large files go up in parts (OPS-2).** Over 32 MB, `/api/upload` starts a multipart upload and returns one length-bound URL per 8 MB part; the browser retries parts individually and waits out offline spells; `/api/upload/complete` joins them from R2's own part list after checking every length. Registration then proceeds exactly as for a single PUT.
+
+**Every pick goes through a queue on the device (OPS-3, `lib/upload-queue/`).** The file is written to IndexedDB the moment it is picked, prepared there (step 2), and sent from there, so a dropped connection, a locked phone or a closed tab loses nothing. The media id is chosen once, at pick time, and that is what makes every retry safe:
+
+- Progress is written down as it happens (`sent` on the record): the key, a multipart upload id, which stills arrived, whether the file is stored. A reload resumes from it. `POST /api/upload/parts` asks R2 which parts of a multipart upload arrived whole and signs the rest only; a 404 means R2 no longer has it and the file starts again.
+- Registration is idempotent for the person who sent it: the same id from the same guest (or the team, for a team upload) answers 200 with `alreadyAdded` and the item, before anything else about the request is checked. Anyone else still gets 409. So a registration whose answer the wifi lost is not a failure, and is never a duplicate.
+- Senders take an item with a hold that lapses after 90 seconds unless renewed (`claimNext` in one IndexedDB readwrite transaction, which the browser runs one at a time across tabs and workers). Two senders can work one queue without sending anything twice; a page the phone froze mid-upload lets go by itself.
+- A lost connection waits for the connection and never counts against the item. A server error or a throttle backs off (2 s to 5 min, honouring `Retry-After`) and stops to ask the person after six server errors in a row. A refusal (gallery full, uploads closed, not a photo) stops at once and shows the server's words.
+- Where the browser has Background Sync (Chrome on Android), a service worker built from `lib/upload-queue/worker.ts` to `public/upload-sw.js` by `scripts/build-upload-sw.mjs` takes over when the page goes into the background. It is registered at scope `/upload-sw/`, where no page lives, and has no fetch handler, so it controls nothing. Everywhere else, iPhones included, the queue drains whenever the gallery or kiosk is open.
+
+`lib/upload-client.ts` is the same preparation and send without the queue, for the one upload somebody waits on: an edited copy (CAM-2).
 
 ### The rule that governs step 4
 
@@ -293,6 +303,8 @@ Any AI that needs a model. Error tracking beyond structured logging and email al
 **Usernames and the account page, 2026-10-08 (ID-1 to ID-3).** Handles are unique without case (`users_username_lower_idx`), stored lowercase, and follow `lib/username.ts`; older generated ones are grandfathered. A changed handle is parked for 30 days by a trigger in `drizzle/0027_usernames.sql`, and the JWT callback now refreshes `token.username` from the row it already reads. `/dashboard/account` holds name, handle, password and deletion.
 
 **Guest accounts, 2026-10-09 (ACC-1 to ACC-5).** A guest is still a cookie and still needs no account. When they have one, `guests.user_id` links the two: set on join while signed in, claimed from cookies on `/me` and on gallery load, and resumed on a new phone. Email sign-in sends a six-digit code, limited in the Auth.js route wrapper. `users.organizer_intent_at` separates people who came to run events from guests keeping a gallery, and the admin signup queue reads it. Passkeys (ACC-6) are not built.
+
+**The offline upload queue, 2026-10-10 (OPS-3).** See section 6. Guest, host and kiosk uploads all go through it; the kiosk no longer makes a guest wait for the wifi. Unsent files are kept only in the uploader's own browser, and the Privacy Policy says so.
 
 **Video location removal, 2026-10-09 (MED-8).** Videos are scrubbed in place by the `media.scrub_video` job; `media.metadata_state` says where each one is, and `videoHeldBack` in `lib/media-access.ts` keeps a pending or failed one to its uploader. The Privacy Policy now says so.
 

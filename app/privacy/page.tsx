@@ -158,6 +158,14 @@ export default function PrivacyPage() {
           functional, set to expire, and readable only by the server. We run no advertising
           cookies, no analytics cookies and no third-party trackers.
         </li>
+        <li>
+          <strong>Photos waiting to upload</strong> are kept in your browser&apos;s storage on your
+          own device until they are sent, so a dropped connection or a closed tab does not lose
+          them. They stay on the device: we receive each one only when it uploads. Each is deleted
+          from the device once it is in the gallery, when you remove it from the upload tray, when
+          you remove everything you added, or after 30 days if it never sends. On a kiosk tablet
+          they are kept on the tablet the same way.
+        </li>
       </ul>
 
       <h2>How long we keep things</h2>

@@ -326,6 +326,31 @@ The **Privacy Policy** gained one line under "What we collect from organizers".
 - [ ] Saw the small-code warning, and the "which copy to keep" choice across two tabs
 - [ ] Opened the studio on a phone
 
+And the **offline upload queue**. This needs an event that is still taking uploads: every test
+event in production is on the Event plan, whose 30-day upload window has closed, so use a new
+pass or a Premium event. Then, as a guest:
+
+- On an **iPhone**, open the gallery, turn on Airplane mode and add three photos. The box above
+  the photos says you are offline and that they are saved on this phone. Swipe Safari away
+  completely. Turn Airplane mode off and open the gallery again: they send and appear.
+- On an **Android phone in Chrome**, do the same, but after closing the tab do not open Klik
+  again. Turn Airplane mode off and wait a minute, then look at the gallery on another device:
+  they arrived on their own.
+- Add a **long video** (a minute or more) and turn on Airplane mode when it is about half way.
+  Close the tab, go back online and open the gallery: it carries on from about half, not zero.
+- Pick a photo and tap its tile in the upload box: **Don't send** takes it out before it goes.
+
+On a **kiosk tablet**, turn the wifi off and take two photos: each guest is done straight away,
+the done screen says it goes to the gallery when the wifi is back, and the start screen shows
+two photos waiting. Turn the wifi on and watch them go.
+
+The **Privacy Policy** gained one line under "Technical information": photos waiting to upload are kept on
+the guest's own device until they are sent.
+
+- [ ] Sent photos picked in Airplane mode, on an iPhone and on an Android phone
+- [ ] Saw a half-sent video carry on after closing the tab
+- [ ] Took photos on a kiosk with the wifi off and saw them arrive
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

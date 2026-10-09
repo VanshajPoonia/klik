@@ -55,7 +55,7 @@ function drawToCanvas(video: HTMLVideoElement): HTMLCanvasElement | null {
  * browser would not decode someone's codec is a guest who walks away, so this
  * never blocks the upload it is attached to.
  */
-export function probeVideo(file: File): Promise<VideoProbe> {
+export function probeVideo(file: Blob): Promise<VideoProbe> {
   return new Promise((resolve) => {
     const fallback: VideoProbe = { poster: null, width: 0, height: 0, duration: null };
 

@@ -217,6 +217,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!viewer.ownerSession && !viewer.guestId) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
+
+  // Deliberately does NOT filter deleted_at. A soft-deleted row still owns its
+  // R2 pathname for 30 days, so letting an id be reused would overwrite an
+  // object sitting in the trash and silently destroy the thing the recovery
+  // window exists to protect.
+  //
+  // OPS-3: but the same person sending the same id again is not a reuse. It
+  // is the upload queue retrying a registration whose answer the wifi lost,
+  // so it is told the upload is in, with the item, rather than that it failed.
+  // Checked before anything else about the request, which may no longer hold
+  // (a folder trashed since) for an upload that is already in.
+  const [existingMedia] = await db.select().from(media).where(eq(media.id, input.mediaId)).limit(1);
+  if (existingMedia) {
+    const sameUploader = viewer.ownerSession ? existingMedia.guestId === null : existingMedia.guestId === viewer.guestId;
+    if (existingMedia.eventId === event.id && !existingMedia.deletedAt && sameUploader) {
+      const [published] = await toGalleryMedia(
+        [{ ...existingMedia, mine: !viewer.ownerSession && existingMedia.guestId === viewer.guestId }],
+        event.slug,
+      );
+      return NextResponse.json({ media: published, alreadyAdded: true });
+    }
+    return NextResponse.json({ error: "Upload identifier is already in use" }, { status: 409 });
+  }
   // VEN-2: a kiosk's photos go where the host said, whatever the tablet sends,
   // and to no folder when that one has gone, rather than failing at the door.
   if (viewer.kioskId) {
@@ -273,19 +296,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!album) {
       return NextResponse.json({ error: "That folder is not in this event any more" }, { status: 404 });
     }
-  }
-
-  // Deliberately does NOT filter deleted_at. A soft-deleted row still owns its
-  // R2 pathname for 30 days, so letting an id be reused would overwrite an
-  // object sitting in the trash and silently destroy the thing the recovery
-  // window exists to protect.
-  const [existingMedia] = await db
-    .select({ id: media.id })
-    .from(media)
-    .where(eq(media.id, input.mediaId))
-    .limit(1);
-  if (existingMedia) {
-    return NextResponse.json({ error: "Upload identifier is already in use" }, { status: 409 });
   }
 
   const maxBytes = maxBytesForMime(input.mimeType, plan);
