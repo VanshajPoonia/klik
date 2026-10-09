@@ -274,6 +274,16 @@ And the **camera**, on a phone, from any gallery's Camera button:
 
 - [ ] Tried a burst, the level, a selfie with writing, and the blocked-camera screen
 
+And the **photo editor**. Open a photo you uploaded (on your phone, as a guest) and tap
+the pencil at the top. Crop it square, try a filter, add some text, and press **Save**. It
+appears as a new photo next to the original, and you are offered **Remove the original**.
+On your laptop, the same pencil is on every photo in the event page's viewer; an edit made
+there sits beside the guest's original. Then, as the guest, delete the original: the edited
+copy goes with it, yours included. That is on purpose, and the Privacy Policy now says so
+(one new paragraph under "Who can see a photo").
+
+- [ ] Edited a photo as a guest and as the host, and saw the copy go when the guest deleted the original
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,6 +10,7 @@ import {
   Flag,
   Heart,
   Pause,
+  Pencil,
   Play,
   Share2,
   Sparkles,
@@ -18,6 +20,11 @@ import {
 import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
 import { CommentButton, CommentsSheet, HeartButton } from "@/components/guest/media-social";
 import { MediaSharePanel } from "@/components/guest/media-share-panel";
+import { fetchMediaBlob } from "@/lib/media-share";
+
+// CAM-2. A few hundred kilobytes that only someone editing should download,
+// and it reaches for `window` the moment it loads.
+const ImageEditor = dynamic(() => import("@/components/media/image-editor"), { ssr: false });
 
 export interface LightboxItem {
   id: string;
@@ -38,6 +45,17 @@ export interface LightboxItem {
   /** CAM-3: a link to it only helps when others in the gallery can see it. */
   status?: "pending" | "approved" | "rejected";
   visibility?: "gallery" | "private" | "link";
+}
+
+/** CAM-2: editing a photo, which saves an edited copy and leaves the original. */
+export interface LightboxEdit {
+  canEdit: (item: LightboxItem) => boolean;
+  /** Uploads the edited copy. Resolves to its id; throws to say why not. */
+  save: (item: LightboxItem, edited: Blob) => Promise<string | null>;
+  /** Guest side: takes the original down once the copy is saved. Resolves to
+   *  an error message, or null when it worked. */
+  removeOriginal?: (originalId: string) => Promise<string | null>;
+  accent?: string;
 }
 
 /** CAM-3: what the share sheet needs to know about the event and the viewer. */
@@ -110,6 +128,7 @@ export function Lightbox({
   onReport,
   social,
   share,
+  edit,
 }: {
   items: LightboxItem[];
   index: number;
@@ -133,6 +152,7 @@ export function Lightbox({
   social?: LightboxSocial;
   /** CAM-3: the Share button opens a sheet of ways to send it on. */
   share?: LightboxShare;
+  edit?: LightboxEdit;
 }) {
   const touchStartX = useRef<number | null>(null);
   const lastTap = useRef(0);
@@ -163,6 +183,11 @@ export function Lightbox({
   const [burst, setBurst] = useState<{ id: string; key: number } | null>(null);
   const commentsOpen = Boolean(item && commentsFor === item.id);
   const [sharingFor, setSharingFor] = useState<string | null>(null);
+  // CAM-2. The photo being edited, with its bytes as a local URL so the
+  // editor's canvas is never tainted by a cross-origin image.
+  const [editing, setEditing] = useState<{ item: LightboxItem; url: string } | null>(null);
+  const [editLoading, setEditLoading] = useState<string | null>(null);
+  const [editNote, setEditNote] = useState<{ originalId: string; message: string; canRemove: boolean } | null>(null);
   const sharingOpen = Boolean(item && sharingFor === item.id);
   const photoUrl = item
     ? item.src && !expiredIds.has(item.id)
@@ -207,6 +232,8 @@ export function Lightbox({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // The editor has its own keys, and Escape there is not "close the viewer".
+      if (editing) return;
       // Escape closes the comments first, then the viewer.
       if (e.key === "Escape") {
         if (sharingOpen) setSharingFor(null);
@@ -226,7 +253,7 @@ export function Lightbox({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canSlideshow, commentsOpen, go, items.length, onClose, sharingOpen]);
+  }, [canSlideshow, commentsOpen, editing, go, items.length, onClose, sharingOpen]);
 
   useEffect(() => {
     if (!slideshowPlaying || commentsOpen || sharingOpen || items.length < 2 || !item) return;
@@ -254,6 +281,29 @@ export function Lightbox({
   }, []);
 
   if (!item) return null;
+
+  const canEdit = Boolean(edit && item.kind === "photo" && edit.canEdit(item));
+  /** Fetches the photo's bytes, then opens the editor on them. */
+  const openEditor = async () => {
+    if (!edit || editLoading) return;
+    setSlideshowPlaying(false);
+    setSharingFor(null);
+    setCommentsFor(null);
+    setEditNote(null);
+    setEditLoading(item.id);
+    try {
+      const blob = await fetchMediaBlob(item);
+      setEditing({ item, url: URL.createObjectURL(blob) });
+    } catch {
+      setEditNote({ originalId: item.id, message: "The photo could not be opened for editing. Try again.", canRemove: false });
+    } finally {
+      setEditLoading(null);
+    }
+  };
+  const closeEditor = () => {
+    if (editing) URL.revokeObjectURL(editing.url);
+    setEditing(null);
+  };
 
   const canHeart = Boolean(social?.reactions && social.onReact);
   /** Double-tap or double-click on a photo hearts it, and never un-hearts. */
@@ -343,6 +393,22 @@ export function Lightbox({
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
             >
               <Trash2 className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => void openEditor()}
+              disabled={editLoading !== null}
+              aria-label={`Edit this photo`}
+              title="Edit a copy"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90 disabled:opacity-50"
+            >
+              {editLoading === item.id ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-paper" aria-hidden="true" />
+              ) : (
+                <Pencil className="h-5 w-5" aria-hidden="true" />
+              )}
             </button>
           )}
           {(share || onShare) && (
@@ -621,6 +687,40 @@ export function Lightbox({
           </div>
         )}
 
+        {editNote && (
+          <div
+            role="status"
+            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+          >
+            <p className="text-sm text-paper">{editNote.message}</p>
+            <div className="flex flex-wrap gap-2">
+              {editNote.canRemove && edit?.removeOriginal && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const error = await edit.removeOriginal!(editNote.originalId);
+                    setEditNote(
+                      error
+                        ? { ...editNote, message: error }
+                        : { originalId: editNote.originalId, message: "The original is gone. Your edit stays.", canRemove: false },
+                    );
+                  }}
+                  className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
+                >
+                  Remove the original
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setEditNote(null)}
+                className="min-h-11 rounded-full bg-volt px-4 text-sm font-medium text-on-volt"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+
         {index > 0 && (
           <button
             onClick={() => go(-1)}
@@ -640,6 +740,26 @@ export function Lightbox({
           </button>
         )}
       </div>
+
+      {editing && edit && (
+        <ImageEditor
+          source={editing.url}
+          accent={edit.accent}
+          onSave={async (edited) => {
+            const original = editing.item;
+            await edit.save(original, edited);
+            closeEditor();
+            setEditNote({
+              originalId: original.id,
+              message: edit.removeOriginal
+                ? "Saved as a new photo. Your original is still in the gallery too."
+                : "Saved as a new photo beside the original, which is unchanged.",
+              canRemove: Boolean(edit.removeOriginal),
+            });
+          }}
+          onClose={closeEditor}
+        />
+      )}
 
       {showSocialBar && social && (
         <div className="flex shrink-0 items-center gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">

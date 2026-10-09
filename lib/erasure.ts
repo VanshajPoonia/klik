@@ -125,6 +125,35 @@ export async function eraseEvent(
 }
 
 /**
+ * CAM-2: every edited copy made from these photos, at any remove, found
+ * before the originals go, because deleting an original clears its copies'
+ * pointer to it. A copy the host made of a guest's photo is still that
+ * guest's photo, and "delete my photo" has to take it too.
+ */
+async function editedCopies(
+  eventId: string,
+  ids: string[],
+): Promise<Array<MediaObjectRow & { id: string; sizeBytes: number; legalHoldAt: Date | null }>> {
+  const found = new Set(ids);
+  const copies: Array<MediaObjectRow & { id: string; sizeBytes: number; legalHoldAt: Date | null }> = [];
+  let frontier = ids;
+  while (frontier.length > 0) {
+    const next = await db
+      .select({ id: media.id, ...MEDIA_OBJECT_COLUMNS, sizeBytes: media.sizeBytes, legalHoldAt: media.legalHoldAt })
+      .from(media)
+      .where(and(eq(media.eventId, eventId), inArray(media.derivedFromId, frontier)));
+    frontier = [];
+    for (const row of next) {
+      if (found.has(row.id)) continue;
+      found.add(row.id);
+      copies.push(row);
+      frontier.push(row.id);
+    }
+  }
+  return copies;
+}
+
+/**
  * Erases one guest's contribution to an event: their uploads, their objects,
  * and the guest row carrying their display name and consent timestamp.
  */
@@ -142,6 +171,11 @@ export async function eraseGuest(
     })
     .from(media)
     .where(and(eq(media.guestId, guestId), eq(media.eventId, eventId)));
+  const copies = await editedCopies(
+    eventId,
+    rows.map((row) => row.id),
+  );
+  rows.push(...copies.filter((copy) => !rows.some((row) => row.id === copy.id)));
   if (await hasLegalHold({ mediaIds: rows.map((row) => row.id) })) throw new LegalHoldError();
 
   const result = await eraseMediaRows(rows);
@@ -284,13 +318,18 @@ export async function eraseGuestUpload(
     )
     .limit(1);
   if (rows.length === 0) return null;
+  // CAM-2: edited copies go with it, the host's included; one under a legal
+  // hold stays, as the original would have.
+  const copies = (await editedCopies(eventId, [mediaId])).filter((copy) => !copy.legalHoldAt);
+  const all = [...rows, ...copies];
+  const ids = all.map((row) => row.id);
 
-  const result = await eraseMediaRows(rows);
-  await deleteExportsContaining(eventId, [mediaId]);
+  const result = await eraseMediaRows(all);
+  await deleteExportsContaining(eventId, ids);
   await db
     .update(events)
     .set({ coverMediaId: null, updatedAt: new Date() })
-    .where(and(eq(events.id, eventId), eq(events.coverMediaId, mediaId)));
+    .where(and(eq(events.id, eventId), inArray(events.coverMediaId, ids)));
   await recordErasure("guest", guestId, result, null, "guest_removed_upload");
   return result;
 }

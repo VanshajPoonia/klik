@@ -491,6 +491,9 @@ export const media = pgTable(
     burstId: text("burst_id"),
     // GRW-3: the challenge it was taken for, set at upload and never after.
     challengeId: text("challenge_id").references((): AnyPgColumn => challenges.id, { onDelete: "set null" }),
+    // CAM-2: the photo this is an edited copy of. Editing never changes the
+    // original; it makes this row, which keeps the original's place in time.
+    derivedFromId: text("derived_from_id").references((): AnyPgColumn => media.id, { onDelete: "set null" }),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),

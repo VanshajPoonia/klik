@@ -12,7 +12,7 @@ vi.mock("@/lib/storage", async (importOriginal) => ({
   deleteBlobs,
 }));
 
-const { eraseEvent, eraseGuest, eraseUser } = await import("@/lib/erasure");
+const { eraseEvent, eraseGuest, eraseGuestUpload, eraseUser } = await import("@/lib/erasure");
 const { erasureLog, events, guests, media, users } = await import("@/lib/schema");
 const {
   closeDatabase,
@@ -137,6 +137,36 @@ describe("eraseGuest", () => {
 
     const [row] = await testDb.select().from(events).where(eq(events.id, event));
     expect(row.coverMediaId).toBeNull();
+  });
+});
+
+describe("edited copies (CAM-2)", () => {
+  const remaining = async (eventId: string) =>
+    (await testDb.select({ id: media.id }).from(media).where(eq(media.eventId, eventId))).map((row) => row.id).sort();
+
+  it("go with the guest's photo when they delete it, the host's copy and a copy of that included", async () => {
+    const event = await makeEvent(await makeUser());
+    const guest = await makeGuest(event);
+    const photo = await makeMedia(event, { guestId: guest });
+    const hostsCopy = await makeMedia(event, { derivedFromId: photo });
+    const copyOfCopy = await makeMedia(event, { derivedFromId: hostsCopy });
+    const unrelated = await makeMedia(event);
+
+    const result = await eraseGuestUpload(guest, event, photo);
+    expect(result?.mediaDeleted).toBe(3);
+    expect(await remaining(event)).toEqual([unrelated]);
+    void copyOfCopy;
+  });
+
+  it("go with everything a guest added when they remove it all", async () => {
+    const event = await makeEvent(await makeUser());
+    const guest = await makeGuest(event);
+    const photo = await makeMedia(event, { guestId: guest });
+    await makeMedia(event, { derivedFromId: photo, deletedAt: new Date() });
+    const unrelated = await makeMedia(event);
+
+    expect((await eraseGuest(guest, event, null)).mediaDeleted).toBe(2);
+    expect(await remaining(event)).toEqual([unrelated]);
   });
 });
 

@@ -69,6 +69,8 @@ export interface GalleryUpload {
   challengeId?: string | null;
   /** CAM-1: when a camera capture was taken. A capture has no EXIF to read. */
   capturedAt?: string | null;
+  /** CAM-2: the photo this is an edited copy of. */
+  derivedFromId?: string | null;
   maxVideoSeconds: number;
   onProgress?: (percentage: number) => void;
 }
@@ -93,6 +95,7 @@ export async function uploadToGallery({
   albumId = null,
   challengeId = null,
   capturedAt: capturedAtGiven = null,
+  derivedFromId = null,
   maxVideoSeconds,
   onProgress = () => {},
 }: GalleryUpload): Promise<{ media?: unknown }> {
@@ -210,6 +213,7 @@ export async function uploadToGallery({
       capturedAt: capturedAt ?? undefined,
       albumId: albumId || null,
       challengeId: challengeId || null,
+      ...(derivedFromId ? { derivedFromId } : {}),
     }),
   });
   const registered = await registerRes.json().catch(() => ({}));

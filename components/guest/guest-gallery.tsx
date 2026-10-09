@@ -560,6 +560,51 @@ export function GuestGallery({
     );
   }, []);
 
+  /**
+   * CAM-2: an edited copy goes up through the ordinary upload path as a new
+   * photo that points at the original, so compression, quotas and moderation
+   * all apply, and it is opened in the viewer once it lands. The moment tabs
+   * go back to "any time" first: the copy is placed in its moment by a job a
+   * moment later, and must not vanish from the viewer meanwhile.
+   */
+  const saveEdit = useCallback(
+    async (original: { id: string }, edited: Blob): Promise<string | null> => {
+      const source = items.find((item) => item.id === original.id);
+      const registered = await uploadToGallery({
+        eventId: event.id,
+        slug: event.slug,
+        mediaId: nanoid(),
+        file: new File([edited], `edited-${original.id}.jpg`, { type: edited.type || "image/jpeg" }),
+        albumId: source?.albumId ?? null,
+        challengeId: source?.challengeId ?? null,
+        derivedFromId: original.id,
+        maxVideoSeconds,
+      });
+      const added = registered.media as MediaItem | undefined;
+      if (!added) return null;
+      applyChanges([added], []);
+      setChosenMomentId(null);
+      setLightboxId(added.id);
+      syncNow.current();
+      return added.id;
+    },
+    [applyChanges, event.id, event.slug, items, maxVideoSeconds],
+  );
+
+  /** CAM-2: the original, taken down after an edit, without leaving the viewer. */
+  const removeOriginal = useCallback(
+    async (mediaId: string): Promise<string | null> => {
+      const res = await fetch(`/api/e/${event.slug}/media/${mediaId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return body.error ?? "Could not remove it. Try again.";
+      }
+      setItems((current) => current.filter((item) => item.id !== mediaId));
+      return null;
+    },
+    [event.slug],
+  );
+
   /** GRW-3: opens the camera or the picker for one challenge card. */
   const startChallenge = useCallback((challengeId: string, from: "camera" | "library") => {
     challengeRef.current = challengeId;
@@ -1219,6 +1264,18 @@ export function GuestGallery({
           onEnhancedChange={setEnhancePreference}
           onDeleteOwn={isOwner ? undefined : deleteOwn}
           onReport={isOwner ? undefined : reportItem}
+          edit={
+            // Guests edit their own photos, the team any. Not on a disposable
+            // camera, where looking back at a shot is not part of the deal.
+            disposable && !isOwner
+              ? undefined
+              : {
+                  canEdit: (item) => isOwner || Boolean(item.mine),
+                  save: saveEdit,
+                  removeOriginal: isOwner ? undefined : removeOriginal,
+                  accent: event.accentColor,
+                }
+          }
           share={{
             eventName: event.name,
             accent: event.accentColor,

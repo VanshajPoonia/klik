@@ -218,6 +218,12 @@ export default function PrivacyPage() {
         the consent notice tells guests before they upload.
       </p>
       <p>
+        A guest can edit their own photos, and the organizer can edit any photo in their gallery. An
+        edit is always saved as a new copy beside the original, which is never changed. When a guest
+        deletes a photo, or removes everything they added, every edited copy made from it goes too,
+        including one the organizer made.
+      </p>
+      <p>
         A comment is seen by everyone who can see the photo it is on. Its author can delete it. The
         organizer can hide it, and so can we after reports; a hidden comment is kept, visible only to
         its author, the organizer and us, so it can be reviewed and shown again if the report was

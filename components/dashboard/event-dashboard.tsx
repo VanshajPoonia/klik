@@ -37,6 +37,8 @@ import { UsageMeter, type UsageSummary } from "@/components/dashboard/usage-mete
 import { ReportedComments, type ReportedCommentRow } from "@/components/dashboard/reported-comments";
 import { KioskPanel } from "@/components/dashboard/kiosk-panel";
 import { ChallengesPanel } from "@/components/dashboard/challenges-panel";
+import { nanoid } from "nanoid";
+import { uploadToGallery } from "@/lib/upload-client";
 
 type Tab = "gallery" | "insights" | "links" | "settings" | "qr" | "trash";
 
@@ -110,6 +112,14 @@ export function EventDashboard({
   const [tab, setTab] = useState<Tab>("gallery");
   const router = useRouter();
   const [mediaItems, setMediaItems] = useState(initialMedia);
+  // CAM-2: the list follows the server whenever the page is refreshed, which
+  // is how an edited copy saved here, or anything else new, arrives. Set while
+  // rendering, as React recommends for state that resets with a prop.
+  const [syncedFrom, setSyncedFrom] = useState(initialMedia);
+  if (syncedFrom !== initialMedia) {
+    setSyncedFrom(initialMedia);
+    setMediaItems(initialMedia);
+  }
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
@@ -908,6 +918,24 @@ export function EventDashboard({
             eventName: event.name,
             accent: canCustomizeGallery ? event.accentColor : "#edee00",
             canTakeFile: () => true,
+          }}
+          // CAM-2: the team edits any photo; the copy keeps the original's
+          // folder, time and visibility, and the original stays as it was.
+          edit={{
+            canEdit: () => true,
+            save: async (original, edited) => {
+              const registered = await uploadToGallery({
+                eventId: event.id,
+                slug: event.slug,
+                mediaId: nanoid(),
+                file: new File([edited], `edited-${original.id}.jpg`, { type: edited.type || "image/jpeg" }),
+                derivedFromId: original.id,
+                maxVideoSeconds: 0,
+              });
+              router.refresh();
+              return (registered.media as { id: string } | undefined)?.id ?? null;
+            },
+            accent: canCustomizeGallery ? event.accentColor : undefined,
           }}
           // MED-9. The count, not the button: hearting is for the gallery, and
           // this is where the host manages it. Comments open with moderation.

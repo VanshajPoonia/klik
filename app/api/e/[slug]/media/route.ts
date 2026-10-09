@@ -28,6 +28,7 @@ import { enqueue, enqueueMomentsRefresh, enqueueThumbnail, enqueueVideoScrub, ki
 import { claimUsageWarning } from "@/lib/notices";
 import { spendShot } from "@/lib/disposable";
 import { liveChallengeId } from "@/lib/challenges";
+import { EDIT_REFUSAL_MESSAGES, editableOriginal } from "@/lib/media-edits";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
 import {
   SIGNATURE_BYTES,
@@ -60,6 +61,8 @@ const registerSchema = z.object({
   albumId: z.string().min(10).max(64).nullable().optional(),
   // GRW-3: the challenge card it was taken from.
   challengeId: z.string().min(1).max(64).nullable().optional(),
+  // CAM-2: an edited copy of this photo, which stays as it was.
+  derivedFromId: z.string().min(1).max(64).nullable().optional(),
   // True when the browser already resized/re-encoded the photo before
   // upload, which skips redundant server-side recompression of the same file.
   clientCompressed: z.boolean().optional(),
@@ -227,6 +230,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         : [];
     input.albumId = folder?.id ?? null;
   }
+  // CAM-2: an edit is a new photo made from one this person may edit: the
+  // team, any photo in the event; a guest, their own. It takes the original's
+  // time, folder, visibility and challenge, so it sits where the original did.
+  let derivedFrom: typeof media.$inferSelect | null = null;
+  if (input.derivedFromId) {
+    const editable = await editableOriginal(event, input.derivedFromId, {
+      isManager: Boolean(viewer.ownerSession),
+      guestId: viewer.guestId,
+      kioskId: viewer.kioskId,
+    });
+    if ("refused" in editable) {
+      return NextResponse.json(
+        { error: EDIT_REFUSAL_MESSAGES[editable.refused] },
+        { status: editable.refused === "not_found" ? 404 : 403 },
+      );
+    }
+    derivedFrom = editable.original;
+    input.challengeId = input.challengeId ?? derivedFrom.challengeId;
+    if (!input.albumId && derivedFrom.albumId && canUseAlbums(plan.key)) {
+      // The original's folder, while it is live; a copy of a photo whose folder
+      // went to the trash goes unfiled rather than failing.
+      const [live] = await db
+        .select({ id: albums.id })
+        .from(albums)
+        .where(and(eq(albums.id, derivedFrom.albumId), eq(albums.eventId, event.id), isNull(albums.deletedAt)))
+        .limit(1);
+      input.albumId = live?.id ?? null;
+    }
+  }
   if (input.albumId) {
     if (!canUseAlbums(plan.key)) {
       return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
@@ -345,7 +377,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   // security boundary, but it still lands in a timestamp column, so it is
   // range-checked before it is trusted.
   let capturedAt: string | null =
-    input.capturedAt && isPlausibleCaptureTime(input.capturedAt) ? input.capturedAt : null;
+    input.capturedAt && isPlausibleCaptureTime(input.capturedAt) ? input.capturedAt : (derivedFrom?.capturedAt ?? null);
   let sizeBytes = actualSizeBytes;
   let storedMimeType = input.mimeType;
   let width = input.width;
@@ -494,6 +526,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       guestId: viewer.ownerSession ? null : viewer.guestId,
       albumId: input.albumId ?? null,
       challengeId,
+      derivedFromId: derivedFrom?.id ?? null,
+      ...(derivedFrom ? { visibility: derivedFrom.visibility } : {}),
       kind,
       status: event.moderation && !viewer.ownerSession ? "pending" : "approved",
       blobUrl,
