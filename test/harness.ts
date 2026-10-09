@@ -61,6 +61,10 @@ const TABLES = [
   "rate_limits",
   // VEN-2, before `guests`, `albums`, `events` and `users`.
   "kiosks",
+  // QR-4, before `events` and `users`.
+  "print_design_versions",
+  "print_designs",
+  "print_assets",
   // Before `media_shares` and `media`, both of which it references.
   "media_share_items",
   // Before `media`, `albums`, `guests` and `events`, all of which it references.

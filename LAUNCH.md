@@ -300,6 +300,32 @@ The **Privacy Policy** changed for this, the "Who can see a photo" section, date
 - [ ] Shared a folder and a selection, opened both on a phone, and turned one off
 - [ ] Read the share link paragraph in `/privacy`
 
+And the **print studio**, on a Premium or Venue event that is live. Open the event's **QR code**
+tab and press **Open the print studio**. Every template shows your event's own name and code.
+On a laptop:
+
+- Pick **Poster**. Click the event name and change the typeface on the right; drag the QR code
+  around (it snaps to the middle of the page); press Cmd+Z to undo. Wait a second and it says
+  "Saved". Close the tab and open the design again: your changes are there.
+- Upload a logo (a PNG with a transparent background is best) from **Your photos and logos**
+  and place it.
+- Press **Export**. The checks should say the code scans. Download the **PDF for printing** with
+  bleed and crop marks, open it, and print one page at actual size on your own printer: scan
+  the code from across a table.
+- Make the QR code small (about 2 cm) and press Export again to see the warning. Undo.
+- Open the same design in a second tab, change something in each, and see the second one ask
+  which copy to keep.
+
+On your phone, open the studio: you can choose a template, change the words and export, and it
+tells you moving things needs a computer. Before sending a real order to a print shop, ask them
+whether they want bleed and crop marks (most do; the studio adds them by default).
+
+The **Privacy Policy** gained one line under "What we collect from organizers".
+
+- [ ] Made a poster, uploaded a logo, exported a PDF, printed it and scanned the code
+- [ ] Saw the small-code warning, and the "which copy to keep" choice across two tabs
+- [ ] Opened the studio on a phone
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

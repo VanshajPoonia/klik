@@ -1029,6 +1029,69 @@ export const kiosks = pgTable(
   (table) => [index("kiosks_event_idx").on(table.eventId), uniqueIndex("kiosks_guest_idx").on(table.guestId)],
 );
 
+/**
+ * QR-4: print designs. `doc` is the scene the studio draws (lib/print/doc.ts),
+ * carrying its own schema version; `revision` counts saves so a stale copy
+ * cannot overwrite a newer one.
+ */
+export const printDesigns = pgTable(
+  "print_designs",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    preset: text("preset").notNull(),
+    widthMm: real("width_mm").notNull(),
+    heightMm: real("height_mm").notNull(),
+    bleedMm: real("bleed_mm").notNull().default(3),
+    doc: jsonb("doc").$type<unknown>().notNull(),
+    revision: integer("revision").notNull().default(1),
+    thumbnailKey: text("thumbnail_key"),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("print_designs_event_idx").on(table.eventId, table.updatedAt)],
+);
+
+/** The last ten earlier states of a design. */
+export const printDesignVersions = pgTable(
+  "print_design_versions",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id")
+      .notNull()
+      .references(() => printDesigns.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    doc: jsonb("doc").$type<unknown>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("print_design_versions_design_idx").on(table.designId, table.createdAt)],
+);
+
+/** Photos and logos uploaded for designs, under `designs/<eventId>/`. */
+export const printAssets = pgTable(
+  "print_assets",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    key: text("key").notNull().unique(),
+    mimeType: text("mime_type").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("print_assets_event_idx").on(table.eventId, table.createdAt)],
+);
+
+export type PrintDesign = typeof printDesigns.$inferSelect;
+export type PrintAsset = typeof printAssets.$inferSelect;
 export type Kiosk = typeof kiosks.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type User = typeof users.$inferSelect;

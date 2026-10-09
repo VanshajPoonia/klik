@@ -135,6 +135,10 @@ export default function PrivacyPage() {
         <li>A username, generated or chosen, used to invite co-hosts.</li>
         <li>Which plan the account is on and when it was activated.</li>
         <li>If signing in with Google: the name, email and profile image Google returns.</li>
+        <li>
+          Designs made in the print studio, and any photos or logos uploaded for them. These are kept
+          with the event and deleted with it.
+        </li>
       </ul>
       <p>
         <strong>We never see card details.</strong> Payment happens on a page hosted by Stripe. Card

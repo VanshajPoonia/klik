@@ -5,6 +5,7 @@ import { erasureLog, events, guests, media, mediaComments, users, eventInvites }
 import { deleteBlobs } from "./storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys, type MediaObjectRow } from "./media-objects";
 import { deleteEventExports, deleteExportsContaining } from "./exports";
+import { deleteEventDesignObjects } from "./print-designs";
 import { hasLegalHold } from "./reports";
 
 /**
@@ -118,6 +119,9 @@ export async function eraseEvent(
   // A ZIP of the gallery is the gallery. Exports are deleted, not left to
   // expire, because "gone within a week" is not what erasure promises.
   await deleteEventExports([eventId]);
+  // QR-4: the host's uploaded images and the designs' thumbnails, before the
+  // cascade takes the rows that say where they are.
+  await deleteEventDesignObjects([eventId]);
   await db.delete(guests).where(eq(guests.eventId, eventId));
   await db.delete(events).where(eq(events.id, eventId));
   await recordErasure("event", eventId, result, requestedBy, reason);
@@ -264,6 +268,7 @@ export async function eraseUser(
     // Before the cascade takes the export rows, which are the only record of
     // where the ZIPs are.
     await deleteEventExports(ownedEvents.map((event) => event.id));
+    await deleteEventDesignObjects(ownedEvents.map((event) => event.id));
   }
 
   const ownedIds = new Set(ownedEvents.map((event) => event.id));

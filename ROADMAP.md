@@ -37,7 +37,7 @@
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
-- A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
+- The print studio **is** built (QR-4a to QR-4f, 2026-10-10): a canvas editor with eleven templates, print-ready PDF and PNG export, and the four print checks. The QR route's server-drawn sign is still there for Premium's one-click download.
 - Error tracking (F-9 shipped structured logging and email alerts; Sentry is wired but has no DSN). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
 
 
@@ -801,6 +801,17 @@ Replace the plain `qrcode` render for display purposes with a styled renderer: r
 - A `GET /api/events/[id]/qr?format=story` export sized 1080x1920 for Instagram stories.
 
 ### QR-4. Print studio, the canvas editor
+**DONE 2026-10-10, all six parts** (`drizzle/0037_print_designs.sql`, `lib/print/`, `lib/print-designs.ts`, `components/print/`, `app/dashboard/events/[id]/print/`, `test/print-designs.dbtest.ts`, `lib/print/*.test.ts`). On Premium and Venue, for the owner and managers (`event.qr`), once the event is live; the QR code tab links to it. Decisions:
+- **One drawing routine for everything.** `lib/print/draw.ts` draws each element in plain Canvas 2D in millimetres. The editor's Konva shapes call it from inside their `sceneFunc`, and the thumbnails, template previews and exports call `renderPage`. So the screen and the PDF cannot disagree, which they would with Konva's own text and an export renderer beside it. Konva does only the pointer work: selection, drag, handles.
+- **QR-4a.** `print_designs` holds the scene as `doc` jsonb with its own `schemaVersion` (`upgradeDoc` is where a future change adds a step), plus a `revision`. Autosave runs a moment after each change and sends the revision it started from. A save from a stale copy (a second tab, a co-host) is refused with what is stored, and the host chooses **Load theirs** or **Keep mine**; it is one conditional UPDATE, since neon-http has no transactions. The state a save replaces is kept as a version at most every five minutes, ten at most, and putting one back keeps the current state first. Undo is a stack of whole designs in the browser, with typing and nudges folded into one step.
+- **QR-4b.** Stage in millimetres with zoom about the pointer, pan (wheel, Space, middle button), rulers, guides dragged from the rulers, snapping to the page, its centre, the safe line, guides and other elements (Alt switches it off), multi-select by Shift-click or a drag box, moving several at once, resize and rotate handles (square for codes and icons, width-only for lines, corner handles scale type), align and distribute, a layers list with hide and lock, and the usual shortcuts. **The QR code is live-bound**: a design stores only its style and colours and draws the code from the event's current address, so changing the address updates every design. The quiet zone is always part of the element.
+- **QR-4c.** Eight typefaces: Fraunces and Geist plus Playfair Display, Cormorant Garamond, Montserrat, Bebas Neue, Great Vibes and Caveat, served from this site by `next/font` on the studio's pages only. A design stores a font key, never a family name, because `next/font` names families with a build hash. Uploads go to `designs/<eventId>/` (never `events/`, so the orphan reaper and the backup leave them alone) through a signed PUT bound to type and size, then are confirmed against the object's own HEAD. The browser redraws each image before upload, which drops camera metadata and gives the true pixel size. Nine icons drawn as paths. An image a design uses cannot be deleted; event and account erasure and the deleted-event purge delete them with the thumbnails.
+- **QR-4d.** Eleven templates in `lib/print/templates.ts`: poster, flyer, table card, sticker sheet, welcome sign, bar sign, menu insert, place card, thank-you card, Instagram story, save-the-date. Each is filled with the event's name (bound, so a rename follows), date and accent, and long names shrink to fit. **A test holds every template to every export check** for a short and a very long name, the default accent and a dark one, and short and long addresses. Blank pages come in every preset or a custom size.
+- **QR-4e.** Exported in the browser: PNG at 300 or 150 ppi with a `pHYs` chunk so the file carries its physical size, a story at exactly 1080 × 1920, and a PDF through pdf-lib at the real page size, with the 3 mm bleed, crop marks and TrimBox and BleedBox when asked, written without object streams for older print software. The resolution drops on a device that cannot hold the canvas and says so. Filename `klik-<slug>-<preset>.pdf`.
+- **QR-4f.** `lib/print/guardrails.ts`: a code under 2.5 cm (a fifth of the width for a story), contrast under 4.5:1 against what is actually behind it (its own square, a covering shape, or the page), a light code on dark, anything drawn over a code, words or codes crossing or within 3 mm of the cut, a shape or photo that runs off the page but stops short of the bleed, a photo under 150 ppi at its placed size, tiny type, and bright colours a printer cannot match. **And the check arithmetic cannot make: the export dialog draws the page and reads every code back with jsQR.** Warnings never block; the button says "anyway".
+- **Phones** get the page, its words and export, and a line saying moving things needs a computer.
+- Not done: a server-side render (not needed while exports happen in a browser), and printing through a fulfilment partner (GRW-6).
+
 **Size:** XL. This is the "canvas editing built inside the app so they do not take the print separately". Break it into QR-4a through QR-4f; each is shippable.
 
 **Library choice:** Konva with react-konva (MIT). Fabric.js v6 is the alternative. Konva wins here for React integration, a clean layer model, and `stage.toDataURL({ pixelRatio })` making 300 DPI export a one-liner. Do not build a canvas engine by hand.
@@ -1209,7 +1220,7 @@ One person, so nothing below assumes parallel work, and each block ends somewher
 
 **Block 4, the differentiator**
 13. **QR-1**, **QR-2**, **QR-3** slugs, styling, sharing
-14. **QR-4a** through **QR-4f** the print studio
+14. ~~**QR-4a** through **QR-4f** the print studio~~ **DONE 2026-10-10**
 15. **F-2** remaining rate limits, **F-9** error tracking
 16. **LAW-1** terms and privacy policy, **LAW-4** venue curation
 

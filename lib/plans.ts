@@ -195,6 +195,14 @@ export function canDownloadQrSign(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }
 
+/**
+ * QR-4: the print studio. The same tiers as the printable sign it grows out
+ * of, so no plan loses a sign it had and none gains a studio it did not buy.
+ */
+export function canUsePrintStudio(planKey: PlanKey): boolean {
+  return canDownloadQrSign(planKey);
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes >= 1024 * MB) return `${Math.round(bytes / (1024 * MB))} GB`;
   return `${Math.round(bytes / MB)} MB`;

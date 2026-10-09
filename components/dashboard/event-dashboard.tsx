@@ -37,6 +37,7 @@ import { UsageMeter, type UsageSummary } from "@/components/dashboard/usage-mete
 import { ReportedComments, type ReportedCommentRow } from "@/components/dashboard/reported-comments";
 import { KioskPanel } from "@/components/dashboard/kiosk-panel";
 import { ChallengesPanel } from "@/components/dashboard/challenges-panel";
+import { PrintStudioCard } from "@/components/dashboard/print-studio-card";
 import { nanoid } from "nanoid";
 import { uploadToGallery } from "@/lib/upload-client";
 
@@ -61,6 +62,8 @@ export function EventDashboard({
   canModerateComments = false,
   canManageKiosks = false,
   canManageChallenges = false,
+  canUsePrintStudio = false,
+  canManageQr = false,
   reportedComments = [],
   usage = null,
   addressing = null,
@@ -94,6 +97,10 @@ export function EventDashboard({
   canManageKiosks?: boolean;
   /** GRW-3: set the photo challenges and the leaderboard switch. */
   canManageChallenges?: boolean;
+  /** QR-4: the plan has the print studio. */
+  canUsePrintStudio?: boolean;
+  /** QR-4: this person manages the QR code, which the studio prints. */
+  canManageQr?: boolean;
   reportedComments?: ReportedCommentRow[];
   usage?: UsageSummary | null;
   addressing?: { origin: string; formerSlugs: string[] } | null;
@@ -781,6 +788,7 @@ export function EventDashboard({
                 canStyle={canCustomizeQr}
               />
               {canManageKiosks && <KioskPanel eventId={event.id} folders={canManageAlbums ? folders : []} />}
+              {canManageQr && <PrintStudioCard eventId={event.id} available={canUsePrintStudio} />}
             </div>
           ))}
       </div>

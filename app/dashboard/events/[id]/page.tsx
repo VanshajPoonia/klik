@@ -23,6 +23,7 @@ import {
   canUseSlideshow,
   canUseKiosk,
   canUseVenueHub,
+  canUsePrintStudio,
 } from "@/lib/plans";
 import { withProtectedMediaUrl } from "@/lib/media-delivery";
 import { signMediaUrls } from "@/lib/media-urls";
@@ -138,6 +139,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canModerateComments={canModerateComments}
         canManageKiosks={canUseKiosk(plan.key) && can(actor.role, "event.settings")}
         canManageChallenges={can(actor.role, "event.settings")}
+        canUsePrintStudio={canUsePrintStudio(plan.key)}
+        canManageQr={can(actor.role, "event.qr")}
         moments={moments.map((moment) => ({ id: moment.id, name: moment.name }))}
         reportedComments={commentReports.map((row) => ({
           commentId: row.commentId,

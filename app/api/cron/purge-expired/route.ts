@@ -5,6 +5,7 @@ import { albums, events, guests, media, venueClients } from "@/lib/schema";
 import { deleteBlobs } from "@/lib/storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys } from "@/lib/media-objects";
 import { deleteEventExports } from "@/lib/exports";
+import { deleteEventDesignObjects } from "@/lib/print-designs";
 import { hasLegalHold } from "@/lib/reports";
 import { pruneRateLimits } from "@/lib/ratelimit";
 import { log, reportError } from "@/lib/observability";
@@ -112,6 +113,7 @@ export async function GET(request: Request) {
     // are the only record of where the ZIPs are. The daily export sweep would
     // catch them by age anyway; this just does not make it wait.
     await deleteEventExports([event.id]);
+    await deleteEventDesignObjects([event.id]);
     await db.delete(events).where(eq(events.id, event.id));
     await deleteBlobs(mediaObjectKeys(rows));
   }
