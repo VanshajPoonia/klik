@@ -4,7 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2 } from "@/lib/storage";
 import { reportError } from "@/lib/observability";
 import { resolveShareRequest } from "@/lib/share-request";
-import { collectionItem, listCollectionItems } from "@/lib/shares";
+import { collectionPreviewItem } from "@/lib/shares";
 import type { Media } from "@/lib/schema";
 
 /**
@@ -35,16 +35,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   // like.
   if (!resolved.ok) return new NextResponse(null, { status: 404 });
 
-  // A folder link previews as its cover, if the link shows the cover, else
-  // as its newest photo; a selection as its newest. Whatever it is, it is a
-  // photo the link opens, picked through the same rule as the page.
-  let item: Media | null = resolved.item;
-  if (!item) {
-    const cover = resolved.folder?.coverMediaId
-      ? await collectionItem(resolved.share, resolved.event, resolved.folder.coverMediaId)
-      : null;
-    item = cover ?? (await listCollectionItems(resolved.share, resolved.event, { limit: 1 })).items[0] ?? null;
-  }
+  // A folder or selection link previews as one photo it opens, picked
+  // through the same rule as its page.
+  const item: Media | null =
+    resolved.item ??
+    (await collectionPreviewItem(resolved.share, resolved.event, resolved.folder?.coverMediaId ?? null));
   if (!item) return new NextResponse(null, { status: 404 });
 
   // A video previews as the still extracted at upload time. Without one there is

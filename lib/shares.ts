@@ -212,6 +212,27 @@ export async function allCollectionItems(share: MediaShare, event: Event): Promi
     .orderBy(media.createdAt, media.id);
 }
 
+/**
+ * The photo a folder or selection link previews as in a chat: the folder's
+ * cover if the link shows it, else the newest photo, else the newest video
+ * with a poster still. A video without one has nothing to draw.
+ */
+export async function collectionPreviewItem(share: MediaShare, event: Event, coverId: string | null): Promise<Media | null> {
+  const condition = await collectionCondition(share, event);
+  const drawable = or(eq(media.kind, "photo"), sql`${media.posterPathname} IS NOT NULL`)!;
+  if (coverId) {
+    const [cover] = await db.select().from(media).where(and(eq(media.id, coverId), condition, drawable)).limit(1);
+    if (cover) return cover;
+  }
+  const [newest] = await db
+    .select()
+    .from(media)
+    .where(and(condition, drawable))
+    .orderBy(sql`${media.kind} = 'photo' DESC`, desc(media.createdAt), desc(media.id))
+    .limit(1);
+  return newest ?? null;
+}
+
 /** A page of photos as the share page receives them. */
 export async function toSharedItems(token: string, items: Media[], now = Date.now()): Promise<SharedItem[]> {
   return Promise.all(

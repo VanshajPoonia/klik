@@ -146,6 +146,24 @@ describe("a folder link", () => {
   });
 });
 
+describe("a link's preview image", () => {
+  it("is the folder's cover when the link shows it, else the newest photo, never a video with no still", async () => {
+    const eventId = await makeEvent(await makeUser());
+    const folder = await makeFolder(eventId);
+    const older = await makeMedia(eventId, { albumId: folder, createdAt: new Date(Date.UTC(2026, 9, 1, 10)) });
+    const newer = await makeMedia(eventId, { albumId: folder, createdAt: new Date(Date.UTC(2026, 9, 1, 11)) });
+    await makeMedia(eventId, { albumId: folder, kind: "video", createdAt: new Date(Date.UTC(2026, 9, 1, 12)) });
+    const hidden = await makeMedia(eventId, { albumId: folder, visibility: "private" });
+    const share = await shareRow(await makeShare(eventId, { scope: "album", albumId: folder }));
+    const event = await eventRow(eventId);
+
+    expect((await shares.collectionPreviewItem(share, event, null))?.id).toBe(newer);
+    expect((await shares.collectionPreviewItem(share, event, older))?.id).toBe(older);
+    // A cover the link does not show is passed over, not leaked.
+    expect((await shares.collectionPreviewItem(share, event, hidden))?.id).toBe(newer);
+  });
+});
+
 describe("a selection link", () => {
   it("opens exactly what was picked, hidden ones included, until one is rejected or deleted", async () => {
     const eventId = await makeEvent(await makeUser());
