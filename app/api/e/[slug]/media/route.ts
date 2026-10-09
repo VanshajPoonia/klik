@@ -24,7 +24,7 @@ import {
 import { acceptDerivedObject } from "@/lib/derived-objects";
 import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
 import { renderThumbnail } from "@/lib/thumbnail";
-import { enqueue, enqueueThumbnail, enqueueVideoScrub, kickJobRunner } from "@/lib/jobs";
+import { enqueue, enqueueMomentsRefresh, enqueueThumbnail, enqueueVideoScrub, kickJobRunner } from "@/lib/jobs";
 import { claimUsageWarning } from "@/lib/notices";
 import { spendShot } from "@/lib/disposable";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "@/lib/media-constants";
@@ -495,7 +495,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const warning = await claimUsageWarning(event.id).catch(() => null);
   if (warning) {
     await enqueue("notify.usage", { eventId: event.id, level: warning }).catch(() => {});
-    after(kickJobRunner);
   }
 
   // No thumbnail yet and something to make one from: queue it now, so it is on
@@ -503,13 +502,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   // response so the guest is not kept waiting for it.
   if (!row.thumbPathname && (row.kind === "photo" || row.posterPathname)) {
     await enqueueThumbnail(row.id).catch((error) => reportError("upload.thumbnail_enqueue_failed", error));
-    after(kickJobRunner);
   }
 
   if (row.kind === "video") {
     await enqueueVideoScrub(row.id).catch((error) => reportError("upload.video_scrub_enqueue_failed", error));
-    after(kickJobRunner);
   }
+
+  // AI-1: every photo can move the event's moments. Collapsed while a refresh
+  // is pending, so a busy hour is a handful of runs rather than one per photo.
+  await enqueueMomentsRefresh(event.id).catch((error) => reportError("upload.moments_enqueue_failed", error));
+
+  // One kick drains everything queued above.
+  after(kickJobRunner);
 
   const [published] = await toGalleryMedia(
     [{ ...row, mine: !viewer.ownerSession && row.guestId === viewer.guestId }],

@@ -7,7 +7,7 @@ import { resolveEventViewer } from "@/lib/event-viewer";
 import { canViewMedia, rollUndeveloped } from "@/lib/media-access";
 import { toGalleryMedia } from "@/lib/gallery-media";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
-import { galleryFolderPayload } from "@/lib/folders";
+import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
 import { eventPlan } from "@/lib/license";
 import { canUseAlbums } from "@/lib/plans";
 import type { Event } from "@/lib/schema";
@@ -87,7 +87,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     // MED-9: the switches travel with the resync, so turning hearts or
     // comments on reaches phones already open without a reload.
     return NextResponse.json(
-      { at, resync: true, features: galleryFeatures(event), folders: await folderUpdate(event, isManager) },
+      {
+        at,
+        resync: true,
+        features: galleryFeatures(event),
+        folders: await folderUpdate(event, isManager),
+        // AI-1: a refresh of the moments stamps the event, so it arrives here.
+        moments: !isManager && rollUndeveloped(event) ? [] : await galleryMoments(event, { isManager }),
+      },
       { headers: noStore },
     );
   }
@@ -98,7 +105,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   // poll's window, the phone starts over and gets the whole reveal at once.
   if (event.disposableMode && event.developsAt && event.developsAt > from && event.developsAt <= new Date(at)) {
     return NextResponse.json(
-      { at, resync: true, features: galleryFeatures(event), folders: await folderUpdate(event, isManager) },
+      {
+        at,
+        resync: true,
+        features: galleryFeatures(event),
+        folders: await folderUpdate(event, isManager),
+        // AI-1: a refresh of the moments stamps the event, so it arrives here.
+        moments: !isManager && rollUndeveloped(event) ? [] : await galleryMoments(event, { isManager }),
+      },
       { headers: noStore },
     );
   }
@@ -114,7 +128,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     .limit(MAX_CHANGES + 1);
   if (changed.length > MAX_CHANGES) {
     return NextResponse.json(
-      { at, resync: true, features: galleryFeatures(event), folders: await folderUpdate(event, isManager) },
+      {
+        at,
+        resync: true,
+        features: galleryFeatures(event),
+        folders: await folderUpdate(event, isManager),
+        // AI-1: a refresh of the moments stamps the event, so it arrives here.
+        moments: !isManager && rollUndeveloped(event) ? [] : await galleryMoments(event, { isManager }),
+      },
       { headers: noStore },
     );
   }

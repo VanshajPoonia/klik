@@ -48,6 +48,8 @@ const patchSchema = z.object({
   // MED-9. Any plan: a gallery people talk about is the product working.
   reactionsEnabled: z.boolean().optional(),
   commentsEnabled: z.boolean().optional(),
+  // AI-1. On by default; the team always sees moments either way.
+  momentsEnabled: z.boolean().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
   // CAM-4. Developing early is `developsAt: <now>`; there is no separate verb,
   // because "develop now" and "develop at this time" are the same setting.

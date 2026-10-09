@@ -23,12 +23,21 @@ export interface DashboardFolder extends FolderNode {
   coverMediaId: string | null;
 }
 
-/** "all", "unfiled", or a folder's id. */
+/** "all", "unfiled", a folder's id, or `moment:` and a moment's id (AI-1). */
 export type FolderView = "all" | "unfiled" | string;
+
+export interface DashboardMoment {
+  id: string;
+  name: string;
+}
+
+export const momentView = (id: string): FolderView => `moment:${id}`;
+export const viewedMoment = (view: FolderView): string | null => (view.startsWith("moment:") ? view.slice(7) : null);
 
 interface BrowsableMedia {
   id: string;
   albumId: string | null;
+  momentId?: string | null;
   kind: "photo" | "video";
   thumbSrc?: string | null;
   blobUrl: string;
@@ -67,6 +76,8 @@ export function FolderBrowser({
   onViewChange,
   canManage,
   onDropMedia,
+  moments = [],
+  onMomentsChange,
 }: {
   eventId: string;
   folders: DashboardFolder[];
@@ -77,6 +88,9 @@ export function FolderBrowser({
   onViewChange: (view: FolderView) => void;
   canManage: boolean;
   onDropMedia: (ids: string[], folderId: string | null) => void;
+  /** AI-1: the event's moments, worked out from capture times. */
+  moments?: DashboardMoment[];
+  onMomentsChange?: (next: DashboardMoment[]) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -87,11 +101,22 @@ export function FolderBrowser({
   const [error, setError] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-  const current = view !== "all" && view !== "unfiled" ? (folders.find((folder) => folder.id === view) ?? null) : null;
+  /** Moving elsewhere closes whatever was half done here. */
+  const go = (next: FolderView) => {
+    setRenaming(false);
+    setConfirmingDelete(false);
+    setCreating(false);
+    onViewChange(next);
+  };
+
+  const momentId = viewedMoment(view);
+  const currentMoment = momentId ? (moments.find((moment) => moment.id === momentId) ?? null) : null;
+  const current =
+    view !== "all" && view !== "unfiled" && !momentId ? (folders.find((folder) => folder.id === view) ?? null) : null;
   const path = folderPath(folders, current?.id ?? null);
-  const cards = view === "unfiled" ? [] : childrenOf(folders, current?.id ?? null);
+  const cards = view === "unfiled" || momentId ? [] : childrenOf(folders, current?.id ?? null);
   const unfiledCount = inFolder(items, folders, null).length;
-  const nestable = view !== "unfiled" && canNestIn(folders, current?.id ?? null);
+  const nestable = view !== "unfiled" && !momentId && canNestIn(folders, current?.id ?? null);
 
   async function call(url: string, init: RequestInit): Promise<Record<string, unknown> | null> {
     setBusy(true);
@@ -134,6 +159,16 @@ export function FolderBrowser({
     return true;
   }
 
+  async function renameMoment(id: string, name: string) {
+    const body = await call(`/api/events/${eventId}/albums/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
+    if (!body) return false;
+    onMomentsChange?.(moments.map((moment) => (moment.id === id ? { ...moment, name } : moment)));
+    return true;
+  }
+
   async function remove(id: string) {
     const body = await call(`/api/events/${eventId}/albums/${id}`, { method: "DELETE" });
     if (!body) return;
@@ -141,7 +176,7 @@ export function FolderBrowser({
     const parent = folders.find((folder) => folder.id === id)?.parentId ?? null;
     onFoldersChange(folders.filter((folder) => !gone.has(folder.id)));
     setConfirmingDelete(false);
-    onViewChange(parent ?? "all");
+    go(parent ?? "all");
   }
 
   /** Swaps a card with its neighbour, on screen first and then on the server. */
@@ -183,7 +218,7 @@ export function FolderBrowser({
   const crumb = (key: FolderView, label: string, active: boolean) => (
     <button
       type="button"
-      onClick={() => onViewChange(key)}
+      onClick={() => go(key)}
       aria-current={active ? "page" : undefined}
       className={`min-h-10 rounded-full px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
         active ? "font-medium text-paper" : "text-muted hover:text-paper"
@@ -215,10 +250,16 @@ export function FolderBrowser({
               {crumb(folder.id, folder.name, folder.id === view)}
             </span>
           ))}
+          {currentMoment && (
+            <span className="flex items-center">
+              <ChevronRight className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+              {crumb(view, currentMoment.name, true)}
+            </span>
+          )}
         </nav>
         <button
           type="button"
-          onClick={() => onViewChange(view === "unfiled" ? "all" : "unfiled")}
+          onClick={() => go(view === "unfiled" ? "all" : "unfiled")}
           aria-pressed={view === "unfiled"}
           {...(canManage ? dropProps(null, "unfiled") : {})}
           className={`min-h-10 rounded-full border px-4 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
@@ -230,6 +271,75 @@ export function FolderBrowser({
           Unfiled ({unfiledCount})
         </button>
       </div>
+
+      {moments.length > 1 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium tracking-wide text-muted uppercase">Moments</p>
+          <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Moments">
+            {moments.map((moment) => {
+              const count = items.filter((item) => item.momentId === moment.id).length;
+              const pressed = moment.id === momentId;
+              return (
+                <button
+                  key={moment.id}
+                  type="button"
+                  onClick={() => go(pressed ? "all" : momentView(moment.id))}
+                  aria-pressed={pressed}
+                  className={`min-h-10 shrink-0 rounded-full border px-4 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
+                    pressed ? "border-transparent bg-paper text-canvas" : "border-canvas-line text-muted hover:text-paper"
+                  }`}
+                >
+                  {moment.name} <span className="tabular-nums opacity-70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          {currentMoment && canManage && (
+            renaming ? (
+              <form
+                className="flex flex-wrap gap-2"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (rename.trim() && (await renameMoment(currentMoment.id, rename.trim()))) setRenaming(false);
+                }}
+              >
+                <input
+                  aria-label="Moment name"
+                  className={`${inputClass} max-w-xs`}
+                  value={rename}
+                  onChange={(event) => setRename(event.target.value)}
+                  maxLength={60}
+                  autoFocus
+                />
+                <Button type="submit" size="sm" disabled={busy || !rename.trim()}>
+                  Save
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setRenaming(false)}>
+                  Cancel
+                </Button>
+              </form>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setRename(currentMoment.name);
+                    setRenaming(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  Rename moment
+                </Button>
+                <p className="text-xs text-muted">
+                  Worked out from when photos were taken. Name it &ldquo;Ceremony&rdquo; or &ldquo;First dance&rdquo;
+                  and the name stays as more arrive.
+                </p>
+              </div>
+            )
+          )}
+        </div>
+      )}
 
       {current && canManage && (
         <div className="flex flex-wrap items-center gap-2">
@@ -326,7 +436,7 @@ export function FolderBrowser({
               <li key={folder.id} className="relative">
                 <button
                   type="button"
-                  onClick={() => onViewChange(folder.id)}
+                  onClick={() => go(folder.id)}
                   {...(canManage ? dropProps(folder.id, folder.id) : {})}
                   className={`group block w-full overflow-hidden rounded-xl border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
                     highlighted ? "border-volt ring-2 ring-volt" : "border-canvas-line hover:border-paper/30"

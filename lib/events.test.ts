@@ -55,6 +55,7 @@ const row: Event = {
   transferOfferedAt: null,
   reactionsEnabled: true,
   commentsEnabled: true,
+  momentsEnabled: true,
 };
 
 /**
@@ -121,6 +122,9 @@ const WITHHELD: Record<string, string> = {
   // guest's gallery, so the flag buys a guest nothing and telling them about a
   // back room they cannot see is worse than silence.
   uploaderSeesOwnPrivate: "host configuration, enforced server side",
+  // AI-1. The server sends no moments when it is off, so the flag says nothing
+  // a guest can use.
+  momentsEnabled: "decides what the server sends, never needed raw",
 };
 
 describe("toPublicEvent", () => {

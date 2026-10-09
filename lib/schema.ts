@@ -297,6 +297,8 @@ export const events = pgTable(
     // the host turns them on. See lib/reactions.ts and lib/comments.ts.
     reactionsEnabled: boolean("reactions_enabled").notNull().default(false),
     commentsEnabled: boolean("comments_enabled").notNull().default(false),
+    // AI-1: whether guests see the gallery grouped into moments.
+    momentsEnabled: boolean("moments_enabled").notNull().default(true),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -478,6 +480,11 @@ export const media = pgTable(
     // read from the row a grid already has instead of counted per tile.
     reactionCount: integer("reaction_count").notNull().default(0),
     commentCount: integer("comment_count").notNull().default(0),
+    // AI-1: written by the `moments.refresh` job, never by a route. The moment
+    // is a smart `albums` row; the burst is its first photo's id. See
+    // lib/moments.ts and drizzle/0032_moments.sql.
+    momentId: text("moment_id").references((): AnyPgColumn => albums.id, { onDelete: "set null" }),
+    burstId: text("burst_id"),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),

@@ -10,7 +10,13 @@ import { MediaGrid, type DashboardMedia } from "@/components/dashboard/media-gri
 import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
 import { QrPanel } from "@/components/dashboard/qr-panel";
 import { LicenseBanner, type EventLicenseSummary } from "@/components/dashboard/license-banner";
-import { FolderBrowser, type DashboardFolder, type FolderView } from "@/components/dashboard/folder-browser";
+import {
+  FolderBrowser,
+  viewedMoment,
+  type DashboardFolder,
+  type DashboardMoment,
+  type FolderView,
+} from "@/components/dashboard/folder-browser";
 import { flattenFolders, inFolder } from "@/lib/folder-tree";
 import { CoHostManager, type CoHost, type PendingInvite } from "@/components/dashboard/co-host-manager";
 import { TeamActivity } from "@/components/dashboard/team-activity";
@@ -54,6 +60,7 @@ export function EventDashboard({
   addressing = null,
   license = { state: "live", canGoLive: false, requestedAt: null },
   albums = [],
+  moments: initialMoments = [],
   coHosts = [],
   team = null,
   activity = null,
@@ -82,6 +89,8 @@ export function EventDashboard({
   addressing?: { origin: string; formerSlugs: string[] } | null;
   license?: EventLicenseSummary;
   albums?: Album[];
+  /** AI-1: the event's moments, when there are at least two. */
+  moments?: DashboardMoment[];
   coHosts?: CoHost[];
   /** ORG-3/4: what the team card needs beyond its members. */
   team?: { isOwner: boolean; invites: PendingInvite[]; transferTo: string | null } | null;
@@ -115,15 +124,21 @@ export function EventDashboard({
     })),
   );
   const [chosenView, setChosenView] = useState<FolderView>("all");
+  const [moments, setMoments] = useState<DashboardMoment[]>(initialMoments);
 
   const pending = mediaItems.filter((item) => item.status === "pending");
   const approved = mediaItems.filter((item) => item.status === "approved");
   // A folder deleted while open drops back to everything.
+  const chosenMoment = viewedMoment(chosenView);
   const folderView: FolderView =
-    chosenView === "all" || chosenView === "unfiled" || folders.some((folder) => folder.id === chosenView)
+    chosenView === "all" ||
+    chosenView === "unfiled" ||
+    folders.some((folder) => folder.id === chosenView) ||
+    (chosenMoment && moments.some((moment) => moment.id === chosenMoment))
       ? chosenView
       : "all";
-  const currentFolder = folderView !== "all" && folderView !== "unfiled" ? folderView : null;
+  const viewMoment = viewedMoment(folderView);
+  const currentFolder = folderView !== "all" && folderView !== "unfiled" && !viewMoment ? folderView : null;
   // Inside a folder, what is filed there itself; what is in folders beneath it
   // is a click away on their cards.
   const shownApproved =
@@ -131,8 +146,10 @@ export function EventDashboard({
       ? approved
       : folderView === "unfiled"
         ? inFolder(approved, folders, null)
-        : inFolder(approved, folders, folderView, { deep: false });
-  const showFolders = canManageAlbums || folders.length > 0;
+        : viewMoment
+          ? approved.filter((item) => item.momentId === viewMoment)
+          : inFolder(approved, folders, folderView, { deep: false });
+  const showFolders = canManageAlbums || folders.length > 0 || moments.length > 1;
   const rejected = mediaItems.filter((item) => item.status === "rejected");
   const selectedItems = approved.filter((item) => selectedIds.has(item.id));
   const selectedDownloadParts = buildDownloadBatches(selectedItems);
@@ -609,6 +626,8 @@ export function EventDashboard({
                     onViewChange={setChosenView}
                     canManage={canManageAlbums}
                     onDropMedia={(ids, folderId) => void runBulk({ action: "move", albumId: folderId }, ids)}
+                    moments={moments}
+                    onMomentsChange={setMoments}
                   />
                 </div>
               )}
@@ -620,6 +639,8 @@ export function EventDashboard({
                 <Card className="text-center text-sm text-muted">
                   {folderView === "unfiled"
                     ? "Everything is in a folder."
+                    : viewMoment
+                      ? "Nothing from this moment is in the gallery."
                     : "Nothing is filed directly in this folder. Drag photos onto it, or select some and move them here."}
                 </Card>
               ) : (

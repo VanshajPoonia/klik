@@ -61,7 +61,7 @@ export async function listFolders(eventId: string): Promise<FolderRow[]> {
 
 async function liveFolder(eventId: string, id: string) {
   const [row] = await db
-    .select({ id: albums.id })
+    .select({ id: albums.id, kind: albums.kind })
     .from(albums)
     .where(and(eq(albums.id, id), eq(albums.eventId, eventId), isNull(albums.deletedAt)))
     .limit(1);
@@ -114,8 +114,21 @@ export async function updateFolder(
   id: string,
   changes: { name?: string; parentId?: string | null; coverMediaId?: string | null },
 ): Promise<FolderRow> {
-  if (!(await liveFolder(eventId, id))) throw new FolderError("not_found");
+  const folder = await liveFolder(eventId, id);
+  if (!folder) throw new FolderError("not_found");
   const set: Partial<typeof albums.$inferInsert> = {};
+  if (folder.kind === "smart") {
+    // AI-1: a moment is named by the host and placed by time. Its name is
+    // marked as theirs, so the next refresh keeps it.
+    if (changes.parentId !== undefined || changes.coverMediaId !== undefined) throw new FolderError("parent_invalid");
+    if (changes.name === undefined) throw new FolderError("not_found");
+    const [row] = await db
+      .update(albums)
+      .set({ name: changes.name, query: sql`coalesce(${albums.query}, '{}'::jsonb) || '{"renamed": true}'::jsonb` })
+      .where(and(eq(albums.id, id), eq(albums.eventId, eventId)))
+      .returning(folderColumns);
+    return row;
+  }
   if (changes.name !== undefined) set.name = changes.name;
   if (changes.parentId !== undefined) {
     if (changes.parentId && !(await liveFolder(eventId, changes.parentId))) throw new FolderError("parent_invalid");
@@ -296,6 +309,41 @@ export async function galleryFolderPayload(eventId: string, { isManager }: { isM
     createdAt: folder.createdAt.toISOString(),
     filled: isManager || folder.filled,
   }));
+}
+
+export interface GalleryMoment {
+  id: string;
+  name: string;
+  /** What this viewer can see in it. */
+  count: number;
+}
+
+/**
+ * AI-1: an event's moments, in time order, with how many photos in each this
+ * viewer can see. Guests get none when the host has them off, and none when
+ * fewer than two have anything in them, since one is no grouping.
+ */
+export async function galleryMoments(
+  event: { id: string; momentsEnabled: boolean },
+  { isManager }: { isManager: boolean },
+): Promise<GalleryMoment[]> {
+  if (!isManager && !event.momentsEnabled) return [];
+  const visible = isManager
+    ? sql`${media.deletedAt} IS NULL`
+    : sql`${media.deletedAt} IS NULL AND ${media.status} = 'approved' AND ${media.visibility} = 'gallery'`;
+  const rows = await db
+    .select({
+      id: albums.id,
+      name: albums.name,
+      count: sql<number>`count(${media.id}) FILTER (WHERE ${visible})`.mapWith(Number),
+    })
+    .from(albums)
+    .leftJoin(media, eq(media.momentId, albums.id))
+    .where(and(eq(albums.eventId, event.id), eq(albums.kind, "smart"), isNull(albums.deletedAt)))
+    .groupBy(albums.id, albums.name, albums.position)
+    .orderBy(albums.position);
+  const filled = rows.filter((row) => row.count > 0);
+  return filled.length >= 2 ? filled : [];
 }
 
 /**

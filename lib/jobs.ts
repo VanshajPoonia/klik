@@ -57,6 +57,10 @@ export const JOB_PAYLOADS = {
   "media.scrub_video": z.object({ mediaId: z.string().min(1).max(64) }),
   /** MED-8: queue a scrub for every video that has not had one. */
   "media.backfill_video_scrubs": z.object({}),
+  /** AI-1: work out one event's moments and bursts. */
+  "moments.refresh": z.object({ eventId: z.string().min(1).max(64) }),
+  /** AI-1: refresh every event with recent media. */
+  "moments.backfill": z.object({}),
 } as const;
 
 export type JobKind = keyof typeof JOB_PAYLOADS;
@@ -70,6 +74,15 @@ export function enqueueThumbnail(mediaId: string) {
 /** Queues the location scrub for one video, at most once while one is pending. */
 export function enqueueVideoScrub(mediaId: string) {
   return enqueue("media.scrub_video", { mediaId }, { dedupeKey: `scrub:${mediaId}`, maxAttempts: 4 });
+}
+
+/**
+ * Queues the moments for one event. Collapsed while one is pending, so a
+ * hundred uploads in a minute are one run; the run goes round again itself if
+ * photos arrived while it was working.
+ */
+export function enqueueMomentsRefresh(eventId: string) {
+  return enqueue("moments.refresh", { eventId }, { dedupeKey: `moments:${eventId}`, maxAttempts: 3 });
 }
 
 export function isJobKind(kind: string): kind is JobKind {
@@ -185,6 +198,8 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     { kind: "usage.reconcile", payload: {} },
     // MED-8: videos from before the scrub existed, and any whose job was lost.
     { kind: "media.backfill_video_scrubs", payload: {} },
+    // AI-1: anything a kick missed, and capture times found after the fact.
+    { kind: "moments.backfill", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

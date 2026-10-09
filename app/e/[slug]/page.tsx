@@ -33,7 +33,7 @@ import { can } from "@/lib/permissions";
 import { auth } from "@/lib/auth";
 import { claimGuestCookies } from "@/lib/guest-accounts";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
-import { galleryFolderPayload } from "@/lib/folders";
+import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -143,12 +143,14 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     event,
     reactorFor({ guestId: guestSession?.guestId ?? null, userId: managerSession?.user?.id ?? null }),
   );
-  const [folders, coverRows] = await Promise.all([
+  const [folders, moments, coverRows] = await Promise.all([
     // MED-4. A roll that has not developed shows guests nothing, folders
     // included: a tab per folder would say what is coming.
     canUseAlbums(plan.key) && (isOwner || !rollUndeveloped(event))
       ? galleryFolderPayload(event.id, { isManager: isOwner })
       : Promise.resolve([]),
+    // AI-1. Not before a roll develops either, for the same reason.
+    isOwner || !rollUndeveloped(event) ? galleryMoments(event, { isManager: isOwner }) : Promise.resolve([]),
     canCustomizeGallery(plan.key) && event.coverMediaId
       ? db
           .select()
@@ -201,6 +203,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       initialMedia={initialMedia}
       syncedAt={syncedAt}
       folders={folders}
+      moments={moments}
       coverUrl={coverUrl}
       canSlideshow={canUseSlideshow(plan.key)}
       maxVideoSeconds={plan.maxVideoSeconds}

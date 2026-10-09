@@ -10,6 +10,7 @@ import { eventLicenseState, eventPlan } from "@/lib/license";
 import { getAccountEntitlements } from "@/lib/entitlements";
 import { openReportCounts } from "@/lib/reports";
 import { COMMENT_REPORT_LABELS, reportedComments, type CommentReportReason } from "@/lib/comments";
+import { galleryMoments } from "@/lib/folders";
 import { eventUsage } from "@/lib/usage";
 import { listFormerSlugs } from "@/lib/slugs";
 import {
@@ -57,7 +58,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const isOwner = actor.role === "owner";
   const canManageTeam = canUseCoHosts(plan.key) && can(actor.role, "cohosts.manage");
   const canModerateComments = can(actor.role, "media.moderate");
-  const [reportCounts, formerSlugs, invites, activity, offeredBy, commentReports] = await Promise.all([
+  const [reportCounts, formerSlugs, invites, activity, offeredBy, commentReports, moments] = await Promise.all([
     openReportCounts(event.id),
     listFormerSlugs(event.id),
     canManageTeam ? openInvites(event.id) : Promise.resolve([]),
@@ -72,6 +73,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           .then(([owner]) => owner?.name ?? (owner?.username ? `@${owner.username}` : "The owner"))
       : Promise.resolve(null),
     canModerateComments ? reportedComments(event.id) : Promise.resolve([]),
+    // AI-1. The team sees them whether or not guests do.
+    galleryMoments(event, { isManager: true }),
   ]);
   const [mediaRows, albumRows, coHostRows, clientRows, held] = await Promise.all([
     db
@@ -132,6 +135,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canManageShares={can(actor.role, "shares.manage")}
         canManageTrash={can(actor.role, "trash.manage")}
         canModerateComments={canModerateComments}
+        moments={moments.map((moment) => ({ id: moment.id, name: moment.name }))}
         reportedComments={commentReports.map((row) => ({
           commentId: row.commentId,
           mediaId: row.mediaId,

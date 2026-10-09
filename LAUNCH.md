@@ -210,6 +210,16 @@ folders come back, with their photos in place.
 - [ ] Made nested folders, dragged photos into them, and saw the tabs on a phone
 - [ ] Deleted and restored a folder with a folder inside it
 
+And **moments**. They need photos taken at least twenty minutes apart, so the quickest
+test is a real one: upload photos from two different times of day from your camera roll
+to a test gallery. Within a minute the gallery shows a row of tabs such as "Afternoon"
+and "Evening"; rename one to "Ceremony" from the dashboard's gallery tab and check the
+name holds after you add more. Hold the shutter on your phone's camera for a burst,
+upload it, and it shows as one photo with a count. Moments can be turned off for guests
+in **Settings**.
+
+- [ ] Saw moments on a test gallery, renamed one, and saw a burst stack
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

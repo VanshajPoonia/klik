@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { nanoid } from "nanoid";
-import { Camera, Heart, MessageCircle, Play } from "lucide-react";
+import { Camera, Heart, Layers, MessageCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
@@ -37,6 +37,13 @@ interface GalleryFolder {
   filled: boolean;
 }
 
+/** AI-1: a stretch of the event, worked out from when photos were taken. */
+interface GalleryMoment {
+  id: string;
+  name: string;
+  count: number;
+}
+
 // The camera carries the looks engine and its pixel passes. Most guests never
 // open it, so it stays out of the initial bundle until they do.
 const CameraCapture = dynamic(
@@ -65,6 +72,9 @@ interface MediaItem {
   reactionCount?: number;
   commentCount?: number;
   reacted?: boolean;
+  /** AI-1. The moment it was taken in, and the burst it stacks under. */
+  momentId?: string | null;
+  burstId?: string | null;
 }
 
 interface UploadProgress {
@@ -174,6 +184,7 @@ export function GuestGallery({
   initialMedia,
   syncedAt,
   folders: initialFolders = [],
+  moments: initialMoments = [],
   coverUrl = null,
   canSlideshow = false,
   showBranding = true,
@@ -189,6 +200,7 @@ export function GuestGallery({
   /** When the server read `initialMedia`. The first poll asks what changed since. */
   syncedAt: string;
   folders?: GalleryFolder[];
+  moments?: GalleryMoment[];
   coverUrl?: string | null;
   canSlideshow?: boolean;
   showBranding?: boolean;
@@ -257,6 +269,8 @@ export function GuestGallery({
   // is in them may have changed.
   const [folders, setFolders] = useState<GalleryFolder[]>(initialFolders);
   const [chosenFolderId, setChosenFolderId] = useState<string | null>(null);
+  const [moments, setMoments] = useState<GalleryMoment[]>(initialMoments);
+  const [chosenMomentId, setChosenMomentId] = useState<string | null>(null);
   const [uploadAlbumId, setUploadAlbumId] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -336,8 +350,10 @@ export function GuestGallery({
           removed?: string[];
           features?: { reactions: boolean; comments: boolean };
           folders?: GalleryFolder[];
+          moments?: GalleryMoment[];
         } = await res.json();
         if (data.folders) setFolders(data.folders);
+        if (data.moments) setMoments(data.moments);
         if (data.resync) {
           if (data.features) setFeatures(data.features);
           await reloadFirstPage();
@@ -378,9 +394,6 @@ export function GuestGallery({
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [applyChanges, event.slug, reloadFirstPage, syncedAt]);
-
-  // Resolves to -1 if the open item was removed (moderated away), which closes.
-  const lightboxIndex = lightboxId ? items.findIndex((item) => item.id === lightboxId) : -1;
 
   const uploadOne = useCallback(
     async ({ file, prepared }: PendingUpload) => {
@@ -695,7 +708,26 @@ export function GuestGallery({
   const tabFolders = folders.filter((folder) => folder.filled);
   const activeFolderId = chosenFolderId && tabFolders.some((folder) => folder.id === chosenFolderId) ? chosenFolderId : null;
   const activePath = folderPath(tabFolders, activeFolderId);
-  const visibleItems = activeFolderId ? inFolder(items, tabFolders, activeFolderId) : items;
+  const activeMomentId =
+    chosenMomentId && moments.some((moment) => moment.id === chosenMomentId) ? chosenMomentId : null;
+  const inFolderItems = activeFolderId ? inFolder(items, tabFolders, activeFolderId) : items;
+  const visibleItems = activeMomentId
+    ? inFolderItems.filter((item) => item.momentId === activeMomentId)
+    : inFolderItems;
+  // AI-1: a burst shows as its first photo with a count. Only when that photo
+  // is itself on screen; otherwise the rest show as they are.
+  const shownIds = new Set(visibleItems.map((item) => item.id));
+  const burstSizes = new Map<string, number>();
+  for (const item of visibleItems) {
+    if (item.burstId && shownIds.has(item.burstId)) {
+      burstSizes.set(item.burstId, (burstSizes.get(item.burstId) ?? 0) + 1);
+    }
+  }
+  const gridItems = visibleItems.filter(
+    (item) => !item.burstId || item.burstId === item.id || !shownIds.has(item.burstId),
+  );
+  // Resolves to -1 if the open item was removed (moderated away), which closes.
+  const lightboxIndex = lightboxId ? visibleItems.findIndex((item) => item.id === lightboxId) : -1;
   // One row of tabs per level, down to the folder being browsed and one below.
   const tabRows: Array<{ parentId: string | null; selected: string | null }> = [{ parentId: null, selected: activePath[0]?.id ?? null }];
   for (let level = 0; level < activePath.length; level += 1) {
@@ -873,6 +905,28 @@ export function GuestGallery({
           </div>
         )}
 
+        {moments.length > 1 && (
+          <nav className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Moments">
+            {[{ id: null, name: "Any time" }, ...moments].map((moment) => {
+              const pressed = activeMomentId === moment.id;
+              return (
+                <button
+                  key={moment.id ?? "any"}
+                  onClick={() => setChosenMomentId(moment.id)}
+                  aria-pressed={pressed}
+                  className={`min-h-11 shrink-0 rounded-full border px-4 text-sm transition-colors ${
+                    pressed
+                      ? "border-transparent bg-paper text-canvas"
+                      : "border-canvas-line text-muted hover:text-paper"
+                  }`}
+                >
+                  {moment.name}
+                </button>
+              );
+            })}
+          </nav>
+        )}
+
         {tabFolders.length > 0 && (
           <nav className="mb-6 space-y-2" aria-label="Folders">
             {tabRows.map((row, level) => {
@@ -925,7 +979,7 @@ export function GuestGallery({
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {visibleItems.map((item) => (
+            {gridItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setLightboxId(item.id)}
@@ -1020,6 +1074,14 @@ export function GuestGallery({
                         <span className="sr-only">{item.commentCount === 1 ? "comment" : "comments"}</span>
                       </span>
                     )}
+                  </span>
+                )}
+                {/* AI-1: the rest of the burst is a swipe away in the viewer. */}
+                {(burstSizes.get(item.id) ?? 0) > 1 && (
+                  <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium tabular-nums text-paper backdrop-blur">
+                    <Layers className="h-3 w-3" aria-hidden="true" />
+                    {burstSizes.get(item.id)}
+                    <span className="sr-only">photos taken together</span>
                   </span>
                 )}
               </button>
@@ -1121,9 +1183,9 @@ export function GuestGallery({
 
       {lightboxIndex >= 0 && (
         <Lightbox
-          items={items}
+          items={visibleItems}
           index={lightboxIndex}
-          onIndexChange={(next) => setLightboxId(items[next]?.id ?? null)}
+          onIndexChange={(next) => setLightboxId(visibleItems[next]?.id ?? null)}
           onClose={() => setLightboxId(null)}
           canDownload={event.downloadsEnabled || isOwner}
           canSlideshow={canSlideshow}

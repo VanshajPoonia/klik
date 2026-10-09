@@ -34,7 +34,7 @@
 - Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt. Usernames are still generated at signup, and since ID-2 can be changed on `/dashboard/account`.
 - Passkeys (ACC-6). Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09. Hearts and comments (MED-9) shipped the same day.
 - Folder share links (album scope). Nested folders **are** built (MED-4, 2026-10-09), and per-photo visibility, share links and revocable access are too: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
-- Any AI beyond client-side CSS filters.
+- Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
 - Error tracking (F-9 shipped structured logging and email alerts; Sentry is wired but has no DSN). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
 
@@ -681,6 +681,8 @@ Still open here:
 Build this in three layers, cheapest first. Layer 1 alone covers most of the real value and costs nothing.
 
 ### AI-1. Moments: time and burst clustering
+**DONE 2026-10-09** (`drizzle/0032_moments.sql`, `lib/moments.ts`, `lib/job-handlers/moments.ts`, `test/moments.dbtest.ts`). Capture time is EXIF where it exists; photos without it are put on the same wall clock by estimating the event's zone as the median of upload minus capture, rounded to a quarter hour. A new moment starts at a gap of at least 20 minutes or six typical gaps, whichever is longer; strays of fewer than three fold into the nearer neighbour within three hours; the gap widens until there are at most twelve; fewer than two is no grouping. Bursts are five or more inside ten seconds from one person, from capture times only, because upload times bunch whenever someone picks thirty photos from their roll. The `moments.refresh` job stores the result as smart `albums` rows plus `media.moment_id` and `media.burst_id`, matching new moments to stored ones by overlap so a renamed moment keeps its name; it runs on every upload (collapsed while pending, and going round again if photos land mid-run) and daily for anything recent. Guests get a "when" row of moment tabs (off with "Show guests the gallery in moments") and see a burst as one tile with a count; the viewer now swipes within what is on screen. The dashboard lists moments in the folder browser, where the host renames them.
+
 **Size:** M. **Depends on:** MED-4. No ML, no cost, ship it first.
 Cluster an event's media by capture-time gaps (a new moment when the gap exceeds the adaptive threshold derived from the event's own upload density, floor 20 minutes). Surface as auto-generated smart folders: "Getting ready", "Ceremony", "First dance" are just named moments the organizer renames. Also collapse bursts (more than 4 photos inside 10 seconds from the same guest) into a stack in the grid, showing one with a count, which single-handedly makes a 3000-photo gallery browsable.
 Use EXIF `DateTimeOriginal` when present, falling back to `created_at`, since upload time and capture time diverge badly when someone uploads a day later.

@@ -30,6 +30,8 @@ export function toPublicMedia(
     durationS?: number | null;
     reactionCount?: number;
     commentCount?: number;
+    momentId?: string | null;
+    burstId?: string | null;
   },
   slug: string,
 ) {
@@ -54,6 +56,9 @@ export function toPublicMedia(
     // whether to draw them from the event's own switches.
     reactionCount: item.reactionCount ?? 0,
     commentCount: item.commentCount ?? 0,
+    // AI-1. Which moment it was taken in, and the burst it stacks under.
+    momentId: item.momentId ?? null,
+    burstId: item.burstId ?? null,
   };
 }
 

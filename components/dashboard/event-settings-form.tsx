@@ -111,6 +111,7 @@ export function EventSettingsForm({
   const [uploadsEnabled, setUploadsEnabled] = useState(event.uploadsEnabled);
   const [reactionsEnabled, setReactionsEnabled] = useState(event.reactionsEnabled);
   const [commentsEnabled, setCommentsEnabled] = useState(event.commentsEnabled);
+  const [momentsEnabled, setMomentsEnabled] = useState(event.momentsEnabled);
   const [expiresAt, setExpiresAt] = useState(toDateInputValue(event.expiresAt));
   const [clientName, setClientName] = useState(event.clientName ?? "");
   const [clientEmail, setClientEmail] = useState(event.clientEmail ?? "");
@@ -173,6 +174,7 @@ export function EventSettingsForm({
           uploadsEnabled,
           reactionsEnabled,
           commentsEnabled,
+          momentsEnabled,
           expiresAt: endOfDayIso(expiresAt),
           clientId: canManageClients ? clientId || null : undefined,
           clientName: canManageClients ? clientName || null : undefined,
@@ -453,6 +455,13 @@ export function EventSettingsForm({
           hint="Guests sign in with their email to comment, so nobody is anonymous. You can hide any comment, and three reports hide one until you look."
         >
           Guests can comment
+        </Checkbox>
+        <Checkbox
+          checked={momentsEnabled}
+          onChange={(event) => setMomentsEnabled(event.target.checked)}
+          hint="Klik splits the gallery wherever there was a long pause in the photos, like before and after the ceremony. Rename them from the gallery tab."
+        >
+          Show guests the gallery in moments
         </Checkbox>
       </div>
 

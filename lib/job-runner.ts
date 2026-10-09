@@ -61,6 +61,8 @@ const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   },
   "media.scrub_video": async () => (await import("./job-handlers/video-scrub")).scrubVideo,
   "media.backfill_video_scrubs": async () => (await import("./job-handlers/video-scrub")).backfillVideoScrubs,
+  "moments.refresh": async () => (await import("./job-handlers/moments")).refreshMoments,
+  "moments.backfill": async () => (await import("./job-handlers/moments")).backfillMoments,
 };
 
 /** How long a job may sit in `running` before it is presumed killed. */
