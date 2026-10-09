@@ -24,6 +24,8 @@ export interface FetchGalleryOptions {
    */
   since?: string | null;
   limit?: number;
+  /** CAM-3: just this row, for a link that opens one photo. Same rule. */
+  id?: string;
 }
 
 // Bounds one response when polling "since a cursor". Since-mode reads the
@@ -34,12 +36,13 @@ const SINCE_SAFETY_CAP = 300;
 /** Single source of truth for "which media rows can this viewer see," shared
  * by the guest gallery API route and the guest page's initial server render. */
 export async function fetchGalleryMedia(eventId: string, options: FetchGalleryOptions) {
-  const { isOwner, guestId, event, cursor, since, limit = 50 } = options;
+  const { isOwner, guestId, event, cursor, since, limit = 50, id } = options;
   // Soft-deleted rows are excluded for everyone, owners included. They exist
   // only so the 30-day recovery window in the purge cron has something to
   // restore from, and a deleted photo reappearing in a gallery would defeat
   // the point of deleting it.
   const conditions = [eq(media.eventId, eventId), isNull(media.deletedAt)];
+  if (id) conditions.push(eq(media.id, id));
   const sinceCursor = since ? decodeMediaCursor(since) : null;
   const pageCursor = cursor ? decodeMediaCursor(cursor) : null;
   if (sinceCursor) {

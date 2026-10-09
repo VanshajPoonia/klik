@@ -302,6 +302,8 @@ Folder share links. Any AI that needs a model. The canvas print studio (the QR s
 
 **Moments and bursts, 2026-10-09 (AI-1).** Worked out from capture times by `lib/moments.ts` (pure) and stored by the `moments.refresh` job: moments as `albums` rows of kind `smart` with their span in `query`, and on each photo as `media.moment_id`; bursts as `media.burst_id`, the first photo's id. A refresh that changes anything stamps `events.updated_at`, so galleries resync and receive the new moments. Smart rows are left out of every folder list and of the folder limit, and only their name can change.
 
+**Sharing from the gallery, 2026-10-09 (CAM-3).** All on the viewer's phone and nothing stored: `lib/media-share.ts` fetches the file (signed URL first, then the authorized route, never with cookies across origins), draws the smaller copy and the story image, and makes the QR code from the gallery address with the `qrcode` package loaded on demand. A link to a photo is `/e/<slug>?m=<id>`; the page reads it with `fetchGalleryMedia`'s `id` option, which is the grid's query and visibility rule narrowed to one row, so a link can never show more than the grid. The download route lets a guest save their own upload when the host has downloads off.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

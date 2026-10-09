@@ -35,6 +35,7 @@
 - Passkeys (ACC-6). Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09. Hearts and comments (MED-9) shipped the same day.
 - Folder share links (album scope). Nested folders **are** built (MED-4, 2026-10-09), and per-photo visibility, share links and revocable access are too: MED-1 through MED-3 shipped 2026-10-02 and 2026-10-03 as `drizzle/0011_media_visibility_and_shares.sql`, `lib/shares.ts` and `lib/share-access.ts`.
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
+- Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
 - A canvas print editor. The "sign" is a hard-coded SVG string in the QR route.
 - Error tracking (F-9 shipped structured logging and email alerts; Sentry is wired but has no DSN). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
 
@@ -819,6 +820,8 @@ The in-app camera is already good (six looks, torch, zoom, focus tap, timer, fro
 - Available to both organizers (dashboard) and guests (on their own uploads).
 
 ### CAM-3. Sharing from the gallery
+**DONE 2026-10-09** (`lib/media-share.ts`, `components/guest/media-share-panel.tsx`, `test/sharing.dbtest.ts`). The viewer's Share button opens one sheet, on the guest gallery and the dashboard alike: **Send** hands the file itself to the phone's share sheet, **Story with QR** draws a 1080 x 1920 image on the phone (the photo whole over a blurred copy of itself, the event's name, and the gallery's QR code in the bottom corner, drawn from the address so it needs no request), **Copy link** gives `/e/<slug>?m=<id>`, which opens that photo on arrival through the same gate and the same query as the grid, **Save full size** uses the download route, and **Save a smaller copy** resizes to 1600px on the phone. The organizer also gets MED-2's share link from the same sheet. Decisions: Klik keeps only the re-encoded photo, so "original" is that file; a photo is fetched as the sheet opens so Send can open the share sheet inside the tap (Safari forgets a tap that waits on the network), while a video waits to be asked; the story is photos only; when the host turns downloads off, everything that hands over the file is off for guests **except on their own uploads**, which the download route now allows, and the copy link stays. Nothing is stored and nothing new is counted; a link that points at something the viewer cannot see opens the gallery with a note instead.
+
 **Size:** M. **Depends on:** MED-2.
 Per-item: copy share link, Web Share API with the file attached, download original, download web-size, and a 9:16 story export with the event QR in the corner so a guest sharing a photo also advertises the gallery. That last one is a growth loop, not a nicety.
 

@@ -890,7 +890,13 @@ export function EventDashboard({
           canDownload
           canSlideshow={canSlideshow}
           downloadBaseUrl={downloadBaseUrl}
+          slug={event.slug}
           onShare={canManageShares ? setShareMediaId : undefined}
+          share={{
+            eventName: event.name,
+            accent: canCustomizeGallery ? event.accentColor : "#edee00",
+            canTakeFile: () => true,
+          }}
           // MED-9. The count, not the button: hearting is for the gallery, and
           // this is where the host manages it. Comments open with moderation.
           social={

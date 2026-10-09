@@ -36,15 +36,17 @@ export async function GET(
   }
 
   if (!viewer.ownerSession) {
-    if (!event.downloadsEnabled) {
+    if (!viewer.guestId) {
+      return NextResponse.json({ error: "Join the gallery before downloading" }, { status: 401 });
+    }
+
+    // CAM-3: the switch keeps guests from taking each other's photos. A
+    // guest's own upload came from their phone and stays theirs to save.
+    if (!event.downloadsEnabled && item.guestId !== viewer.guestId) {
       return NextResponse.json(
         { error: "Downloads are disabled for this gallery" },
         { status: 403 },
       );
-    }
-
-    if (!viewer.guestId) {
-      return NextResponse.json({ error: "Join the gallery before downloading" }, { status: 401 });
     }
 
     // The third place this rule is enforced, and the one most likely to be

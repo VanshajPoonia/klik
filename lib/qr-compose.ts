@@ -12,7 +12,7 @@
 
 type Template = "classic" | "minimal" | "bold";
 
-function cssFont(variable: string, fallback: string): string {
+export function cssFont(variable: string, fallback: string): string {
   const value = getComputedStyle(document.body).getPropertyValue(variable).trim();
   return value || fallback;
 }
@@ -28,7 +28,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 /** Splits `text` into at most `maxLines` lines that fit `width`, shrinking the
  *  font until they do. Returns the size used and the lines. */
-function fitText(
+export function fitText(
   context: CanvasRenderingContext2D,
   text: string,
   { family, weight, start, min, width, maxLines }: { family: string; weight: number; start: number; min: number; width: number; maxLines: number },
@@ -55,8 +55,9 @@ function fitText(
   return { size: min, lines: [text] };
 }
 
-/** By hand rather than `roundRect`, which Safari before 16 lacks and throws on. */
-function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+/** By hand rather than `roundRect`, which Safari before 16 lacks and throws on.
+ *  Leaves the path open for a fill or a clip. */
+export function roundedPath(context: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const radius = Math.min(r, w / 2, h / 2);
   context.beginPath();
   context.moveTo(x + radius, y);
@@ -65,6 +66,10 @@ function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, w:
   context.arcTo(x, y + h, x, y, radius);
   context.arcTo(x, y, x + w, y, radius);
   context.closePath();
+}
+
+export function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  roundedPath(context, x, y, w, h, r);
   context.fill();
 }
 

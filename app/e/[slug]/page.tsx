@@ -34,6 +34,7 @@ import { auth } from "@/lib/auth";
 import { claimGuestCookies } from "@/lib/guest-accounts";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
+import { linkedMediaId } from "@/lib/media-share";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -61,8 +62,17 @@ export async function generateMetadata({
   };
 }
 
-export default async function GuestEventPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function GuestEventPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ m?: string | string[] }>;
+}) {
   const { slug } = await params;
+  // CAM-3: a link to one photo. It opens the gallery like any other visit, so
+  // the password, the entry sheet and the access rule all still stand.
+  const linkedId = linkedMediaId((await searchParams).m);
   const event = await getEventBySlug(slug);
   if (!event) notFound();
   const plan = eventPlan(event);
@@ -127,6 +137,7 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
     after(() => claimGuestCookies(signedInUserId, [cookie]).catch(() => {}));
   }
 
+  const viewerReactor = reactorFor({ guestId: guestSession?.guestId ?? null, userId: managerSession?.user?.id ?? null });
   // Taken before the query, so anything that changes while it runs is sent
   // again by the first poll rather than falling between the two.
   const syncedAt = new Date().toISOString();
@@ -141,9 +152,9 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       event.slug,
     ),
     event,
-    reactorFor({ guestId: guestSession?.guestId ?? null, userId: managerSession?.user?.id ?? null }),
+    viewerReactor,
   );
-  const [folders, moments, coverRows] = await Promise.all([
+  const [folders, moments, coverRows, linkedRows] = await Promise.all([
     // MED-4. A roll that has not developed shows guests nothing, folders
     // included: a tab per folder would say what is coming.
     canUseAlbums(plan.key) && (isOwner || !rollUndeveloped(event))
@@ -158,7 +169,17 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
           .where(and(eq(media.id, event.coverMediaId), isNull(media.deletedAt)))
           .limit(1)
       : Promise.resolve([]),
+    // The same query and rule as the grid, narrowed to the one row, so a link
+    // can never show what the grid would not.
+    linkedId && !initialMedia.some((item) => item.id === linkedId)
+      ? fetchGalleryMedia(event.id, { isOwner, guestId: guestSession?.guestId, event, id: linkedId, limit: 1 })
+      : Promise.resolve([]),
   ]);
+  const linked =
+    initialMedia.find((item) => item.id === linkedId) ??
+    (linkedRows.length > 0
+      ? (await withViewerReactions(await toGalleryMedia(linkedRows, event.slug), event, viewerReactor))[0]
+      : null);
   // The cover is chosen by the host from the gallery, so whoever can see the
   // gallery can see it. Signed like a tile, for the same reason. A video cover
   // shows its poster; the route URL it used to get was a video handed to an
@@ -212,6 +233,8 @@ export default async function GuestEventPage({ params }: { params: Promise<{ slu
       disposable={disposable}
       signedIn={Boolean(signedInUserId)}
       canModerateComments={Boolean(actor && can(actor.role, "media.moderate"))}
+      linked={linked}
+      linkedMissing={Boolean(linkedId && !linked)}
     />
   );
 }

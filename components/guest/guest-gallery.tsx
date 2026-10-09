@@ -193,6 +193,8 @@ export function GuestGallery({
   disposable = null,
   signedIn = false,
   canModerateComments = false,
+  linked = null,
+  linkedMissing = false,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -213,6 +215,10 @@ export function GuestGallery({
   signedIn?: boolean;
   /** MED-9: a team member whose role may hide comments. */
   canModerateComments?: boolean;
+  /** CAM-3: the photo a shared link points at, opened on arrival. */
+  linked?: MediaItem | null;
+  /** The link pointed at something this viewer cannot see, or that is gone. */
+  linkedMissing?: boolean;
 }) {
   const [shotsLeft, setShotsLeft] = useState(disposable?.shotsLeft ?? 0);
   // MED-9. Held as state because the host can switch either on while phones
@@ -245,12 +251,14 @@ export function GuestGallery({
 
   const [uploading, setUploading] = useState<UploadProgress[]>([]);
   const [remaining, setRemaining] = useState(0);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(
+    linkedMissing ? "That photo is not in the gallery any more, or not yet. Here is everything else." : null,
+  );
   const [failed, setFailed] = useState<FailedUpload[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   // Tracked by id, not position: new photos stream in at the head every poll,
   // which would otherwise shift the open item out from under the viewer.
-  const [lightboxId, setLightboxId] = useState<string | null>(null);
+  const [lightboxId, setLightboxId] = useState<string | null>(linked?.id ?? null);
   /**
    * Viewer-side enhancement, on by default, stored per browser. Subscribed to
    * rather than read into state, so there is no render with the wrong value
@@ -728,6 +736,23 @@ export function GuestGallery({
   );
   // Resolves to -1 if the open item was removed (moderated away), which closes.
   const lightboxIndex = lightboxId ? visibleItems.findIndex((item) => item.id === lightboxId) : -1;
+  // CAM-3: a linked photo older than the first page opens on its own until
+  // it is closed. The copy in `items`, once it loads, carries fresher counts.
+  const linkedAlone =
+    lightboxIndex < 0 && linked && lightboxId === linked.id
+      ? (items.find((item) => item.id === linked.id) ?? linked)
+      : null;
+  const viewerItems = linkedAlone ? [linkedAlone] : visibleItems;
+  const viewerIndex = linkedAlone ? 0 : lightboxIndex;
+  const closeViewer = useCallback(() => {
+    setLightboxId(null);
+    // Back to the gallery's own address, so a reload does not reopen it.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("m")) {
+      url.searchParams.delete("m");
+      window.history.replaceState(window.history.state, "", url);
+    }
+  }, []);
   // One row of tabs per level, down to the folder being browsed and one below.
   const tabRows: Array<{ parentId: string | null; selected: string | null }> = [{ parentId: null, selected: activePath[0]?.id ?? null }];
   for (let level = 0; level < activePath.length; level += 1) {
@@ -1181,12 +1206,12 @@ export function GuestGallery({
         />
       )}
 
-      {lightboxIndex >= 0 && (
+      {viewerIndex >= 0 && (
         <Lightbox
-          items={visibleItems}
-          index={lightboxIndex}
-          onIndexChange={(next) => setLightboxId(visibleItems[next]?.id ?? null)}
-          onClose={() => setLightboxId(null)}
+          items={viewerItems}
+          index={viewerIndex}
+          onIndexChange={(next) => setLightboxId(viewerItems[next]?.id ?? null)}
+          onClose={closeViewer}
           canDownload={event.downloadsEnabled || isOwner}
           canSlideshow={canSlideshow}
           downloadBaseUrl={`/api/e/${event.slug}/media`}
@@ -1195,6 +1220,12 @@ export function GuestGallery({
           onEnhancedChange={setEnhancePreference}
           onDeleteOwn={isOwner ? undefined : deleteOwn}
           onReport={isOwner ? undefined : reportItem}
+          share={{
+            eventName: event.name,
+            accent: event.accentColor,
+            // A guest's own upload is theirs to send on, whatever the setting.
+            canTakeFile: (item) => event.downloadsEnabled || isOwner || Boolean(item.mine),
+          }}
           social={
             features.reactions || features.comments
               ? {

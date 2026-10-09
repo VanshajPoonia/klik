@@ -439,6 +439,7 @@ export function EventSettingsForm({
         <Checkbox
           checked={downloadsEnabled}
           onChange={(event) => setDownloadsEnabled(event.target.checked)}
+          hint="Saving, sending and story images. When it is off, guests can still save and send their own uploads, and copy a link that opens a photo in the gallery."
         >
           Guests can download photos and videos
         </Checkbox>

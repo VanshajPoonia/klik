@@ -220,6 +220,17 @@ in **Settings**.
 
 - [ ] Saw moments on a test gallery, renamed one, and saw a burst stack
 
+And **sharing**. On your phone, open a gallery as a guest, open a photo and tap the share
+arrow at the top. Try each: **Send photo** (pick WhatsApp or Messages and send it to
+yourself), **Story with QR** (check the preview, then share it to an Instagram story, or
+save it and scan the QR code on it with another phone), **Copy link** (paste it into a
+message, open it on another phone, and the gallery opens on that photo once it has
+joined), and both **Save** rows. Then on your laptop, the same button on the dashboard has
+**Make a share link** at the top. One behaviour changed: with "Guests can download" off,
+a guest can still save and send **their own** uploads. The setting now says so.
+
+- [ ] Sent a photo, posted a story image and scanned its QR, and opened a copied link
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

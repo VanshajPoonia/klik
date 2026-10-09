@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
 import { CommentButton, CommentsSheet, HeartButton } from "@/components/guest/media-social";
+import { MediaSharePanel } from "@/components/guest/media-share-panel";
 
 export interface LightboxItem {
   id: string;
@@ -34,6 +35,17 @@ export interface LightboxItem {
   reactionCount?: number;
   commentCount?: number;
   reacted?: boolean;
+  /** CAM-3: a link to it only helps when others in the gallery can see it. */
+  status?: "pending" | "approved" | "rejected";
+  visibility?: "gallery" | "private" | "link";
+}
+
+/** CAM-3: what the share sheet needs to know about the event and the viewer. */
+export interface LightboxShare {
+  eventName: string;
+  accent: string;
+  /** Whether this viewer may send, save or post this item as a file. */
+  canTakeFile: (item: LightboxItem) => boolean;
 }
 
 /** MED-9: what the viewer shows and allows of hearts and comments. */
@@ -97,6 +109,7 @@ export function Lightbox({
   onDeleteOwn,
   onReport,
   social,
+  share,
 }: {
   items: LightboxItem[];
   index: number;
@@ -108,8 +121,8 @@ export function Lightbox({
   slug?: string;
   enhanced?: boolean;
   onEnhancedChange?: (next: boolean) => void;
-  /** Organizer-only: opens the share sheet for the photo on screen. Absent on
-   *  the guest side, where nobody may create links. */
+  /** Organizer-only: opens MED-2's share-link sheet for the photo on screen.
+   *  Absent on the guest side, where nobody may create links. */
   onShare?: (id: string) => void;
   /** Guest side: deletes one of their own uploads. Resolves to an error
    *  message, or null when it worked. Offered only on items marked `mine`. */
@@ -118,6 +131,8 @@ export function Lightbox({
    *  error message, or null when the report was taken. */
   onReport?: (id: string, reason: ReportReason, note: string) => Promise<string | null>;
   social?: LightboxSocial;
+  /** CAM-3: the Share button opens a sheet of ways to send it on. */
+  share?: LightboxShare;
 }) {
   const touchStartX = useRef<number | null>(null);
   const lastTap = useRef(0);
@@ -125,7 +140,7 @@ export function Lightbox({
   const [slideshowPlaying, setSlideshowPlaying] = useState(false);
   // Keyed by media id rather than reset on change, so nothing has to call
   // setState from an effect body just to clear a stale result.
-  const [enhancedFor, setEnhancedFor] = useState<{ id: string; url: string } | null>(null);
+  const [enhancedFor, setEnhancedFor] = useState<{ id: string; url: string; blob: Blob } | null>(null);
   const enhancedBlob = useRef<Blob | null>(null);
   const item = items[index];
   const enhancedUrl = item && enhancedFor?.id === item.id ? enhancedFor.url : null;
@@ -147,6 +162,8 @@ export function Lightbox({
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
   const [burst, setBurst] = useState<{ id: string; key: number } | null>(null);
   const commentsOpen = Boolean(item && commentsFor === item.id);
+  const [sharingFor, setSharingFor] = useState<string | null>(null);
+  const sharingOpen = Boolean(item && sharingFor === item.id);
   const photoUrl = item
     ? item.src && !expiredIds.has(item.id)
       ? item.src
@@ -170,7 +187,7 @@ export function Lightbox({
       if (controller.signal.aborted || !blob) return;
       enhancedBlob.current = blob;
       objectUrl = URL.createObjectURL(blob);
-      setEnhancedFor({ id: item.id, url: objectUrl });
+      setEnhancedFor({ id: item.id, url: objectUrl, blob });
     });
 
     return () => {
@@ -192,7 +209,8 @@ export function Lightbox({
     const onKey = (e: KeyboardEvent) => {
       // Escape closes the comments first, then the viewer.
       if (e.key === "Escape") {
-        if (commentsOpen) setCommentsFor(null);
+        if (sharingOpen) setSharingFor(null);
+        else if (commentsOpen) setCommentsFor(null);
         else onClose();
         return;
       }
@@ -208,16 +226,16 @@ export function Lightbox({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canSlideshow, commentsOpen, go, items.length, onClose]);
+  }, [canSlideshow, commentsOpen, go, items.length, onClose, sharingOpen]);
 
   useEffect(() => {
-    if (!slideshowPlaying || commentsOpen || items.length < 2 || !item) return;
+    if (!slideshowPlaying || commentsOpen || sharingOpen || items.length < 2 || !item) return;
     const delay = item.kind === "video" ? 12_000 : 6_000;
     const timer = window.setTimeout(() => {
       onIndexChange((index + 1) % items.length);
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [commentsOpen, index, item, items.length, onIndexChange, slideshowPlaying]);
+  }, [commentsOpen, index, item, items.length, onIndexChange, sharingOpen, slideshowPlaying]);
 
   // Move focus into the viewer, and hand it back to the tile that opened it.
   useEffect(() => {
@@ -300,6 +318,7 @@ export function Lightbox({
             <button
               type="button"
               onClick={() => {
+                setSharingFor(null);
                 setReportingId(item.id);
                 setReportReason(null);
                 setReportNote("");
@@ -316,6 +335,7 @@ export function Lightbox({
             <button
               type="button"
               onClick={() => {
+                setSharingFor(null);
                 setDeleteError(null);
                 setConfirmingDelete(item.id);
               }}
@@ -325,10 +345,21 @@ export function Lightbox({
               <Trash2 className="h-5 w-5" aria-hidden="true" />
             </button>
           )}
-          {onShare && (
+          {(share || onShare) && (
             <button
               type="button"
-              onClick={() => onShare(item.id)}
+              onClick={() => {
+                if (!share) {
+                  onShare?.(item.id);
+                  return;
+                }
+                setSlideshowPlaying(false);
+                setCommentsFor(null);
+                setReportingId(null);
+                setConfirmingDelete(null);
+                setSharingFor(sharingOpen ? null : item.id);
+              }}
+              aria-expanded={share ? sharingOpen : undefined}
               aria-label={`Share this ${item.kind}`}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
             >
@@ -340,6 +371,8 @@ export function Lightbox({
             // following the link, so what you download is what you were
             // looking at. Falls back to the server route for videos, for
             // originals, and whenever enhancement did not produce anything.
+            // On a phone, saving lives in the share sheet, which keeps the
+            // top bar to what fits beside the counter.
             <a
               href={`${downloadBaseUrl}/${item.id}/download`}
               aria-label={`Download ${item.kind}`}
@@ -349,7 +382,7 @@ export function Lightbox({
                 event.preventDefault();
                 saveBlob(blob, downloadFilename(slug, item.id));
               }}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+              className={`${share ? "hidden sm:flex" : "flex"} h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90`}
             >
               <Download className="h-5 w-5" aria-hidden="true" />
             </a>
@@ -431,6 +464,29 @@ export function Lightbox({
             onClose={() => setCommentsFor(null)}
             onVisibleCountChange={(count) => social.onCommentCount?.(item.id, count)}
             onModerated={social.onModerated}
+          />
+        )}
+
+        {share && sharingOpen && (
+          <MediaSharePanel
+            key={item.id}
+            item={item}
+            slug={slug ?? ""}
+            eventName={share.eventName}
+            accent={share.accent}
+            canTakeFile={share.canTakeFile(item)}
+            linkable={(item.status ?? "approved") === "approved" && (item.visibility ?? "gallery") === "gallery"}
+            downloadHref={downloadBaseUrl ? `${downloadBaseUrl}/${item.id}/download` : null}
+            enhanced={item && enhancedFor?.id === item.id ? enhancedFor.blob : null}
+            onShareLink={
+              onShare
+                ? () => {
+                    setSharingFor(null);
+                    onShare(item.id);
+                  }
+                : undefined
+            }
+            onClose={() => setSharingFor(null)}
           />
         )}
 
@@ -600,6 +656,7 @@ export function Lightbox({
               count={item.commentCount ?? 0}
               onOpen={() => {
                 setSlideshowPlaying(false);
+                setSharingFor(null);
                 setCommentsFor(commentsOpen ? null : item.id);
               }}
             />
