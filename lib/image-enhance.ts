@@ -148,30 +148,82 @@ export function applyAdjustments(
 }
 
 const SATURATION = 1.12;
+/** How much of a measured colour cast is taken out: most of it, never all, a correction rather than a reset. */
+const WHITE_BALANCE_STRENGTH = 0.65;
+/** A cast smaller than this is left alone; it is more likely taste than error. */
+const WHITE_BALANCE_MIN_CAST = 0.03;
+/** Where the tone curve aims a photo's average brightness. */
+const TARGET_MEAN = 0.46;
+/** Above this many pixels the colour-noise pass is skipped, to stay inside a phone's memory. */
+const DENOISE_MAX_PIXELS = 16_000_000;
+/** A photo darker than this on average was shot in low light, where colour noise lives. */
+const LOW_LIGHT_MEAN = 0.3;
+
+const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 
 /**
- * Auto-levels: stretches the luminance range between its 0.5th and 99.5th
- * percentiles so shadows and highlights use the full range, then lifts
- * saturation slightly. Hue is preserved (the same stretch maps every channel),
- * so it corrects exposure and flatness without introducing color casts. A
- * near-flat image is left alone to avoid amplifying noise.
+ * AI-5's on-device tier: the whole "Auto" correction as one function over an
+ * RGBA buffer, so the camera, the viewer and the tests run the same code and
+ * a browser is not needed to test it. In order:
+ *
+ * 1. **White balance from grey things.** Pixels that are nearly neutral
+ *    (walls, shirts, tablecloths) should be grey; their average says what
+ *    colour the light was. Most of that cast is taken out, within limits. A
+ *    strong cast is left alone on purpose: such pixels are too coloured to
+ *    count as grey, which is how candlelight keeps its warmth.
+ * 2. **Levels.** The luminance range between its 0.5th and 99.5th percentiles
+ *    is stretched to the full range, the same for every channel so hue holds.
+ * 3. **Shadow and highlight recovery.** A gentle curve that moves the
+ *    photo's average brightness part of the way to a comfortable middle:
+ *    lifting a dark room's shadows, calming an overexposed one.
+ * 4. **A small saturation lift.**
+ * 5. **Colour-noise reduction, in low light only.** Phone noise in a dark room
+ *    is mostly blotches of colour, not of brightness, so the colour (Cb, Cr)
+ *    is smoothed over a few pixels and the brightness, which holds the
+ *    detail, is left exactly as it was.
+ *
+ * A photo with almost no range is left as it is, rather than its noise
+ * stretched into the picture.
  */
-export function autoEnhance(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-  let image: ImageData;
-  try {
-    image = ctx.getImageData(0, 0, width, height);
-  } catch {
-    return; // Tainted canvas (shouldn't happen for a same-origin camera).
-  }
-  const data = image.data;
+export function enhancePixels(data: Uint8ClampedArray, width: number, height: number): void {
   const pixelCount = width * height;
+  if (pixelCount === 0) return;
 
   const histogram = new Uint32Array(256);
+  let greyR = 0;
+  let greyG = 0;
+  let greyB = 0;
+  let greyCount = 0;
+  let luminanceSum = 0;
   for (let i = 0; i < data.length; i += 4) {
-    const lum = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000;
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const lum = (r * 299 + g * 587 + b * 114) / 1000;
     histogram[lum | 0]++;
+    luminanceSum += lum;
+    const max = Math.max(r, g, b);
+    if (lum > 40 && lum < 235 && max - Math.min(r, g, b) < max * 0.25) {
+      greyR += r;
+      greyG += g;
+      greyB += b;
+      greyCount++;
+    }
+  }
+  const meanBefore = luminanceSum / pixelCount / 255;
+
+  // 1. White balance.
+  let gains = [1, 1, 1];
+  if (greyCount > pixelCount * 0.05) {
+    const means = [greyR / greyCount, greyG / greyCount, greyB / greyCount];
+    const neutral = (means[0] + means[1] + means[2]) / 3;
+    const raw = means.map((mean) => neutral / mean);
+    if (Math.max(...raw.map((gain) => Math.abs(gain - 1))) > WHITE_BALANCE_MIN_CAST) {
+      gains = raw.map((gain) => Math.min(1.22, Math.max(0.82, 1 + (gain - 1) * WHITE_BALANCE_STRENGTH)));
+    }
   }
 
+  // 2. Levels.
   const cut = Math.max(1, Math.floor(pixelCount * 0.005));
   let low = 0;
   let high = 255;
@@ -189,23 +241,97 @@ export function autoEnhance(ctx: CanvasRenderingContext2D, width: number, height
       break;
     }
   }
-
   const stretch = high - low > 8;
-  const scale = stretch ? 255 / (high - low) : 1;
-  const lut = new Uint8ClampedArray(256);
-  for (let v = 0; v < 256; v++) {
-    lut[v] = stretch ? (v - low) * scale : v;
+  const levels = (v: number) => (stretch ? clamp01((v - low) / (high - low)) : v / 255);
+
+  // 3. Recovery: the average after levels, moved part of the way to the target.
+  let meanAfterLevels = 0;
+  for (let v = 0; v < 256; v++) meanAfterLevels += histogram[v] * levels(v);
+  meanAfterLevels /= pixelCount;
+  let exponent = 1;
+  if (stretch && meanAfterLevels > 0.02 && meanAfterLevels < 0.98) {
+    const full = Math.log(TARGET_MEAN) / Math.log(meanAfterLevels);
+    exponent = Math.min(1.25, Math.max(0.7, 1 + (full - 1) * 0.5));
   }
 
+  const lut = new Uint8ClampedArray(256);
+  for (let v = 0; v < 256; v++) lut[v] = Math.round(255 * levels(v) ** exponent);
+
   for (let i = 0; i < data.length; i += 4) {
-    const r = lut[data[i]];
-    const g = lut[data[i + 1]];
-    const b = lut[data[i + 2]];
+    const r = lut[Math.min(255, Math.round(data[i] * gains[0]))];
+    const g = lut[Math.min(255, Math.round(data[i + 1] * gains[1]))];
+    const b = lut[Math.min(255, Math.round(data[i + 2] * gains[2]))];
+    // 4. Saturation.
     const l = (r * 299 + g * 587 + b * 114) / 1000;
     data[i] = l + (r - l) * SATURATION;
     data[i + 1] = l + (g - l) * SATURATION;
     data[i + 2] = l + (b - l) * SATURATION;
   }
 
+  // 5. Colour noise, in low light.
+  if (meanBefore < LOW_LIGHT_MEAN && pixelCount <= DENOISE_MAX_PIXELS && width > 4 && height > 4) {
+    reduceColourNoise(data, width, height);
+  }
+}
+
+/** Smooths Cb and Cr over a 5x5 box and leaves luma alone. Two planes of one byte a pixel. */
+function reduceColourNoise(data: Uint8ClampedArray, width: number, height: number): void {
+  const count = width * height;
+  const cb = new Uint8ClampedArray(count);
+  const cr = new Uint8ClampedArray(count);
+  for (let p = 0, i = 0; p < count; p++, i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    cb[p] = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+    cr[p] = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+  }
+  const scratch = new Uint8ClampedArray(count);
+  boxBlur(cb, scratch, width, height, 2);
+  boxBlur(cr, scratch, width, height, 2);
+  for (let p = 0, i = 0; p < count; p++, i += 4) {
+    const y = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    const u = cb[p] - 128;
+    const v = cr[p] - 128;
+    data[i] = y + 1.402 * v;
+    data[i + 1] = y - 0.344136 * u - 0.714136 * v;
+    data[i + 2] = y + 1.772 * u;
+  }
+}
+
+/** A separable box blur in place, with running sums so its cost does not grow with the radius. */
+function boxBlur(plane: Uint8ClampedArray, scratch: Uint8ClampedArray, width: number, height: number, radius: number) {
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    let sum = 0;
+    for (let x = -radius; x <= radius; x++) sum += plane[row + Math.min(width - 1, Math.max(0, x))];
+    for (let x = 0; x < width; x++) {
+      scratch[row + x] = sum / (2 * radius + 1);
+      sum += plane[row + Math.min(width - 1, x + radius + 1)] - plane[row + Math.max(0, x - radius)];
+    }
+  }
+  for (let x = 0; x < width; x++) {
+    let sum = 0;
+    for (let y = -radius; y <= radius; y++) sum += scratch[Math.min(height - 1, Math.max(0, y)) * width + x];
+    for (let y = 0; y < height; y++) {
+      plane[y * width + x] = sum / (2 * radius + 1);
+      sum +=
+        scratch[Math.min(height - 1, y + radius + 1) * width + x] - scratch[Math.max(0, y - radius) * width + x];
+    }
+  }
+}
+
+/**
+ * The camera's "Auto" look and the viewer's enhancement: `enhancePixels` on
+ * a canvas. Leaves a tainted canvas alone rather than throwing.
+ */
+export function autoEnhance(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  let image: ImageData;
+  try {
+    image = ctx.getImageData(0, 0, width, height);
+  } catch {
+    return; // Tainted canvas (shouldn't happen for a same-origin camera).
+  }
+  enhancePixels(image.data, width, height);
   ctx.putImageData(image, 0, 0);
 }

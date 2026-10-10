@@ -37,6 +37,7 @@
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times. Duplicate and blur cleanup (AI-7) and highlights (AI-8) are built without one too, 2026-10-10, from three numbers measured per photo by a background job.
 - The morning-after recap email (GRW-1) **is** built, 2026-10-10, and dormant until `COMPANY_POSTAL_ADDRESS` is set (LAUNCH.md step 11).
 - Klik can pause a gallery and ask an organizer to review a reported photo (ADM-5, 2026-10-10). AI-flagged media joins that queue when AI-6 has its key.
+- The camera's Auto look and the viewer's enhancement now also correct white balance, lift dark rooms and clean colour noise in low light, all on the device (AI-5's free tier, 2026-10-11).
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
 - Billing after the sale **is** built (PAY-5, PAY-8, ADM-2, 2026-10-10): grants record what was paid, organizers have a billing page, a failed Venue payment gets a 7-day grace with three emails, and `/admin/revenue` adds it up. All by hand, as payments are.
@@ -780,10 +781,14 @@ Use EXIF `DateTimeOriginal` when present, falling back to `created_at`, since up
 **If AI-3a looks like too much to carry:** AI-2 visual grouping gets you scene, time, and similarity clustering with none of this exposure, and covers most of the organizer's actual sorting problem. Faces are the last 20 percent of the value at 100 percent of the legal risk.
 
 ### AI-4. Smart folders
+**Waits for AI-2, decided 2026-10-11.** See "Answered (2026-10-10)".
+
 **Size:** M. **Depends on:** AI-1 or AI-2, MED-4.
 A folder whose `kind = 'smart'` holds a stored query (time range, label, person cluster, uploader, similarity to a seed photo) and is evaluated live. Nothing is copied, so a photo can appear in several smart folders without violating the one-folder rule in MED-4.
 
 ### AI-5. AI enhancement, two tiers
+**On-device tier DONE 2026-10-11** (`enhancePixels` in `lib/image-enhance.ts`, `lib/image-enhance.test.ts`). The camera's Auto look and the viewer's enhancement share one pure pass over the pixels: white balance taken from nearly neutral pixels (most of a mild cast removed, a strong one such as candlelight left alone because such pixels are too coloured to count as grey), levels, a curve that moves the average brightness part of the way to the middle (lifting a dark room, calming a bright one), a small saturation lift, and in low light only, colour-noise reduction that smooths Cb and Cr over a few pixels and leaves brightness, where the detail is, untouched. Tested on synthetic photos: a good photo is left nearly alone, a flat one is not stretched, a green lawn stays green, and a brightness edge stays a pixel wide. Checked by eye on a degraded scene against the old pass. **The cloud tier waits for a Replicate key** (LAUNCH.md keys table).
+
 **Size:** L. **Depends on:** CAM-2.
 - **On-device tier (free, instant):** extend the existing `lib/image-enhance.ts` looks with auto white balance, shadow and highlight recovery, and light denoise. Keep everything as a single pixel pass so the preview and the saved file stay identical, which the current file already does well.
 - **Cloud tier (costs credits):** `lib/ai/enhance.ts` with operations for restore and upscale (Real-ESRGAN), face restoration (GFPGAN or CodeFormer), low-light lift, and background cleanup. Charged against `plan.aiCreditsPerEvent`.
@@ -1269,6 +1274,9 @@ Ten dollars is a quarter of the cheapest pass: enough to notice, small enough th
 
 ### AI-7, AI-8: measured, not modelled. ANSWERED
 Both tasks were written to depend on AI-2's embeddings, which need a Cloudflare key. A difference hash finds the near-identical frames everyone shoots of one toast just as well, because those frames are near-identical pixel for pixel; embeddings earn their keep finding "the same scene from across the room", which is not what a tidy should hide. The variance of the Laplacian is what the task already named for blur, and brightness keeps black frames out of highlights. All three come from one pass over the 480px tile the gallery already made, cost nothing per photo, and run inside the existing job queue, so the feature works on day one with no key and no per-image bill. When AI-2 lands, its embeddings can join the same groupings (`similarGroups` takes any distance) without changing the screens. Highlights stay in the dashboard as a pure function, not a stored list, so the host's pins are the only state and nothing goes stale when a guest hearts a photo.
+
+### AI-4 waits for AI-2's labels. ANSWERED
+Without a model, the queries a smart folder could hold are time, who uploaded, photo or video, hearts and highlights. Each of those already has a home: moments (AI-1) are the time folders and use the same `smart` album kind, challenges and the uploader's own view cover "who", and the Highlights tab covers "best". A folder type that only re-slices those would be a second way to do each thing. Smart folders earn their place with "the dance floor", "the cake" or "outdoors", which need AI-2's scene labels, so they are built with it. Moments already prove the storage: a `smart` album whose membership is computed.
 
 ### GRW-1: one email, then the address is gone. ANSWERED
 The roadmap said "one email per guest per event, no drip". The strongest way to keep that promise is to make a second email impossible: the address is deleted the moment the first one goes, and only the send time is kept. It also means a breach of Klik leaks no guest list. What stops future recaps to someone who opted out is a hash on a suppression list, which can refuse an address without being able to read it.
