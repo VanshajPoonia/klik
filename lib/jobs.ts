@@ -61,6 +61,8 @@ export const JOB_PAYLOADS = {
   "moments.refresh": z.object({ eventId: z.string().min(1).max(64) }),
   /** AI-1: refresh every event with recent media. */
   "moments.backfill": z.object({}),
+  /** SEC-5: erase one event whose 30-day trash has closed. Idempotent: a gone event is done. */
+  "events.purge_deleted": z.object({ eventId: z.string().min(1).max(64) }),
   /** PAY-8: one of the three emails during a failed payment's 7-day grace. */
   "notify.grace": z.object({
     entitlementId: z.string().min(1).max(64),

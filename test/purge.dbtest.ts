@@ -12,10 +12,17 @@ vi.mock("@/lib/db", async () => ({ db: (await import("./harness")).testDb }));
 vi.mock("@/lib/storage", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/storage")>()),
   deleteBlobs,
+  // Listings of an event's exports and designs find nothing here.
+  r2: { send: async () => ({ Contents: [], IsTruncated: false }) },
+}));
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: () => undefined,
 }));
 
 const { GET } = await import("@/app/api/cron/purge-expired/route");
-const { events, media } = await import("@/lib/schema");
+const { events, jobs, media } = await import("@/lib/schema");
+const { purgeDeletedEvent } = await import("@/lib/purge");
 const {
   closeDatabase,
   daysFromNow,
@@ -217,5 +224,35 @@ describe("the trash window", () => {
       .from(media)
       .where(and(eq(media.eventId, event), isNull(media.deletedAt)));
     expect(live).toHaveLength(1);
+  });
+});
+
+describe("SEC-5 deleted events, one job each", () => {
+  it("queues one job per event past its 30 days, once, and the job erases it, bytes included", async () => {
+    const owner = await makeUser();
+    const old = await makeEvent(owner, { deletedAt: daysFromNow(-31) });
+    const recent = await makeEvent(owner, { deletedAt: daysFromNow(-5) });
+    await makeMedia(old, { blobPathname: "events/old/a.jpg" });
+
+    expect((await runCron()).status).toBe(200);
+    expect((await runCron()).status).toBe(200);
+    const queued = await testDb.select().from(jobs).where(eq(jobs.kind, "events.purge_deleted"));
+    expect(queued.map((job) => (job.payload as { eventId: string }).eventId)).toEqual([old]);
+
+    expect(await purgeDeletedEvent(old)).toBe("purged");
+    expect(await testDb.select().from(events).where(eq(events.id, old))).toHaveLength(0);
+    expect(deleteBlobs).toHaveBeenCalledWith(expect.arrayContaining(["events/old/a.jpg"]));
+
+    // Run again, or on one still inside its window: nothing to do.
+    expect(await purgeDeletedEvent(old)).toBe("skipped");
+    expect(await purgeDeletedEvent(recent)).toBe("skipped");
+    expect(await testDb.select().from(events).where(eq(events.id, recent))).toHaveLength(1);
+  });
+
+  it("leaves an event alone while anything in it is under a legal hold", async () => {
+    const eventId = await makeEvent(await makeUser(), { deletedAt: daysFromNow(-40) });
+    await makeMedia(eventId, { legalHoldAt: new Date() });
+    expect(await purgeDeletedEvent(eventId)).toBe("skipped");
+    expect(await testDb.select().from(events).where(eq(events.id, eventId))).toHaveLength(1);
   });
 });

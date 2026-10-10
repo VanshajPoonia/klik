@@ -46,6 +46,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: "This gallery is private", code: "private" }, { status: 403 });
   }
 
+  // F-2: each join writes a guest row. Generous, because a whole wedding joins
+  // through the venue's one address within the hour; the roadmap's first
+  // figure of 10 would have shut the door on the eleventh guest.
+  const [joinsByIp, joinsByEvent] = await Promise.all([
+    consume(`session:ip:${clientIp(request)}`, 300, 60 * 60),
+    consume(`session:event:${event.id}`, 3000, 60 * 60),
+  ]);
+  if (!joinsByIp.allowed || !joinsByEvent.allowed) {
+    const retryAfter = Math.max(joinsByIp.allowed ? 0 : joinsByIp.retryAfter, joinsByEvent.allowed ? 0 : joinsByEvent.retryAfter);
+    return NextResponse.json(
+      { error: "Too many attempts. Try again a little later.", code: "too_many_tries" },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {

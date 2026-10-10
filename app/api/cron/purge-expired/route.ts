@@ -1,12 +1,10 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { enqueue, kickJobRunner } from "@/lib/jobs";
 import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { albums, events, guests, media, venueClients } from "@/lib/schema";
 import { deleteBlobs } from "@/lib/storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys } from "@/lib/media-objects";
-import { deleteEventExports } from "@/lib/exports";
-import { deleteEventDesignObjects } from "@/lib/print-designs";
-import { hasLegalHold } from "@/lib/reports";
 import { pruneRateLimits } from "@/lib/ratelimit";
 import { log, reportError } from "@/lib/observability";
 import { env } from "@/lib/env";
@@ -98,25 +96,15 @@ export async function GET(request: Request) {
     .from(events)
     .where(and(isNotNull(events.deletedAt), lte(events.deletedAt, trashCutoff)));
 
+  // SEC-5: one job per event, each in its own function and budget, rather
+  // than all of them inside this one. Deduplicated, so a slow night queues
+  // nothing twice. See lib/purge.ts.
   for (const event of expiredDeletedEvents) {
-    // Deleting the event row would cascade away held media with it, so an
-    // event holding any waits, logged, until a superadmin resolves the hold.
-    if (await hasLegalHold({ eventIds: [event.id] })) {
-      log.warn("purge.skipped_legal_hold", { eventId: event.id });
-      continue;
-    }
-    const rows = await db
-      .select(MEDIA_OBJECT_COLUMNS)
-      .from(media)
-      .where(eq(media.eventId, event.id));
-    // Exports first: deleting the event cascades their rows away, and the rows
-    // are the only record of where the ZIPs are. The daily export sweep would
-    // catch them by age anyway; this just does not make it wait.
-    await deleteEventExports([event.id]);
-    await deleteEventDesignObjects([event.id]);
-    await db.delete(events).where(eq(events.id, event.id));
-    await deleteBlobs(mediaObjectKeys(rows));
+    await enqueue("events.purge_deleted", { eventId: event.id }, { dedupeKey: `purge:${event.id}`, maxAttempts: 5 }).catch(
+      (error) => reportError("purge.enqueue_failed", error, { eventId: event.id }),
+    );
   }
+  if (expiredDeletedEvents.length > 0) after(kickJobRunner);
 
   // --- Pass 2: events past their pinned retention deadline ------------------
   // retention_until is written once at creation and only ever extended, so it

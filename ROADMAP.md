@@ -159,7 +159,7 @@ Two things this surfaced that were not obvious:
 **Size:** S. **Severity: medium.**
 **FIXED 2026-09-30.** Rows are now deleted before objects, in both the purge cron and `DELETE /api/events/[id]`, so a failure between the two statements leaves sweepable orphans in the bucket rather than a gallery of broken images still listed in the dashboard. The per-run cap from SEC-1 also bounds how much work a single invocation attempts.
 
-**Still outstanding:** moving the loop onto the job runner (F-5) with per-event idempotency, so a large backlog drains reliably rather than depending on how many events fit inside 300 seconds.
+**Job runner DONE 2026-10-10** (`lib/purge.ts`, `test/purge.dbtest.ts`): the nightly purge now queues one `events.purge_deleted` job per event whose 30-day trash has closed, deduplicated by event, and each runs in its own function budget with retries. The job is idempotent (a gone, restored or not-yet-due event is skipped) and still waits on a legal hold. The retention pass, which only soft-deletes, stays inline behind the circuit breaker.
 
 ### SEC-9. R2 does not enforce the signed content type
 **Size:** S. **Severity: low.** Found 2026-09-30 while verifying SEC-2 against the real bucket, not from reading code.
@@ -215,10 +215,16 @@ The new one is organised around what actually causes bugs here rather than aroun
 It carries a "last verified against commit" line, so the next person can see at a glance how far it has drifted.
 
 ### F-2. Rate limiting
+**DONE 2026-10-10.** Every limit below is wired, the last being joining a gallery (`session:ip` and `session:event`). One deliberate change from the list: joining is 300 per network an hour and 3,000 per event, not 10, because a whole wedding joins through the venue's one wifi address within the hour and 10 would have refused the eleventh guest. Share link passwords are 10 per link per address an hour, as written.
+
+Original design:
 **Size:** M. **Blocks:** PAY (webhook abuse), ACC (OTP abuse), ID (username enumeration), MED (share link password brute force).
 Create table `rate_limits` (key text primary key, window_start timestamptz, count integer) and `lib/ratelimit.ts` exposing `consume(key, limit, windowSeconds)` as a single upsert with a conditional increment so it is atomic under concurrency. Key format `<scope>:<identifier>:<bucket>`. Wire to: upload token handshake (60 per guest per hour, 200 per IP per hour), guest session creation (10 per IP per hour), gallery password attempts (10 per IP per hour, **done 2026-10-08**, plus 100 per event so a script cannot spread across one gallery from many addresses), credential login (10 per IP per 15 min, plus 5 per username per 15 min), username availability checks (30 per IP per minute), OTP requests (5 per email per hour), share link password attempts (10 per token per hour). Return `429` with `Retry-After`. Sweep expired rows in the existing purge cron.
 
 ### F-3. Permissions resolver
+**DONE, through ORG-1 (2026-10-02), confirmed 2026-10-10.** The role matrix is pure in `lib/permissions.ts` (`can`, `capabilitiesFor`); `lib/roles.ts` holds the half that needs the session and the database (`resolveEventActor`, `requireEventCapability`), and routes call `requireEventCapability` with a named capability. **Decided:** `lib/roles.ts` stays rather than being deleted as planned below, because it is now the resolver itself; deleting it would only move the same code. The plan's per-event `manageBilling` capability is not needed: billing belongs to the account (`/dashboard/billing`), not the event.
+
+Original design:
 **Size:** M. **Blocks:** ORG, MED, ADM.
 `lib/permissions.ts` replaces the three ad-hoc guards in `lib/roles.ts` with one resolver: `getEventCapabilities(eventId)` returns a typed set such as `{ viewDashboard, manageSettings, moderate, manageMedia, manageFolders, manageCoHosts, manageBilling, rotateQr, deleteEvent, exportAll }`. It resolves superadmin, owner, co-host role (ORG-2), and the owner's effective plan in one query. Every organizer route switches to it. Keep `lib/roles.ts` as thin wrappers during migration, then delete it.
 
