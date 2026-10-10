@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { auth, signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { users, events, entitlements } from "@/lib/schema";
+import { users, events, entitlements, accountCredits, referrals } from "@/lib/schema";
+import { alias } from "drizzle-orm/pg-core";
+import { CreditControl } from "@/components/admin/credit-control";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
@@ -189,6 +191,36 @@ export default async function AdminPage() {
     });
     grantsByUser.set(grant.userId, list);
   }
+  // GRW-5: credit balances and who referred whom, for every card, in two queries.
+  const clientIds = clients.map((client) => client.userId);
+  const referrer = alias(users, "referrer");
+  const [creditRows, referredRows] = clientIds.length
+    ? await Promise.all([
+        db
+          .select({ userId: accountCredits.userId, total: sql<number>`sum(${accountCredits.amountCents})::int` })
+          .from(accountCredits)
+          .where(inArray(accountCredits.userId, clientIds))
+          .groupBy(accountCredits.userId),
+        db
+          .select({
+            referredId: referrals.referredId,
+            name: referrer.name,
+            username: referrer.username,
+            qualifiedAt: referrals.qualifiedAt,
+          })
+          .from(referrals)
+          .innerJoin(referrer, eq(referrer.id, referrals.referrerId))
+          .where(inArray(referrals.referredId, clientIds)),
+      ])
+    : [[], []];
+  const creditByUser = new Map(creditRows.map((row) => [row.userId, row.total]));
+  const referredBy = new Map(
+    referredRows.map((row) => [
+      row.referredId,
+      { name: row.name?.trim() || (row.username ? `@${row.username}` : "an account"), qualified: Boolean(row.qualifiedAt) },
+    ]),
+  );
+
   /** What the chain says they are on: the newest grant still in force. */
   const planSummary = (userId: string) => {
     const current = grants.find((grant) => grant.userId === userId && grant.status === "active");
@@ -323,6 +355,11 @@ export default async function AdminPage() {
                   .map((event) => ({ id: event.id, name: event.name, state: event.license }))}
               />
               <EntitlementList rows={grantsByUser.get(client.userId) ?? []} />
+              <CreditControl
+                userId={client.userId}
+                balanceCents={creditByUser.get(client.userId) ?? 0}
+                referredBy={referredBy.get(client.userId) ?? null}
+              />
 
               <ActivationEmailControl
                 userId={client.userId}

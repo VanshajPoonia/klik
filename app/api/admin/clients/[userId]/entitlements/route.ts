@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { recordAudit } from "@/lib/audit";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -14,6 +14,11 @@ import {
 } from "@/lib/activation-notice";
 import { recordAccountEvent } from "@/lib/timeline";
 import { grantEntitlement } from "@/lib/entitlements";
+import { REFERRAL_CREDIT_CENTS, formatCents, qualifyReferral } from "@/lib/referrals";
+import { referralCreditEmail } from "@/lib/emails/referral-credit";
+import { sendEmail } from "@/lib/email";
+import { getAppUrl } from "@/lib/env";
+import { reportError } from "@/lib/observability";
 
 const requestSchema = z.object({
   planKey: z.enum(PLAN_KEYS),
@@ -113,6 +118,38 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
     detail: `Granted ${what}. ${reason}.${where}`.replace("..", "."),
     actor,
   });
+
+  // GRW-5: the first grant to a referred account is when its referral pays
+  // out, to both sides. Never worth failing a grant over.
+  const referral = await qualifyReferral(userId).catch((error) => {
+    reportError("referral.qualify_failed", error, { userId });
+    return null;
+  });
+  if (referral) {
+    after(async () => {
+      try {
+        const [referrer] = await db
+          .select({ name: users.name, email: users.email })
+          .from(users)
+          .where(eq(users.id, referral.referrerId))
+          .limit(1);
+        if (!referrer?.email) return;
+        const appUrl = getAppUrl();
+        await sendEmail({
+          to: referrer.email,
+          ...referralCreditEmail({
+            name: referrer.name,
+            who: account.name?.trim() || (account.username ? `@${account.username}` : "Someone you invited"),
+            amount: formatCents(REFERRAL_CREDIT_CENTS),
+            accountUrl: `${appUrl}/dashboard/account#referrals`,
+            appUrl,
+          }),
+        });
+      } catch (error) {
+        reportError("referral.notice_failed", error, { userId });
+      }
+    });
+  }
 
   await recordAudit({
     actor: session,

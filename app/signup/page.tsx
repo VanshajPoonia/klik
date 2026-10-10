@@ -11,6 +11,8 @@ import { lookupInvite } from "@/lib/team";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/lib/schema";
+import { cookies } from "next/headers";
+import { REFERRAL_COOKIE, REFERRAL_CREDIT_CENTS, attachReferral, formatCents, referrerByCode } from "@/lib/referrals";
 
 export const metadata: Metadata = {
   title: "Create your account",
@@ -48,6 +50,7 @@ export default async function SignupPage({
   const planKey = !invitation && isPlanKey(plan) ? plan : null;
   const payUrl = planKey ? PAYMENT_LINKS[planKey] : null;
 
+  const referralCode = (await cookies()).get(REFERRAL_COOKIE)?.value ?? null;
   const session = await auth();
   if (session?.user?.id && payUrl) {
     // ACC-2: a signed-in account on its way to pay. Recorded before it leaves
@@ -56,6 +59,9 @@ export default async function SignupPage({
       .update(users)
       .set({ organizerIntentAt: sql`COALESCE(${users.organizerIntentAt}, now())` })
       .where(eq(users.id, session.user.id));
+    // GRW-5: a guest account becoming a customer through someone's link is
+    // the path referrals exist for. Refused for an account already a customer.
+    await attachReferral(session.user.id, referralCode).catch(() => false);
   }
   if (session?.user) {
     // Already signed in and came here from a plan button: send them on rather
@@ -68,6 +74,9 @@ export default async function SignupPage({
   }
 
   const chosen = planKey ? PLANS[planKey] : null;
+  // GRW-5: said up front, so the credit is not a surprise and the link visibly worked.
+  const referrer = !invitation && referralCode ? await referrerByCode(referralCode) : null;
+  const referrerName = referrer ? (referrer.name?.trim() || (referrer.username ? `@${referrer.username}` : null)) : null;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16 text-center">
@@ -97,6 +106,13 @@ export default async function SignupPage({
         <p className="mt-3 max-w-sm text-sm text-muted">
           One account runs all your events. You choose a plan next, and nothing is charged until
           you do.
+        </p>
+      )}
+
+      {referrerName && (
+        <p className="mt-4 max-w-sm rounded-full border border-canvas-line px-4 py-2 text-xs text-paper">
+          Invited by {referrerName}. Once your first event is live, you both get {formatCents(REFERRAL_CREDIT_CENTS)} of
+          credit.
         </p>
       )}
 

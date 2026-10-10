@@ -12,6 +12,8 @@ import { getAppUrl } from "@/lib/env";
 import { log, reportError } from "@/lib/observability";
 import { recordAccountEvent } from "@/lib/timeline";
 import { isUniqueViolation, raisedBy } from "@/lib/db-errors";
+import { REFERRAL_COOKIE, attachReferral } from "@/lib/referrals";
+import { cookieFrom } from "@/lib/request-cookies";
 
 /**
  * Creates an organizer account from the public signup form.
@@ -147,6 +149,11 @@ export async function POST(request: Request) {
     // the first thing asked about a signup that never paid.
     detail: "Signed up through the form.",
   });
+
+  // GRW-5: who sent them, if a referral link did. Never worth failing a signup over.
+  await attachReferral(created.id, cookieFrom(request.headers.get("cookie"), REFERRAL_COOKIE)).catch((error) =>
+    reportError("signup.referral_failed", error, { userId: created.id }),
+  );
 
   // Best effort, and deliberately after the account exists. A welcome email that
   // cannot be sent is a bad morning; an account rolled back because of it is a

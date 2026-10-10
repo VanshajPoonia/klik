@@ -136,6 +136,7 @@ export function GuestGallery({
   coverUrl = null,
   canSlideshow = false,
   showBranding = true,
+  referralHref = null,
   maxVideoSeconds,
   galleryFull = false,
   disposable = null,
@@ -156,6 +157,8 @@ export function GuestGallery({
   coverUrl?: string | null;
   canSlideshow?: boolean;
   showBranding?: boolean;
+  /** GRW-5: the host's referral link, behind the "made with Klik" line. */
+  referralHref?: string | null;
   maxVideoSeconds: number;
   /** PAY-7: storage is used up, so uploads are off and the guest is told why. */
   galleryFull?: boolean;
@@ -1233,6 +1236,14 @@ export function GuestGallery({
         {showBranding && (
           <p className="mt-12 text-center text-xs text-muted">
             Shared with <span className="font-medium text-paper">klik</span>
+            {referralHref && (
+              <>
+                {" · "}
+                <a href={referralHref} className="inline-flex min-h-11 items-center text-paper underline-offset-2 hover:underline">
+                  Make a gallery for your own event
+                </a>
+              </>
+            )}
           </p>
         )}
       </div>

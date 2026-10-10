@@ -80,8 +80,11 @@ const TABLES = [
   "accounts",
   "sessions",
   '"verificationTokens"',
-  // ACC-6, before `users`.
+  // ACC-6, MED-10 and GRW-5, before `users`.
   "user_passkeys",
+  "watermarks",
+  "account_credits",
+  "referrals",
   "users",
 ];
 

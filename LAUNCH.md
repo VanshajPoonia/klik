@@ -404,6 +404,27 @@ And **public profiles**, which need nothing but your own account:
 - [ ] Made my profile public and listed an event
 - [ ] Turned it off again, or left it on deliberately
 
+And **referral credits**. Read the new "Referral credit" paragraph in the Terms and the
+cookie line in the Privacy Policy first: both are new today. Then:
+
+- Open **Your account** and copy your link from **Invite someone running an event**. Open it
+  in a private window: it lands on the home page. Pick a plan: the signup page says
+  "Invited by" you.
+- Sign up there with a second email address. On `/admin`, find that account and grant it a
+  plan as you normally would. Both accounts now show **$10** of credit, and your first
+  account gets a "You earned $10" email.
+- **How to honour credit:** when a customer with credit pays, refund that much of their
+  payment in the Stripe Dashboard, then press **Use credit** on their card on `/admin` and
+  record it, for example "Refunded $10 of their Premium payment". Nothing else is automatic.
+- On a branded gallery (Klik Event plan), the line at the bottom now reads "Shared with klik ·
+  Make a gallery for your own event", and links with the host's code.
+
+If $10 each is the wrong amount, tell Claude; it is one line.
+
+- [ ] Read the new Terms paragraph and the cookie line
+- [ ] Followed a referral link through to a grant and saw both credits
+- [ ] Know how to honour credit in Stripe
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

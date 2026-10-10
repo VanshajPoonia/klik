@@ -16,6 +16,9 @@ import { DeleteAccount } from "@/components/account/delete-account";
 import { PasskeysCard } from "@/components/account/passkeys-card";
 import { WatermarkCard } from "@/components/account/watermark-card";
 import { ProfileCard } from "@/components/account/profile-card";
+import { ReferralCard } from "@/components/account/referral-card";
+import { REFERRAL_CREDIT_CENTS, formatCents, referralSummary } from "@/lib/referrals";
+import { getAppUrl } from "@/lib/env";
 import { watermarkProfile } from "@/lib/proofs";
 import { listPasskeys } from "@/lib/passkeys";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
@@ -55,12 +58,13 @@ export default async function AccountPage() {
     ? new Date(account.usernameChangedAt.getTime() + USERNAME_CHANGE_DAYS * 86_400_000)
     : null;
   // Offered only to someone still on the handle Klik generated for them.
-  const [suggestions, passkeys, watermark] = await Promise.all([
+  const [suggestions, passkeys, watermark, referral] = await Promise.all([
     !account.usernameChangedAt && canChangeUsername
       ? availableSuggestions(account.id, account.name, account.email)
       : Promise.resolve([]),
     listPasskeys(account.id),
     watermarkProfile(account.id),
+    referralSummary(account.id),
   ]);
 
   return (
@@ -91,6 +95,19 @@ export default async function AccountPage() {
           {account.hasPassword && (
             <Card>
               <PasswordForm signInAs={account.email ?? account.username ?? ""} />
+            </Card>
+          )}
+          {/* GRW-5. */}
+          {referral.code && (
+            <Card>
+              <ReferralCard
+                link={`${getAppUrl()}/r/${referral.code}`}
+                creditEach={formatCents(REFERRAL_CREDIT_CENTS)}
+                joined={referral.joined}
+                qualified={referral.qualified}
+                balanceCents={referral.balanceCents}
+                history={referral.history}
+              />
             </Card>
           )}
           {/* GRW-4. */}

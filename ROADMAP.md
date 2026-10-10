@@ -37,6 +37,7 @@
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
+- Referral credits **are** built (GRW-5, 2026-10-10): a link per account, the host's link on every branded gallery, and $10 each side when a referred account first goes live, spent by a superadmin by hand.
 - Public profiles at `/u/<username>` **are** built (GRW-4, 2026-10-10): off by default, they list the galleries their owner chooses by name and date, and never show a photo.
 - Watermarked proofs for photographers **are** built (MED-10, 2026-10-10): the photographer sees their proofs clean, everyone else sees the watermark and the photographer's note on how to buy, and the photographer releases the clean photos when paid. Klik takes no money for it.
 - An offline upload queue **is** built (OPS-3, 2026-10-10): every pick is kept on the device until it is in the gallery, survives a reload or a closed tab, resumes a half-sent video part by part, and drains in the background on Android. The kiosk uses it too.
@@ -911,7 +912,11 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 - Not built: listing events you worked on as a co-host. That needs the owner's agreement per event, and is worth doing when a photographer asks for it.
 
 ### GRW-5. Referral credits
-**Size:** M. Every organizer got there by attending someone else's event. A referral code granting both sides credit makes that path explicit.
+**DONE 2026-10-10** (`drizzle/0041_referrals.sql`, `lib/referrals.ts`, `app/r/[code]/route.ts`, `components/account/referral-card.tsx`, `components/admin/credit-control.tsx`, `test/referrals.dbtest.ts`). Every account has a code (made by the database) and a link, `/r/<code>`, which remembers itself for 30 days and lands on the home page. The gallery's "Shared with klik" line now carries its host's link as **Make a gallery for your own event**, which is the path this task was about. Signup records the referral (both the form and a signed-in guest going to pay), and the signup page says "Invited by Ana". When a superadmin first grants that account a plan, both sides get **$10 credit** and the referrer is emailed. **Your account** shows the link, how many signed up and went live, the balance and its history; each client card on `/admin` shows who referred them and the balance, with **Use credit** to record spending it. Decisions, recorded in Section C on 2026-10-10:
+- **Credit, not cash, and spent by a person.** Klik takes payment through hosted Stripe links and a human grants every plan, so credit is used the same way: a superadmin refunds that much of a payment in Stripe and records it here, with a reason. No coupon is created and nothing is discounted automatically.
+- **Qualifies at the first grant**, which is the moment a human has matched the account to a payment, so a signup that never pays earns nothing.
+- **One referrer per account, for life, never yourself, and never attached to an account that is already a customer**, so a credit cannot be collected after the fact. The database enforces the first two; each side's credit is unique per referral.
+- The amount is one constant, `REFERRAL_CREDIT_CENTS` in `lib/referrals.ts`, and the Terms say credit is shown on the account page, so changing it is one line.
 
 ### GRW-6. Physical print fulfilment
 **Size:** L. "Order prints" and "order a photo book" from the gallery, fulfilled through Prodigi or a similar print API with a margin. Turns the print studio (QR-4) into a revenue line rather than a cost centre, and guests are already in a buying mood the day after an event.
@@ -1201,6 +1206,9 @@ Asked with "take the best architectural and sustainable decision, note it, and p
 
 ### Proofs are stored twice, and the row names the watermark. ANSWERED
 While a proof is locked, `media.blob_pathname` is the **watermarked** copy and the clean original is a separate column that no delivery path reads. The alternative, a flag every route checks before serving, was rejected because it fails open: Klik has a dozen paths that serve a photo (the grid, share links, ZIPs, exports, the live display, link previews, the editor, sharing) and the next one added would forget the flag and leak the photographer's work. This way a new path is safe without knowing proofs exist, and the clean original is reachable in exactly two named places, both checked by `cleanOriginalFor`.
+
+### GRW-5: $10 of credit each side, spent by a superadmin. ANSWERED
+Ten dollars is a quarter of the cheapest pass: enough to notice, small enough that farming it costs more than it pays (it only arrives after a real purchase). It is credit, not a coupon, because a coupon would have to be created in Stripe and attached to Payment Links that accept codes from anyone. A person refunds it from the next payment, which is the same human step every grant already has. Change it in `lib/referrals.ts`.
 
 ## Still open
 

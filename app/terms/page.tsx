@@ -95,6 +95,15 @@ export default function TermsPage() {
         than you hoped.
       </p>
 
+      <h2>Referral credit</h2>
+      <p>
+        When someone signs up through your referral link and their first event goes live, you each
+        receive credit toward a future purchase, in the amount shown on your account page. We apply
+        it to a later payment ourselves. Credit has no cash value, cannot be transferred or
+        withdrawn, and ends if your account is deleted. Credit gained through accounts made only to
+        collect it, or through a referral to yourself, is void.
+      </p>
+
       <h2>Your content stays yours</h2>
       <p>
         <strong>You own what you upload, and what you write in a comment. We claim no ownership of

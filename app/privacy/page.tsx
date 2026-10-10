@@ -165,9 +165,10 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Cookies</strong> are used for signing in, for remembering that a guest has joined
-          a gallery, and for remembering that someone entered a gallery password. They are
-          functional, set to expire, and readable only by the server. We run no advertising
-          cookies, no analytics cookies and no third-party trackers.
+          a gallery, for remembering that someone entered a gallery password, and, for 30 days,
+          for remembering which referral link brought you, so the person who invited you can be
+          credited if you sign up. They are functional, set to expire, and readable only by the
+          server. We run no advertising cookies, no analytics cookies and no third-party trackers.
         </li>
         <li>
           <strong>Photos waiting to upload</strong> are kept in your browser&apos;s storage on your

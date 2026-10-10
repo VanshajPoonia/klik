@@ -14,6 +14,7 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { PlanKey } from "./plans";
+import { sql } from "drizzle-orm";
 
 // --- Auth.js tables (organizers only, guests never get a row here) ---
 
@@ -50,6 +51,13 @@ export const users = pgTable("users", {
   profilePublic: boolean("profile_public").notNull().default(false),
   profileBio: text("profile_bio"),
   profileWebsite: text("profile_website"),
+  /**
+   * GRW-5: this account's referral code, made by the database at insert. Its
+   * unique index is in drizzle/0041_referrals.sql.
+   */
+  referralCode: text("referral_code")
+    .notNull()
+    .default(sql`substr(md5(random()::text || clock_timestamp()::text), 1, 10)`),
   /**
    * When a superadmin granted this account its plan. Null means the account was
    * created by someone filling in the signup form and is not yet entitled to
@@ -105,6 +113,8 @@ export const TIMELINE_KINDS = [
   "username_changed",
   "passkey_added",
   "passkey_removed",
+  "credit_added",
+  "credit_used",
 ] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
@@ -544,6 +554,41 @@ export const media = pgTable(
     // indexes small. They are not declared here: drizzle-kit push would
     // recreate them as full indexes and quietly undo that.
   ],
+);
+
+/** GRW-5: who brought whom. See drizzle/0041_referrals.sql. */
+export const referrals = pgTable(
+  "referrals",
+  {
+    id: text("id").primaryKey(),
+    referrerId: text("referrer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    referredId: text("referred_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    qualifiedAt: timestamp("qualified_at", { withTimezone: true }),
+  },
+  (table) => [index("referrals_referrer_idx").on(table.referrerId, table.createdAt)],
+);
+
+/** GRW-5: credit an account is owed, as a ledger. Positive is credit, negative is used. */
+export const accountCredits = pgTable(
+  "account_credits",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    amountCents: integer("amount_cents").notNull(),
+    reason: text("reason").notNull(),
+    referralId: text("referral_id").references(() => referrals.id, { onDelete: "set null" }),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("account_credits_user_idx").on(table.userId, table.createdAt)],
 );
 
 export const WATERMARK_POSITIONS = ["center", "bottom-right", "bottom-left", "tiled"] as const;

@@ -334,6 +334,8 @@ Any AI that needs a model. Error tracking beyond structured logging and email al
 
 **Public profiles, 2026-10-10 (GRW-4).** `users.profile_public`, `profile_bio`, `profile_website` and `events.show_on_profile` (`drizzle/0040_profiles.sql`). `profileFor` in `lib/profiles.ts` is the whole read, and its listing rule is the place to change what may appear: chosen by the owner, not private, licensed, active, not deleted or purged. The page renders no media by design (LAW-4), so nothing on it needs signing; anything added that shows a photo needs the curation LAW-4 describes first. A handle parked by a rename redirects, temporarily (307), only while it is parked; a permanent one would be cached past the day someone else takes the handle.
 
+**Referral credits, 2026-10-10 (GRW-5).** `users.referral_code` (a database default, unique), `referrals` (one per referred account, never self) and `account_credits`, a ledger whose sum is the balance and whose rows are never updated (`drizzle/0041_referrals.sql`). The `klik_ref` cookie is set by `/r/<code>` and read at signup, by `POST /api/signup` and by `/signup` for a signed-in account on its way to pay. `qualifyReferral` runs in the admin grant route, after the grant; a Stripe-sourced grant, if one is ever written, should call it too. Credit is never applied by code: `spendCredit` only records what a superadmin did in Stripe.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

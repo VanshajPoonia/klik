@@ -36,7 +36,8 @@ export type AuditAction =
   | "comment.shown"
   | "kiosk.created"
   | "kiosk.revoked"
-  | "proofs.released";
+  | "proofs.released"
+  | "credit.used";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;

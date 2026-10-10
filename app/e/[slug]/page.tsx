@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { findEventBySlug } from "@/lib/slugs";
-import { guests, media } from "@/lib/schema";
+import { guests, media, users } from "@/lib/schema";
 import { canUpload, canViewGallery } from "@/lib/access";
 import { eventPlan } from "@/lib/license";
 import { eventUsage } from "@/lib/usage";
@@ -238,10 +238,17 @@ export default async function GuestEventPage({
   const proofs =
     managerSession?.user?.id && canUseProofs(plan.key) && canUpload(event) ? { label: watermark?.label ?? null } : null;
 
+  // GRW-5: the guest who wants one of these for their own event got here
+  // through this host, so the link says so. Only where Klik branding shows.
+  const [host] = !removesKlikBranding(plan.key) && !isOwner
+    ? await db.select({ code: users.referralCode }).from(users).where(eq(users.id, event.ownerId)).limit(1)
+    : [];
+
   return (
     <GuestGallery
       event={publicEvent}
       proofs={proofs}
+      referralHref={host ? `/r/${host.code}` : null}
       isOwner={isOwner}
       initialMedia={initialMedia}
       syncedAt={syncedAt}
