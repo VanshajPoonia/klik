@@ -1197,13 +1197,24 @@ export function GuestGallery({
         {!isOwner && (
           <div className="mt-4 text-center text-xs text-muted">
             {leaving === "idle" ? (
-              <button
-                type="button"
-                onClick={() => setLeaving("confirm")}
-                className="underline underline-offset-2 transition-colors hover:text-paper"
-              >
-                Remove everything I added
-              </button>
+              <span className="inline-flex flex-wrap items-center justify-center gap-x-3">
+                {/* TRS-2: a copy of everything this guest added, and what Klik holds about them here. */}
+                <a
+                  href={`/api/e/${encodeURIComponent(event.slug)}/me/export`}
+                  download
+                  className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
+                >
+                  Download everything I added
+                </a>
+                <span aria-hidden="true">·</span>
+                <button
+                  type="button"
+                  onClick={() => setLeaving("confirm")}
+                  className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
+                >
+                  Remove everything I added
+                </button>
+              </span>
             ) : (
               <div className="mx-auto max-w-sm space-y-3 rounded-2xl border border-canvas-line bg-canvas-raised p-4 text-left">
                 <p className="text-sm text-paper">

@@ -52,6 +52,12 @@ export function JoinedGalleryRow({ gallery }: { gallery: JoinedGallery }) {
           <a href={`/e/${gallery.slug}`} className="text-sm text-volt hover:underline">
             Open
           </a>
+          {/* TRS-2: what this account shared there, as a ZIP with a data.json. */}
+          {uploads > 0 && (
+            <a href={`/api/e/${gallery.slug}/me/export`} download className="text-sm text-muted hover:text-paper hover:underline">
+              Download mine
+            </a>
+          )}
           {state === "idle" && (
             <Button variant="ghost" size="sm" onClick={() => setState("confirm")}>
               Remove mine

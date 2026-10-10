@@ -336,6 +336,8 @@ Any AI that needs a model. Error tracking beyond structured logging and email al
 
 **Referral credits, 2026-10-10 (GRW-5).** `users.referral_code` (a database default, unique), `referrals` (one per referred account, never self) and `account_credits`, a ledger whose sum is the balance and whose rows are never updated (`drizzle/0041_referrals.sql`). The `klik_ref` cookie is set by `/r/<code>` and read at signup, by `POST /api/signup` and by `/signup` for a signed-in account on its way to pay. `qualifyReferral` runs in the admin grant route, after the grant; a Stripe-sourced grant, if one is ever written, should call it too. Credit is never applied by code: `spendCredit` only records what a superadmin did in Stripe.
 
+**Data export, 2026-10-10 (TRS-2).** `lib/data-export.ts` builds both shapes. The account file is JSON with no secrets and nobody else's names; the guest download is `streamZip` with a `data.json` as an extra entry (the `extras` argument), and it reads the guest cookie from the request header, falling back to a signed-in account's guest row at that event. Anything added to what Klik stores about a person should be added to one of these two, or a subject access request gets an incomplete answer. `DELETE /api/events/[id]?erase=true` now finds events in the trash too.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

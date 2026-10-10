@@ -425,6 +425,21 @@ If $10 each is the wrong amount, tell Claude; it is one line.
 - [ ] Followed a referral link through to a grant and saw both credits
 - [ ] Know how to honour credit in Stripe
 
+And **"download my data"**, which answers the requests you would otherwise handle by hand:
+
+- On **Your account**, press **Download my data** and open the file. Check nothing in it
+  surprises you; it is what anyone who asks will get.
+- As a guest on a phone, at the bottom of a gallery you added photos to, press **Download
+  everything I added**: a ZIP with your photos and a `data.json`.
+- **When someone emails asking to be deleted:** for an organizer, use **Erase this account**
+  at the bottom of their card on `/admin`, with a reason. For a whole event, delete it, then
+  **Erase now** under "Recently deleted" on your dashboard.
+
+The **Privacy Policy** now says guests and organizers can download their data themselves.
+
+- [ ] Downloaded my own data and read the file
+- [ ] Downloaded a guest's ZIP from a gallery
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

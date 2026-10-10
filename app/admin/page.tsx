@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { users, events, entitlements, accountCredits, referrals } from "@/lib/schema";
 import { alias } from "drizzle-orm/pg-core";
 import { CreditControl } from "@/components/admin/credit-control";
+import { EraseClientControl } from "@/components/admin/erase-client-control";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CtaLink } from "@/components/marketing/cta-link";
@@ -360,6 +361,8 @@ export default async function AdminPage() {
                 balanceCents={creditByUser.get(client.userId) ?? 0}
                 referredBy={referredBy.get(client.userId) ?? null}
               />
+              {/* TRS-2. Closed until asked for. */}
+              <EraseClientControl userId={client.userId} confirmWith={client.username ?? client.email ?? ""} />
 
               <ActivationEmailControl
                 userId={client.userId}

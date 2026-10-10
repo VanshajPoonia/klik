@@ -258,17 +258,19 @@ export default function PrivacyPage() {
 
       <h2>Your choices</h2>
       <p>
-        <strong>Guests:</strong> remove everything you added to a gallery, your name, hearts and
-        comments included, from the bottom of that gallery at any time. If you signed in, you can do the same for any event
-        from &ldquo;Your galleries&rdquo;, and deleting your account removes everything you shared
-        everywhere. Otherwise write to us at{" "}
+        <strong>Guests:</strong> download a copy of everything you added to a gallery, with a file
+        saying what we hold about you there, or remove all of it, your name, hearts and comments
+        included, from the bottom of that gallery at any time. If you signed in, you can do both
+        for any event from &ldquo;Your galleries&rdquo;, and deleting your account removes everything
+        you shared everywhere. Otherwise write to us at{" "}
         <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a> and tell us which event.
         Unless you signed in we hold no email address for you, so we will usually need the organizer
         to confirm which guest record is yours.
       </p>
       <p>
         <strong>Organizers:</strong> delete your account and everything in it yourself, from the
-        Account page, or write to the same address. Write to us for an export. We action erasure immediately in the live system; the backup copy expires
+        Account page, or write to the same address. The Account page also downloads a copy of
+        everything we hold about your account. We action erasure immediately in the live system; the backup copy expires
         within {BACKUP_EXPIRY_DAYS} days as described above.
       </p>
       <p>

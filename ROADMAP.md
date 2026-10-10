@@ -37,6 +37,7 @@
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
+- Data export **is** built (TRS-2, 2026-10-10): an account downloads everything held about it, a guest downloads what they shared at a gallery with a `data.json`, and every erasure endpoint has a screen.
 - Referral credits **are** built (GRW-5, 2026-10-10): a link per account, the host's link on every branded gallery, and $10 each side when a referred account first goes live, spent by a superadmin by hand.
 - Public profiles at `/u/<username>` **are** built (GRW-4, 2026-10-10): off by default, they list the galleries their owner chooses by name and date, and never show a photo.
 - Watermarked proofs for photographers **are** built (MED-10, 2026-10-10): the photographer sees their proofs clean, everyone else sees the watermark and the photographer's note on how to buy, and the photographer releases the clean photos when paid. Klik takes no money for it.
@@ -1054,7 +1055,11 @@ Endpoints: `DELETE /api/me` (self-service, requires typing your own username or 
 
 `erasure_log` records that an erasure happened without keeping what was erased: the subject is stored as a SHA-256 hash, since a raw identifier would recreate in the audit trail exactly the record the request was meant to remove.
 
-**Still outstanding:** the export half ("download everything you have on me"), UI for all four endpoints, and a scheduled job for bulk requests.
+**Export half and the missing screens DONE 2026-10-10** (`lib/data-export.ts`, `app/api/me/export`, `app/api/e/[slug]/me/export`, `test/data-export.dbtest.ts`):
+- **An account** downloads one JSON file from **Your account, Your data**: its details, sign-in methods (passkey names, never keys; whether a password exists, never the hash), plans with their reasons, its history, the events it runs (with client details it entered), the teams it is on, the galleries it joined, comments it wrote, its watermark settings and its referral credit. Not the photos of events it runs: those are the event's, downloadable from each event, and can be gigabytes.
+- **A guest** downloads a ZIP of everything they shared at one gallery with a `data.json` beside the files: their name there, when they agreed to which consent wording, each file's status and who could see it, their comments and hearts. From the bottom of the gallery (needs only their cookie, as erasing does) or from `/me` per gallery when signed in. Available after the gallery has closed, because it is their data, not the gallery. A kiosk is refused. Five per hour.
+- **The four erasure endpoints all have screens now:** an organizer deleting their account and a guest removing their uploads already did; added **Erase now** for an event in **Recently deleted** (typed name), which the route now allows for an event already in the trash, and **Erase this account** on each `/admin` client card (typed handle and a reason, kept in the erasure log).
+- **Not built:** a scheduled job for bulk requests. Nobody has made one, and each request is one action now.
 
 ### TRS-2 original scope
 **Size:** M. Depends on F-5. Self-service "download everything you have on me" and "delete my account and uploads". Becomes mandatory rather than optional the moment AI-3 ships.

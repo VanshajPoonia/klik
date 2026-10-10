@@ -300,7 +300,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { event } = await getOwnedEvent(id);
+  const erase = new URL(request.url).searchParams.get("erase") === "true";
+  // TRS-2: erasing reaches an event already in the trash too, which is where an
+  // owner looks for "delete it for good now".
+  const [event] = erase
+    ? await db.select().from(events).where(eq(events.id, id)).limit(1)
+    : [(await getOwnedEvent(id)).event];
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const session = await requireOwnerSession(event.ownerId);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -310,7 +315,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   // their data to be removed, and "it is in a trash folder for 30 days" is not
   // an answer to that. It is opt-in because it is the only delete here that
   // cannot be walked back.
-  if (new URL(request.url).searchParams.get("erase") === "true") {
+  if (erase) {
     let result;
     try {
       result = await eraseEvent(event.id, session.user?.id ?? null, "event_erasure_request");
@@ -322,6 +327,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       }
       throw error;
     }
+    await recordAudit({ actor: session, action: "event.erased", targetType: "event", targetId: event.id, detail: event.name });
     return NextResponse.json({ ok: true, erased: true, ...result });
   }
 

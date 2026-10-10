@@ -22,13 +22,20 @@ export interface ZipItem {
  * Used by the organizer's download and by share links, so a gallery comes out
  * named the same way whichever of them packed it.
  */
-export function streamZip(items: ZipItem[], filename: string, headers: Record<string, string> = {}): NextResponse {
+export function streamZip(
+  items: ZipItem[],
+  filename: string,
+  headers: Record<string, string> = {},
+  /** TRS-2: small files made here, such as a data export's JSON, written first. */
+  extras: Array<{ name: string; content: string }> = [],
+): NextResponse {
   const output = new PassThrough();
   const archive = new ZipArchive({ zlib: { level: 0 } });
   archive.on("error", (error) => output.destroy(error));
   archive.pipe(output);
 
   void (async () => {
+    for (const extra of extras) archive.append(extra.content, { name: extra.name });
     for (const [index, item] of items.entries()) {
       const object = await r2.send(
         new GetObjectCommand({

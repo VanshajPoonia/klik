@@ -9,6 +9,7 @@ import { users } from "@/lib/schema";
 import { availableSuggestions } from "@/lib/account";
 import { USERNAME_CHANGE_DAYS } from "@/lib/username";
 import { Card } from "@/components/ui/card";
+import { buttonClassName } from "@/components/ui/button";
 import { ProfileForm } from "@/components/account/profile-form";
 import { UsernameForm } from "@/components/account/username-form";
 import { PasswordForm } from "@/components/account/password-form";
@@ -123,6 +124,30 @@ export default async function AccountPage() {
           </Card>
           <Card>
             <PasskeysCard initial={passkeys} userHandle={isoBase64URL.fromUTF8String(account.id)} now={new Date(account.now).getTime()} />
+          </Card>
+          {/* TRS-2: a copy of everything held about the account, before or instead of deleting it. */}
+          <Card>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="max-w-md">
+                <h2 className="text-sm font-medium text-paper">Your data</h2>
+                <p className="mt-1 text-xs text-muted">
+                  A file of everything Klik holds about your account: your details, sign-in methods, plans,
+                  history, the events you run and the galleries you joined. Photos and videos you shared as a
+                  guest download from each gallery on{" "}
+                  <Link href="/me" className="text-paper hover:underline">
+                    your galleries
+                  </Link>
+                  .
+                </p>
+              </div>
+              <a
+                href="/api/me/export"
+                download
+                className={buttonClassName({ variant: "ghost", size: "sm" })}
+              >
+                Download my data
+              </a>
+            </div>
           </Card>
           {account.role !== "superadmin" && (
             <Card>
