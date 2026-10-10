@@ -19,6 +19,9 @@ deliberately not automated, and what to do next.
 | Dashboard webhook endpoint | Not created. Only the embedded path needs it |
 | A payment granting a plan | **Never automatic.** True of both paths. See "The grant is manual" |
 | What grants capability | **The `entitlements` ledger** (ACT-1, 2026-10-08). A pass licenses one event; Venue licenses up to its limits. `users.plan_key` is retired and read nowhere |
+| What a grant was paid | **Recorded by the superadmin when granting** (2026-10-10): the list price by default, 0 for a comp, plus Stripe's payment reference if wanted. Feeds `/admin/revenue`. Klik still charges nothing itself |
+| A failed Venue payment | **A 7-day grace a superadmin starts** on the grant (PAY-8), with three emails to the organizer; recording the payment ends it, and the daily reconcile lapses it otherwise |
+| Receipts and card changes | **Stripe's**, through its no-code customer portal link (`STRIPE_BILLING_PORTAL_URL`) when set, a person otherwise. Shown on `/dashboard/billing` |
 | A new account's capability | **Drafts only.** It can create events and set them up; none goes live, shows a QR code or takes a guest until a superadmin grants something |
 
 ## The two Stripe accounts
@@ -344,6 +347,35 @@ SQL file (`test/entitlements.dbtest.ts`).
 
 The buyer is told this before paying, on the checkout page. Someone who is not
 told reads the delay as a failure and asks for their money back.
+
+## Billing after the sale (PAY-5, PAY-8, ADM-2), 2026-10-10
+
+Built to fit the rule above rather than to work around it: nothing here charges,
+refunds or grants by itself.
+
+- **Grants say what was paid.** The grant form on `/admin` now asks "Paid $… "
+  (prefilled with the plan's list price from `lib/plans.ts`, `priceCents`) or
+  "Comp", and takes Stripe's payment or receipt number optionally. Stored on
+  `entitlements.amount_cents` and `stripe_ref` (`drizzle/0043_grant_payments.sql`).
+  Grants made before this have `amount_cents` null and count as "not recorded".
+- **`/admin/revenue`** (ADM-2) adds up what was recorded: this month by plan, the
+  last twelve months, what running Venue plans bring in a month, and referral
+  credit owed. It says plainly that Stripe's Dashboard is the record of money.
+  The `purchases` and `subscriptions` tables stay empty and unused, as before.
+- **`/dashboard/billing`** (PAY-5) shows an organizer their passes (used, unused)
+  and Venue plan, their credit, how to buy another event (through `/signup?plan=`,
+  like the pricing buttons), and receipts and card changes: Stripe's customer
+  portal when `STRIPE_BILLING_PORTAL_URL` is set, the support email and phone
+  otherwise.
+- **A failed Venue payment** (PAY-8). Stripe tells you, not Klik. Press **Payment
+  failed** on that Venue grant on `/admin`: everything keeps working for 7 days
+  (decision C-6), `ends_at` is set a week out, and the organizer is emailed now,
+  on day 3 and on day 6 (`notify.grace` jobs, `lib/billing-grace.ts`), each
+  pointing at the portal when there is one. **Payment received** clears the end
+  date and silences the reminders. If nothing is pressed, the daily reconcile
+  lapses the plan at the end: galleries stop taking photos and stay viewable and
+  downloadable, and nothing is deleted. Stripe's own failed-payment emails and
+  Smart Retries are worth turning on as well; they cost nothing.
 
 ## What each piece is for
 

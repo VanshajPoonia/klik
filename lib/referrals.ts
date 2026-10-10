@@ -159,3 +159,19 @@ export async function referralSummary(userId: string) {
     history,
   };
 }
+
+/** ADM-2: credit owed across every account, and how many accounts hold some. */
+export async function creditOwedTotals(): Promise<{ cents: number; accounts: number }> {
+  const balances = db
+    .select({ balance: sql<number>`sum(${accountCredits.amountCents})`.as("balance") })
+    .from(accountCredits)
+    .groupBy(accountCredits.userId)
+    .as("balances");
+  const [row] = await db
+    .select({
+      cents: sql<number>`COALESCE(sum(${balances.balance}) FILTER (WHERE ${balances.balance} > 0), 0)::int`,
+      accounts: sql<number>`count(*) FILTER (WHERE ${balances.balance} > 0)::int`,
+    })
+    .from(balances);
+  return { cents: row?.cents ?? 0, accounts: row?.accounts ?? 0 };
+}

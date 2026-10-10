@@ -115,6 +115,14 @@ const schema = z.object({
     z.string().regex(/^whsec_/, "STRIPE_WEBHOOK_SECRET must start with whsec_"),
   ),
 
+  // PAY-5 and PAY-8: Stripe's no-code customer portal login link
+  // (Dashboard, Settings, Billing, Customer portal), where a customer updates a
+  // card and downloads invoices by email, with no Stripe customer id in Klik.
+  // Without it the billing page and the payment emails say to write to us.
+  STRIPE_BILLING_PORTAL_URL: optionalString(
+    z.string().url().refine((value) => value.startsWith("https://"), "STRIPE_BILLING_PORTAL_URL must be https"),
+  ),
+
   // A URL the purge cron pings after a successful run, for a heartbeat monitor
   // (UptimeRobot, Better Stack, Healthchecks.io). Optional: without it the cron
   // behaves exactly as before. Its absence is the normal state locally, which

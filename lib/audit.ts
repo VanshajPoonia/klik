@@ -37,7 +37,9 @@ export type AuditAction =
   | "kiosk.created"
   | "kiosk.revoked"
   | "proofs.released"
-  | "credit.used";
+  | "credit.used"
+  | "plan.grace_started"
+  | "plan.grace_cleared";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;

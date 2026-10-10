@@ -461,6 +461,28 @@ shows a preview), keyboard users stay inside the camera and viewer while they ar
 - [ ] Switched a gallery to Español and back
 - [ ] A Spanish speaker read the guest screens
 
+And **billing after the sale**, three small habits and one setting:
+
+- **When you grant a plan on `/admin`**, the form now asks what was paid: leave the
+  list price for a normal sale, change it for a deal, or pick **Comp**. Paste the Stripe
+  payment or receipt number if you like. `/admin/revenue` adds these up.
+- **Turn on Stripe's customer portal** so customers can change their card and download
+  invoices themselves: Stripe Dashboard, **Settings, Billing, Customer portal**, activate
+  the "login link", and copy it (it starts `https://billing.stripe.com/p/login/`). Add it
+  in Vercel as `STRIPE_BILLING_PORTAL_URL` (Production), then redeploy. Until then the
+  billing page and payment emails give your email and phone instead.
+- **Turn on Stripe's failed-payment emails and Smart Retries**: Stripe Dashboard,
+  **Settings, Billing, Subscriptions and emails**. They retry the card for you.
+- **When a Venue payment fails** (Stripe emails you), press **Payment failed** on that
+  customer's Venue plan on `/admin`. They keep everything for 7 days and get three emails.
+  When they pay, press **Payment received**. If they never do, their galleries stop taking
+  photos after the 7 days; nothing is deleted.
+- Organizers see all of it at **Billing** in their dashboard header.
+
+- [ ] Granted a plan with the amount filled in, and saw it on /admin/revenue
+- [ ] Set STRIPE_BILLING_PORTAL_URL in Vercel
+- [ ] Turned on Stripe's failed-payment emails and Smart Retries
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

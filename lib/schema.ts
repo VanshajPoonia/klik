@@ -115,6 +115,8 @@ export const TIMELINE_KINDS = [
   "passkey_removed",
   "credit_added",
   "credit_used",
+  "grace_email_sent",
+  "grace_email_failed",
 ] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
@@ -838,6 +840,10 @@ export const entitlements = pgTable(
     grantedByUserId: text("granted_by_user_id").references(() => users.id, { onDelete: "set null" }),
     grantedByLabel: text("granted_by_label"),
     stripeRef: text("stripe_ref"),
+    /** PAY-5, ADM-2: what was recorded as paid, in cents. 0 a comp, null before this was kept. */
+    amountCents: integer("amount_cents"),
+    /** PAY-8: when a failed payment's 7-day grace began. See lib/billing-grace.ts. */
+    graceStartedAt: timestamp("grace_started_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     revokedByUserId: text("revoked_by_user_id").references(() => users.id, { onDelete: "set null" }),

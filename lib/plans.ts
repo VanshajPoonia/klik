@@ -6,6 +6,8 @@ const GB = 1024 * MB;
 
 export type PlanDefinition = {
   key: PlanKey;
+  /** The list price in cents, for recording what a grant was paid (PAY-5, ADM-2). */
+  priceCents: number;
   name: string;
   price: string;
   priceSuffix: string;
@@ -51,6 +53,7 @@ export type PlanDefinition = {
 export const PLANS: Record<PlanKey, PlanDefinition> = {
   event: {
     key: "event",
+    priceCents: 3900,
     name: "Klik Event",
     price: "$39",
     priceSuffix: "one-time",
@@ -84,6 +87,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
   },
   premium: {
     key: "premium",
+    priceCents: 8900,
     name: "Klik Premium",
     price: "$89",
     priceSuffix: "one-time",
@@ -115,6 +119,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
   },
   venue: {
     key: "venue",
+    priceCents: 6900,
     name: "Klik Venue",
     price: "$69",
     priceSuffix: "per month",

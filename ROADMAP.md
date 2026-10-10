@@ -37,6 +37,7 @@
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
+- Billing after the sale **is** built (PAY-5, PAY-8, ADM-2, 2026-10-10): grants record what was paid, organizers have a billing page, a failed Venue payment gets a 7-day grace with three emails, and `/admin/revenue` adds it up. All by hand, as payments are.
 - The guest-facing screens speak **English and Spanish** (TRS-3, 2026-10-10): the guest's choice, else the host's, else the phone's, with the consent recorded in the language it was shown in. Focus handling, the camera's labels and WCAG-held host colours shipped the same day.
 - Data export **is** built (TRS-2, 2026-10-10): an account downloads everything held about it, a guest downloads what they shared at a gallery with a `data.json`, and every erasure endpoint has a screen.
 - Referral credits **are** built (GRW-5, 2026-10-10): a link per account, the host's link on every branded gallery, and $10 each side when a referred account first goes live, spent by a superadmin by hand.
@@ -534,6 +535,9 @@ What shipped records money. It does not grant capability, and that line is the w
 `POST /api/webhooks/stripe` with `export const runtime = "nodejs"`, reading the **raw** body for signature verification (Next's App Router gives this via `await request.text()`; do not parse first). Insert into `stripe_webhook_events` before processing and skip if already present. Handle `checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`. Every handler must be idempotent and must never trust amounts from the client. On refund, revoke the grant and mark the event downgraded rather than deleting media.
 
 ### PAY-5. Billing surface for organizers
+**DONE 2026-10-10, for the Payment Links model** (`app/dashboard/billing/page.tsx`, `drizzle/0043_grant_payments.sql`). `/dashboard/billing`, linked from the dashboard header: each pass (used on which event, or unused) and Venue plan (running, in a payment grace, ended), referral credit, the three plans to buy through `/signup?plan=`, and receipts and card changes through Stripe's no-code customer portal link when `STRIPE_BILLING_PORTAL_URL` is set, a person otherwise. Grants now record what was paid. **Not built:** an in-app invoice history and a Customer Portal session per customer, which both need Stripe customer ids, which only the unused embedded checkout creates. Upgrade prompts at the point of friction already exist from PAY-6. See `BILLING.md` "Billing after the sale".
+
+Original design:
 **Size:** M. **Depends on:** PAY-3, PAY-4.
 `/dashboard/billing`: current plan per event, unused passes, subscription status and renewal date, invoice history, "Manage billing" opening the Stripe Customer Portal (`POST /api/billing/portal`), and an upgrade path from any event that hits a gated feature. Upgrade prompts should appear at the point of friction (the locked folder button), not only on a pricing page.
 
@@ -554,6 +558,9 @@ Every limit currently enforced only at event creation needs enforcing where it a
 - Admin dashboard gets the same data across all accounts (ADM-3).
 
 ### PAY-8. Proration, dunning, and grace
+**DONE 2026-10-10, by hand to match the human-approval rule** (`lib/billing-grace.ts`, `app/api/admin/entitlements/[id]/grace/route.ts`, `test/billing-grace.dbtest.ts`). A superadmin presses **Payment failed** on a Venue grant: 7 days with everything working, emails on days 0, 3 and 6 (each a `notify.grace` job that checks the grace is still the same one before sending), then the daily reconcile lapses it: read-only, viewable, downloadable, nothing deleted. **Payment received** ends it. Decided 2026-10-10: Stripe's own dunning (failed-payment emails, Smart Retries) does the retrying, since the Payment Links never tell Klik a payment failed; Klik's part is the grace and what the organizer is told. **No proration:** passes are one-off and Venue is one price.
+
+Original design:
 **Size:** M. **Depends on:** PAY-4.
 Venue subscription past due: 7-day grace with galleries still readable, then read-only, then the normal purge window. Never delete media because a card expired. Dunning emails at day 1, 3, and 6.
 
@@ -1092,6 +1099,9 @@ Original scope:
 Search across users, usernames, events, slugs, and venue clients from one field. Open any event's dashboard as an admin (already supported by the permission model).
 
 ### ADM-2. Revenue and subscriptions
+**DONE 2026-10-10, from the ledger** (`lib/revenue.ts`, `app/admin/revenue/page.tsx`). Taken this month by plan, the last twelve months with paid, comp and not-recorded counts, what running Venue plans bring in each month (what was paid, or the list price), and referral credit owed. From what superadmins record when granting, since the hosted links never reach the webhook; it says so on the page. Reading `purchases` and `subscriptions` instead becomes right only if the embedded checkout is ever switched on.
+
+Original design:
 **Size:** M. **Depends on:** PAY-4.
 MRR, one-time revenue this month, active subscriptions, failed payments needing attention, refunds. Read from local `subscriptions` and `purchases` tables (kept current by the webhook) rather than calling Stripe on page load.
 
@@ -1225,6 +1235,9 @@ Asked with "take the best architectural and sustainable decision, note it, and p
 
 ### Proofs are stored twice, and the row names the watermark. ANSWERED
 While a proof is locked, `media.blob_pathname` is the **watermarked** copy and the clean original is a separate column that no delivery path reads. The alternative, a flag every route checks before serving, was rejected because it fails open: Klik has a dozen paths that serve a photo (the grid, share links, ZIPs, exports, the live display, link previews, the editor, sharing) and the next one added would forget the flag and leak the photographer's work. This way a new path is safe without knowing proofs exist, and the clean original is reachable in exactly two named places, both checked by `cleanOriginalFor`.
+
+### PAY-8: Stripe does the dunning, Klik does the grace. ANSWERED
+The hosted Payment Links never tell Klik a payment failed, and automating that would mean switching on the webhook and letting a payment change capability, which the human-approval rule forbids. So Stripe retries the card and emails the customer (its built-in dunning), and the superadmin, told by Stripe, starts Klik's 7-day grace with one button. Klik's emails say what happens to the galleries, which Stripe cannot.
 
 ### GRW-5: $10 of credit each side, spent by a superadmin. ANSWERED
 Ten dollars is a quarter of the cheapest pass: enough to notice, small enough that farming it costs more than it pays (it only arrives after a real purchase). It is credit, not a coupon, because a coupon would have to be created in Stripe and attached to Payment Links that accept codes from anyone. A person refunds it from the next payment, which is the same human step every grant already has. Change it in `lib/referrals.ts`.

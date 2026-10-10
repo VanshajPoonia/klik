@@ -189,6 +189,8 @@ export default async function AdminPage() {
       createdAt: formatDate(grant.createdAt),
       endsAt: grant.endsAt ? formatDate(grant.endsAt) : null,
       revokeReason: grant.revokeReason,
+      paid: grant.amountCents === null ? null : grant.amountCents === 0 ? "Comp" : `Paid $${(grant.amountCents / 100).toFixed(grant.amountCents % 100 ? 2 : 0)}`,
+      inGrace: Boolean(grant.graceStartedAt),
     });
     grantsByUser.set(grant.userId, list);
   }

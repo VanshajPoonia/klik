@@ -30,6 +30,10 @@ const requestSchema = z.object({
   // waiting draft and a Venue grant to all of them it has room for.
   eventId: z.string().min(1).max(64).nullable().optional(),
   endsAt: z.coerce.date().nullable().optional(),
+  // PAY-5, ADM-2: what was paid, in cents (0 for a comp), and Stripe's reference
+  // for it when there is one. Recorded, never charged: Stripe took the money.
+  amountCents: z.number().int().min(0).max(10_000_000).optional(),
+  stripeRef: z.string().trim().max(120).optional(),
 });
 
 /**
@@ -99,6 +103,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
     grantedBy: actor,
     endsAt: endsAt ?? null,
     applyToEventId: eventId ?? null,
+    amountCents: parsed.data.amountCents ?? null,
+    stripeRef: parsed.data.stripeRef || null,
   });
 
   const plan = getPlan(planKey);

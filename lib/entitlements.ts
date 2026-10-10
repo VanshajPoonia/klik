@@ -207,6 +207,8 @@ export interface GrantInput {
   grantedBy?: { id: string; label: string | null } | null;
   endsAt?: Date | null;
   stripeRef?: string | null;
+  /** PAY-5, ADM-2: what was paid for it, in cents; 0 for a comp. Omitted is unknown. */
+  amountCents?: number | null;
   /** License this event with the new grant right away. */
   applyToEventId?: string | null;
 }
@@ -243,6 +245,7 @@ export async function grantEntitlement(input: GrantInput): Promise<GrantResult> 
       grantedByLabel: input.grantedBy?.label ?? null,
       endsAt: input.endsAt ?? null,
       stripeRef: input.stripeRef ?? null,
+      amountCents: input.amountCents ?? null,
       maxActiveEvents: scope === "account" ? plan.maxActiveEvents : null,
       maxEventsPerMonth: scope === "account" ? plan.maxEventsPerMonth : null,
     })

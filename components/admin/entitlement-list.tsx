@@ -18,6 +18,10 @@ export interface EntitlementRow {
   createdAt: string;
   endsAt: string | null;
   revokeReason: string | null;
+  /** PAY-5: what was recorded as paid, as words ("$39", "comp"), or null when unknown. */
+  paid: string | null;
+  /** PAY-8: a failed payment's grace is running. */
+  inGrace: boolean;
 }
 
 /**
@@ -48,6 +52,23 @@ function EntitlementItem({ row }: { row: EntitlementRow }) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function grace(action: "start" | "clear") {
+    setBusy(true);
+    setError(null);
+    const response = await fetch(`/api/admin/entitlements/${row.id}/grace`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const body = await response.json().catch(() => ({}));
+    setBusy(false);
+    if (!response.ok) {
+      setError(body.error ?? "Could not change that");
+      return;
+    }
+    router.refresh();
+  }
 
   async function revoke() {
     setBusy(true);
@@ -83,12 +104,25 @@ function EntitlementItem({ row }: { row: EntitlementRow }) {
             {row.createdAt}
             {row.grantedBy ? ` by ${row.grantedBy}` : ""}
             {row.endsAt ? `, until ${row.endsAt}` : ""}
+            {row.paid ? `. ${row.paid}` : ""}
             {row.reason ? `. ${row.reason}` : ""}
           </p>
           {row.revokeReason && <p className="text-xs text-red-400">Revoked: {row.revokeReason}</p>}
+          {row.inGrace && row.status === "active" && (
+            <p className="text-xs text-amber-300">
+              Payment failed. Working until {row.endsAt}, then it lapses unless the payment is recorded. The organizer
+              is emailed now, on day 3 and on day 6.
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone={state === "revoked" ? "danger" : state === "unused" ? "warning" : "volt"}>{state}</Badge>
+          {/* PAY-8: only a Venue grant renews, so only it can fail to. */}
+          {row.status === "active" && row.scope === "account" && !revoking && (
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void grace(row.inGrace ? "clear" : "start")}>
+              {row.inGrace ? "Payment received" : "Payment failed"}
+            </Button>
+          )}
           {row.status === "active" && !revoking && (
             <Button type="button" variant="ghost" size="sm" onClick={() => setRevoking(true)}>
               Revoke
@@ -96,6 +130,11 @@ function EntitlementItem({ row }: { row: EntitlementRow }) {
           )}
         </div>
       </div>
+      {!revoking && error && (
+        <p className="text-xs text-red-400" role="alert">
+          {error}
+        </p>
+      )}
       {revoking && (
         <div className="space-y-2">
           <p className="text-xs text-muted">

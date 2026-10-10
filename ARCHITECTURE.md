@@ -342,6 +342,8 @@ Any AI that needs a model. Error tracking beyond structured logging and email al
 
 **Guest languages, 2026-10-10 (TRS-3).** Words on guest screens live in `lib/i18n/guest.ts` and are read through `useGuestCopy()`; the page picks the locale with `chooseLocale` (the `klik_lang` cookie, then `events.guest_language`, then Accept-Language) and wraps its screens in `GuestCopyProvider` with `lang` set. A new guest-facing string goes in both dictionaries or the test fails. A new refusal a guest can see gets a `code` (and `values` for numbers) in its JSON and a line under `errors` or `uploads.refusals`. Consent ids carry the language after a colon; `consentVersionById` and `consentShown` read both forms.
 
+**Billing after the sale, 2026-10-10 (PAY-5, PAY-8, ADM-2).** `BILLING.md` "Billing after the sale" is the description. In code: `entitlements.amount_cents` and `grace_started_at` (`drizzle/0043_grant_payments.sql`), `lib/billing-grace.ts` (start, clear, and the `notify.grace` job, which compares the grace's start before sending so a cleared or restarted grace stays quiet), `lib/revenue.ts` (pure), `/dashboard/billing` and `/admin/revenue`. A grace lapses through the existing daily `entitlements.reconcile`, so up to a day after its end date.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

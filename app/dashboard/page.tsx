@@ -111,6 +111,9 @@ export default async function DashboardPage() {
             <Link href="/me" className="text-sm text-muted hover:text-paper">
               Your galleries
             </Link>
+            <Link href="/dashboard/billing" className="text-sm text-muted hover:text-paper">
+              Billing
+            </Link>
             <Link href="/dashboard/account" className="text-sm text-muted hover:text-paper">
               Account
             </Link>

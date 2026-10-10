@@ -61,6 +61,14 @@ export const JOB_PAYLOADS = {
   "moments.refresh": z.object({ eventId: z.string().min(1).max(64) }),
   /** AI-1: refresh every event with recent media. */
   "moments.backfill": z.object({}),
+  /** PAY-8: one of the three emails during a failed payment's 7-day grace. */
+  "notify.grace": z.object({
+    entitlementId: z.string().min(1).max(64),
+    // The grace this belongs to: a reminder for a grace since cleared, or
+    // started again, sees a different start and stays quiet.
+    startedAt: z.string().min(1).max(40),
+    day: z.union([z.literal(0), z.literal(3), z.literal(6)]),
+  }),
 } as const;
 
 export type JobKind = keyof typeof JOB_PAYLOADS;

@@ -28,6 +28,10 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
   const [planKey, setPlanKey] = useState<PlanKey>("event");
   const [reason, setReason] = useState("");
   const [eventId, setEventId] = useState("");
+  // PAY-5, ADM-2: what was paid. The list price unless it was a comp or a deal.
+  const [payment, setPayment] = useState<"paid" | "comp">("paid");
+  const [amount, setAmount] = useState("");
+  const [stripeRef, setStripeRef] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -41,7 +45,13 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
     const response = await fetch(`/api/admin/clients/${userId}/entitlements`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planKey, reason, eventId: isVenue ? null : eventId || null }),
+      body: JSON.stringify({
+        planKey,
+        reason,
+        eventId: isVenue ? null : eventId || null,
+        amountCents: payment === "comp" ? 0 : Math.round(Number(amount || PLANS[planKey].priceCents / 100) * 100),
+        stripeRef: payment === "paid" && stripeRef.trim() ? stripeRef.trim() : undefined,
+      }),
     });
     const body = await response.json().catch(() => ({}));
     setSaving(false);
@@ -61,6 +71,8 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
     for (const refusal of body.refused ?? []) parts.push(refusal.reason);
     setOutcome(parts.join(" "));
     setReason("");
+    setAmount("");
+    setStripeRef("");
     router.refresh();
   }
 
@@ -103,6 +115,37 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
           </select>
         )}
       </div>
+      <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-paper">
+        <legend className="sr-only">Payment</legend>
+        <label className="flex min-h-10 items-center gap-2">
+          <input type="radio" name={`payment-${userId}`} checked={payment === "paid"} onChange={() => setPayment("paid")} disabled={saving} />
+          Paid $
+          <input
+            aria-label="Amount paid in dollars"
+            className={`${inputClass} w-24`}
+            inputMode="decimal"
+            placeholder={String(PLANS[planKey].priceCents / 100)}
+            value={amount}
+            onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ""))}
+            disabled={saving || payment !== "paid"}
+          />
+        </label>
+        <label className="flex min-h-10 items-center gap-2">
+          <input type="radio" name={`payment-${userId}`} checked={payment === "comp"} onChange={() => setPayment("comp")} disabled={saving} />
+          Comp, nothing paid
+        </label>
+        {payment === "paid" && (
+          <input
+            aria-label="Stripe payment reference, optional"
+            className={`${inputClass} min-w-0 flex-1`}
+            placeholder="Stripe payment or receipt number (optional)"
+            value={stripeRef}
+            onChange={(event) => setStripeRef(event.target.value)}
+            maxLength={120}
+            disabled={saving}
+          />
+        )}
+      </fieldset>
       <input
         aria-label="Reason"
         className={inputClass}
