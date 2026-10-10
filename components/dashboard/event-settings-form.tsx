@@ -87,6 +87,7 @@ export function EventSettingsForm({
   canCustomizeQr = false,
   canUseVenueHub = false,
   canDeleteEvent = false,
+  profile = null,
   approvedMedia = [],
   clients = [],
   addressing = null,
@@ -99,6 +100,8 @@ export function EventSettingsForm({
   canCustomizeQr?: boolean;
   canUseVenueHub?: boolean;
   canDeleteEvent?: boolean;
+  /** GRW-4: set only for the owner, whose profile this event may be listed on. */
+  profile?: { isPublic: boolean; username: string } | null;
   approvedMedia?: Media[];
   clients?: VenueClient[];
 }) {
@@ -112,6 +115,7 @@ export function EventSettingsForm({
   const [reactionsEnabled, setReactionsEnabled] = useState(event.reactionsEnabled);
   const [commentsEnabled, setCommentsEnabled] = useState(event.commentsEnabled);
   const [momentsEnabled, setMomentsEnabled] = useState(event.momentsEnabled);
+  const [showOnProfile, setShowOnProfile] = useState(event.showOnProfile);
   const [expiresAt, setExpiresAt] = useState(toDateInputValue(event.expiresAt));
   const [clientName, setClientName] = useState(event.clientName ?? "");
   const [clientEmail, setClientEmail] = useState(event.clientEmail ?? "");
@@ -175,6 +179,8 @@ export function EventSettingsForm({
           reactionsEnabled,
           commentsEnabled,
           momentsEnabled,
+          // GRW-4: the owner's choice alone; a manager's save leaves it as it is.
+          showOnProfile: profile ? showOnProfile && visibility !== "private" : undefined,
           expiresAt: endOfDayIso(expiresAt),
           clientId: canManageClients ? clientId || null : undefined,
           clientName: canManageClients ? clientName || null : undefined,
@@ -464,6 +470,22 @@ export function EventSettingsForm({
         >
           Show guests the gallery in moments
         </Checkbox>
+        {profile && (
+          <Checkbox
+            checked={showOnProfile && visibility !== "private"}
+            disabled={visibility === "private"}
+            onChange={(event) => setShowOnProfile(event.target.checked)}
+            hint={
+              visibility === "private"
+                ? "A private gallery cannot be listed."
+                : profile.isPublic
+                  ? `Its name and date appear on your profile at /u/${profile.username}, linking to this gallery. Guests' photos are never shown there.`
+                  : "Its name and date will appear on your public profile once you turn the profile on in your account."
+            }
+          >
+            List on my public profile
+          </Checkbox>
+        )}
       </div>
 
       <fieldset className="space-y-3 rounded-xl border border-canvas-line p-4">

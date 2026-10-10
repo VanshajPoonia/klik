@@ -37,6 +37,7 @@
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
+- Public profiles at `/u/<username>` **are** built (GRW-4, 2026-10-10): off by default, they list the galleries their owner chooses by name and date, and never show a photo.
 - Watermarked proofs for photographers **are** built (MED-10, 2026-10-10): the photographer sees their proofs clean, everyone else sees the watermark and the photographer's note on how to buy, and the photographer releases the clean photos when paid. Klik takes no money for it.
 - An offline upload queue **is** built (OPS-3, 2026-10-10): every pick is kept on the device until it is in the gallery, survives a reload or a closed tab, resumes a half-sent video part by part, and drains in the background on Android. The kiosk uses it too.
 - The print studio **is** built (QR-4a to QR-4f, 2026-10-10): a canvas editor with eleven templates, print-ready PDF and PNG export, and the four print checks. The QR route's server-drawn sign is still there for Premium's one-click download.
@@ -901,7 +902,13 @@ A 30-second video assembled from the highlights with a beat-matched cut and a ti
 **Size:** M. The organizer sets prompts ("a photo with someone you just met", "the worst dance move"). Guests see them as cards in the upload sheet, completed prompts get a checkmark, and a leaderboard shows top contributors. At weddings this reliably multiplies upload volume, which is the metric that makes the gallery worth paying for.
 
 ### GRW-4. Public profile at /u/[username]
-**Size:** M. Depends on ID-1. Gives the global username system a visible purpose: a photographer or venue shows their public events. Opt-in, off by default.
+**DONE 2026-10-10** (`drizzle/0040_profiles.sql`, `lib/profiles.ts`, `app/u/[username]/page.tsx`, `components/account/profile-card.tsx`, `test/profiles.dbtest.ts`). Off by default. **Your account** has a **Public profile** card: turn it on, a short "about you" (280 characters) and an https website. Each event's **Settings** has **List on my public profile**, shown to its owner only. The page shows the name, handle, words and link, and the listed galleries by name and date, each linking to the gallery. Decisions:
+- **No photos on the page at all**, not even a cover. Guests agreed to their photos being seen in the gallery, not on somebody's page about themselves (LAW-4). A listing is a link, and the gallery's own rules (password, private, closed) still apply when it is opened.
+- **Listed means chosen, live and open:** the owner ticked it, it is not private, not a draft or lapsed, not closed, expired, deleted or purged. A private gallery cannot be ticked.
+- **Owner only.** The listing is on the owner's page, so a manager cannot put an event there.
+- **A changed handle redirects** for the 30 days it is parked (ID-1), to a profile that is still public; then it is gone, rather than reaching whoever takes the handle next.
+- Indexed by search engines only once it lists a gallery, so an empty profile is not a free place to park a link. The website is `nofollow ugc` for the same reason.
+- Not built: listing events you worked on as a co-host. That needs the owner's agreement per event, and is worth doing when a photographer asks for it.
 
 ### GRW-5. Referral credits
 **Size:** M. Every organizer got there by attending someone else's event. A referral code granting both sides credit makes that path explicit.

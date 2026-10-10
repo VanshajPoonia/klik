@@ -127,6 +127,15 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   ]);
 
   const guestUrl = `${getAppUrl()}/e/${event.slug}`;
+  // GRW-4: only the owner lists an event on their own profile.
+  const [ownerProfile] = isOwner
+    ? await db
+        .select({ isPublic: users.profilePublic, username: users.username })
+        .from(users)
+        .where(eq(users.id, session.user.id))
+        .limit(1)
+        .then((rows) => rows.filter((row): row is { isPublic: boolean; username: string } => Boolean(row.username)))
+    : [null];
   const backHref = session.user.role === "superadmin" ? "/admin" : "/dashboard";
   return (
     // Support sits outside EventDashboard rather than inside it. That component
@@ -162,6 +171,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           safetyHold: row.safetyHold,
         }))}
         addressing={plan.key !== "event" ? { origin: getAppUrl(), formerSlugs } : null}
+        profile={ownerProfile}
         usage={(() => {
           const usage = eventUsage(event, plan);
           return {

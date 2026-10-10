@@ -57,6 +57,7 @@ const row: Event = {
   commentsEnabled: true,
   momentsEnabled: true,
   leaderboardEnabled: false,
+  showOnProfile: false,
 };
 
 /**
@@ -128,6 +129,8 @@ const WITHHELD: Record<string, string> = {
   momentsEnabled: "decides what the server sends, never needed raw",
   // GRW-3. The server sends no leaderboard when it is off, for the same reason.
   leaderboardEnabled: "decides what the server sends, never needed raw",
+  // GRW-4. The host's choice about their own profile page.
+  showOnProfile: "host configuration for their public profile",
 };
 
 describe("toPublicEvent", () => {

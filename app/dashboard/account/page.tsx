@@ -15,6 +15,7 @@ import { PasswordForm } from "@/components/account/password-form";
 import { DeleteAccount } from "@/components/account/delete-account";
 import { PasskeysCard } from "@/components/account/passkeys-card";
 import { WatermarkCard } from "@/components/account/watermark-card";
+import { ProfileCard } from "@/components/account/profile-card";
 import { watermarkProfile } from "@/lib/proofs";
 import { listPasskeys } from "@/lib/passkeys";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
@@ -37,6 +38,9 @@ export default async function AccountPage() {
       canChangeUsername: sql<boolean>`${users.usernameChangedAt} IS NULL OR ${users.usernameChangedAt} <= now() - (${USERNAME_CHANGE_DAYS}::int * interval '1 day')`,
       hasPassword: sql<boolean>`${users.passwordHash} IS NOT NULL`,
       role: users.role,
+      profilePublic: users.profilePublic,
+      profileBio: users.profileBio,
+      profileWebsite: users.profileWebsite,
       // The page's clock, for "last used 2h ago", taken from the database so
       // rendering stays pure.
       now: sql<string>`now()`,
@@ -89,6 +93,13 @@ export default async function AccountPage() {
               <PasswordForm signInAs={account.email ?? account.username ?? ""} />
             </Card>
           )}
+          {/* GRW-4. */}
+          <Card>
+            <ProfileCard
+              initial={{ isPublic: account.profilePublic, bio: account.profileBio, website: account.profileWebsite }}
+              username={account.username}
+            />
+          </Card>
           {/* MED-10. For anyone: a photographer is often someone else's co-host. */}
           <Card>
             <WatermarkCard initial={watermark} />

@@ -46,6 +46,10 @@ export const users = pgTable("users", {
   organizerIntentAt: timestamp("organizer_intent_at", { withTimezone: true }),
   /** ID-1: when the handle was last chosen. One change per 30 days. */
   usernameChangedAt: timestamp("username_changed_at", { withTimezone: true }),
+  /** GRW-4: whether /u/<username> exists, and what it says. Off by default. */
+  profilePublic: boolean("profile_public").notNull().default(false),
+  profileBio: text("profile_bio"),
+  profileWebsite: text("profile_website"),
   /**
    * When a superadmin granted this account its plan. Null means the account was
    * created by someone filling in the signup form and is not yet entitled to
@@ -331,6 +335,8 @@ export const events = pgTable(
     // GRW-3: a ranked list of who has shared most, by display name. Off until
     // the host turns it on. See lib/challenges.ts.
     leaderboardEnabled: boolean("leaderboard_enabled").notNull().default(false),
+    // GRW-4: listed on the owner's public profile, by name and date only.
+    showOnProfile: boolean("show_on_profile").notNull().default(false),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );

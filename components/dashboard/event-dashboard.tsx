@@ -76,6 +76,7 @@ export function EventDashboard({
   activity = null,
   transferOffer = null,
   clients = [],
+  profile = null,
 }: {
   event: OrganizerEvent;
   initialMedia: DashboardMedia[];
@@ -116,6 +117,8 @@ export function EventDashboard({
   /** ORG-4: set when this event has been offered to the person viewing it. */
   transferOffer?: { fromName: string } | null;
   clients?: VenueClient[];
+  /** GRW-4: the owner's public profile, for listing this event on it. Owner only. */
+  profile?: { isPublic: boolean; username: string } | null;
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
   const router = useRouter();
@@ -806,6 +809,7 @@ export function EventDashboard({
               approvedMedia={approved}
               clients={clients}
               addressing={addressing}
+              profile={profile}
             />
             {(canManageCoHosts || activity || canManageChallenges) && (
               <div className="space-y-5">

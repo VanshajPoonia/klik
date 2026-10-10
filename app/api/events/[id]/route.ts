@@ -50,6 +50,8 @@ const patchSchema = z.object({
   commentsEnabled: z.boolean().optional(),
   // AI-1. On by default; the team always sees moments either way.
   momentsEnabled: z.boolean().optional(),
+  // GRW-4. Listed on the owner's public profile, so only the owner sets it.
+  showOnProfile: z.boolean().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
   // CAM-4. Developing early is `developsAt: <now>`; there is no separate verb,
   // because "develop now" and "develop at this time" are the same setting.
@@ -97,6 +99,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       { error: parsed.error.issues[0]?.message ?? "Invalid input" },
       { status: 400 },
     );
+  }
+
+  if (parsed.data.showOnProfile !== undefined && session.user?.id !== event.ownerId && session.user?.role !== "superadmin") {
+    return NextResponse.json({ error: "Only the event's owner can list it on their profile." }, { status: 403 });
+  }
+  if (parsed.data.showOnProfile && (parsed.data.visibility ?? event.visibility) === "private") {
+    return NextResponse.json({ error: "A private gallery cannot be listed on a public profile." }, { status: 400 });
   }
 
   const clientFieldsRequested =

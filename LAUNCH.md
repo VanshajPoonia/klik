@@ -392,6 +392,18 @@ The **Privacy Policy** gained two lines under "What we collect from organizers":
 - [ ] Saw the watermark as the owner and as a guest, with the note and link
 - [ ] Released one proof, then all of them
 
+And **public profiles**, which need nothing but your own account:
+
+- On **Your account**, open **Public profile**, tick **Make my profile public**, write a line
+  about yourself and add your website. Save, then **View it**: it is at `/u/<your username>`.
+- On one of your live events, open **Settings** and tick **List on my public profile**. Reload
+  your profile: the event is there by name and date, and opens the gallery. A password
+  gallery says "Password needed" and asks for it.
+- Untick **Make my profile public**: the page is gone (it shows "not found").
+
+- [ ] Made my profile public and listed an event
+- [ ] Turned it off again, or left it on deliberately
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them
