@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { recordAudit } from "@/lib/audit";
 import { z } from "zod";
 import { GUEST_LANGUAGES } from "@/lib/i18n/locale";
+import { canUseProofs } from "@/lib/plans";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
@@ -55,6 +56,8 @@ const patchSchema = z.object({
   showOnProfile: z.boolean().optional(),
   // TRS-3. The language guests see, unless they choose their own.
   guestLanguage: z.enum(GUEST_LANGUAGES).optional(),
+  // MED-8. Premium and Venue, the plans with a photographer on the team.
+  keepPhotoDetails: z.boolean().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
   // CAM-4. Developing early is `developsAt: <now>`; there is no separate verb,
   // because "develop now" and "develop at this time" are the same setting.
@@ -109,6 +112,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   if (parsed.data.showOnProfile && (parsed.data.visibility ?? event.visibility) === "private") {
     return NextResponse.json({ error: "A private gallery cannot be listed on a public profile." }, { status: 400 });
+  }
+
+  if (parsed.data.keepPhotoDetails && !canUseProofs(eventPlan(event).key)) {
+    return NextResponse.json({ error: "Keeping camera details is part of Klik Premium and Venue." }, { status: 403 });
   }
 
   const clientFieldsRequested =

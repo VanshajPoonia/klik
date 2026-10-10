@@ -59,6 +59,7 @@ const row: Event = {
   leaderboardEnabled: false,
   showOnProfile: false,
   guestLanguage: "auto",
+  keepPhotoDetails: false,
 };
 
 /**
@@ -134,6 +135,8 @@ const WITHHELD: Record<string, string> = {
   showOnProfile: "host configuration for their public profile",
   // TRS-3. The server picks the language and sends the words, not the setting.
   guestLanguage: "decides what the server sends, never needed raw",
+  // MED-8. Applies to the team's own uploads; guests are never told.
+  keepPhotoDetails: "host configuration for the team's uploads",
 };
 
 describe("toPublicEvent", () => {

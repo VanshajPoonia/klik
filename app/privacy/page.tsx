@@ -120,6 +120,11 @@ export default function PrivacyPage() {
         person who filmed it. The one thing we deliberately keep is the time a photo or video was
         taken, because galleries are ordered by it. We never keep the location.
       </p>
+      <p>
+        One exception, for professional photographers: a host on Klik Premium or Venue can choose to
+        keep the camera details (camera, lens, settings, copyright) on JPEG photos their own team
+        uploads. Even then the location is removed, and guests&rsquo; photos are always re-encoded.
+      </p>
 
       <h3>We do not analyse faces</h3>
       <p>

@@ -483,6 +483,14 @@ And **billing after the sale**, three small habits and one setting:
 - [ ] Set STRIPE_BILLING_PORTAL_URL in Vercel
 - [ ] Turned on Stripe's failed-payment emails and Smart Retries
 
+And one setting for photographers: **Keep camera details on the team's photos**, in a
+Premium or Venue event's **Settings**. With it on, JPEGs the team uploads keep the camera,
+lens, settings and copyright (and are not shrunk), and the location is still removed. The
+Privacy Policy gained a paragraph saying so. Try it with one photo from a real camera and
+check the details in your computer's file info after downloading it.
+
+- [ ] Uploaded a camera JPEG with the setting on and saw its details kept, location gone
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

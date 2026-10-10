@@ -59,6 +59,8 @@ export interface QueuedUpload {
   challengeId: string | null;
   /** MED-10: a photographer's upload, to be stored as a watermarked proof. Photos only. */
   proof?: boolean;
+  /** MED-8: a team JPEG sent as shot, so its camera details survive; the server removes the location. */
+  keepOriginal?: boolean;
 
   /** Progress that survives the page closing. */
   sent: SentProgress;
@@ -119,7 +121,7 @@ export interface NewUpload {
 export function newQueuedUpload(
   id: string,
   upload: NewUpload,
-  context: { eventId: string; slug: string; albumId: string | null; maxVideoSeconds: number; proof?: boolean },
+  context: { eventId: string; slug: string; albumId: string | null; maxVideoSeconds: number; proof?: boolean; keepDetails?: boolean },
   now = Date.now(),
 ): QueuedUpload {
   const kind = upload.file.type.startsWith("video/") ? "video" : "photo";
@@ -145,6 +147,8 @@ export function newQueuedUpload(
     albumId: context.albumId,
     challengeId: upload.challengeId ?? null,
     proof: Boolean(context.proof) && kind === "photo",
+    // A proof is re-encoded to stamp it, so there are no details to keep.
+    keepOriginal: Boolean(context.keepDetails) && !context.proof && upload.file.type === "image/jpeg",
     sent: { ...EMPTY_PROGRESS },
     tries: 0,
     serverFailures: 0,

@@ -67,6 +67,8 @@ export interface QueueContext {
   maxVideoSeconds: number;
   /** MED-10: send photos as watermarked proofs. */
   proof?: boolean;
+  /** MED-8: the team's JPEGs go up as shot, for the event's "keep camera details". */
+  keepDetails?: boolean;
 }
 
 export interface AddedEvent {

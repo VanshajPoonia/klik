@@ -43,6 +43,7 @@ import { mediaContentPath } from "@/lib/media-delivery";
 import { toGalleryMedia } from "@/lib/gallery-media";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { canUseAlbums, canUseProofs } from "@/lib/plans";
+import { stripJpegLocation } from "@/lib/exif-scrub";
 import { getWatermark, isLockedProof, type Watermark } from "@/lib/proofs";
 import { makeProof, readStoredObject } from "@/lib/proof-stamp";
 
@@ -76,6 +77,18 @@ const registerSchema = z.object({
   // MED-10: a photographer on the team asking for this to be a watermarked proof.
   proof: z.boolean().optional(),
 });
+
+/** The size a photo is shown at, turned upright, without decoding it. */
+async function displayedSize(buffer: Buffer): Promise<{ width: number; height: number } | null> {
+  try {
+    const sharp = (await import("sharp")).default;
+    const meta = await sharp(buffer, { failOn: "none" }).metadata();
+    if (!meta.width || !meta.height) return null;
+    return (meta.orientation ?? 1) >= 5 ? { width: meta.height, height: meta.width } : { width: meta.width, height: meta.height };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Re-encodes a photo into the bytes we are willing to store, or returns null
@@ -465,64 +478,90 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     // capture time still exists on the server. See lib/exif.ts.
     capturedAt = capturedAt ?? readCaptureTime(original);
 
-    let decoded = original;
-    // sharp's bundled libheif can decode AVIF but not HEIC/HEIF (the format
-    // iPhones shoot by default), so those need converting to JPEG first.
-    if (input.mimeType === "image/heic" || input.mimeType === "image/heif") {
+    // MED-8: a host who keeps camera details keeps them on the team's JPEGs.
+    // The location is removed in place and nothing else changes; a file the
+    // scrubber cannot walk is re-encoded below, like every other photo.
+    const kept =
+      viewer.ownerSession && event.keepPhotoDetails && canUseProofs(plan.key) && !watermark && input.mimeType === "image/jpeg"
+        ? stripJpegLocation(original)
+        : null;
+    if (kept) {
+      const dimensions = await displayedSize(kept.data);
       try {
-        decoded = await heicConvert({ buffer: original, format: "JPEG", quality: 1 });
+        await r2.send(
+          new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: input.pathname, Body: kept.data, ContentType: "image/jpeg" }),
+        );
       } catch (error) {
-        reportError("upload.heic_convert_failed", error);
+        reportError("upload.store_failed", error);
+        await deleteBlobs([input.pathname]).catch(() => {});
+        return NextResponse.json({ error: "Upload could not be completed", code: "upload_failed" }, { status: 500 });
+      }
+      sizeBytes = kept.data.byteLength;
+      storedPhoto = kept.data;
+      serverThumbnail = await renderThumbnail(kept.data);
+      storedMimeType = "image/jpeg";
+      width = dimensions?.width ?? width;
+      height = dimensions?.height ?? height;
+    } else {
+      let decoded = original;
+      // sharp's bundled libheif can decode AVIF but not HEIC/HEIF (the format
+      // iPhones shoot by default), so those need converting to JPEG first.
+      if (input.mimeType === "image/heic" || input.mimeType === "image/heif") {
+        try {
+          decoded = await heicConvert({ buffer: original, format: "JPEG", quality: 1 });
+        } catch (error) {
+          reportError("upload.heic_convert_failed", error);
+          await deleteBlobs([input.pathname]).catch(() => {});
+          return NextResponse.json(
+            { error: "That photo could not be processed. Try saving it as a JPEG first.", code: "photo_unprocessable" },
+            { status: 422 },
+          );
+        }
+      }
+
+      const sanitized = await sanitizePhoto(decoded);
+
+      // This used to fall through to "store the original untouched", which was
+      // the wrong default in a way that only showed up when something broke: the
+      // bytes a camera produces carry GPS coordinates, a device serial and often
+      // the owner's name, and a gallery link is shareable. Rejecting a photo we
+      // cannot sanitise is a worse upload experience and a much better privacy
+      // guarantee, and it keeps one rule true everywhere: we store only bytes we
+      // produced ourselves.
+      if (!sanitized) {
         await deleteBlobs([input.pathname]).catch(() => {});
         return NextResponse.json(
           { error: "That photo could not be processed. Try saving it as a JPEG first.", code: "photo_unprocessable" },
           { status: 422 },
         );
       }
+
+      try {
+        await r2.send(
+          new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Key: input.pathname,
+            Body: sanitized.data,
+            ContentType: "image/jpeg",
+          }),
+        );
+      } catch (error) {
+        // The original is still sitting at this key, so there is no version of
+        // this that ends with a usable row. Remove it rather than record a
+        // pointer to bytes we decided not to keep.
+        reportError("upload.store_failed", error);
+        await deleteBlobs([input.pathname]).catch(() => {});
+        return NextResponse.json({ error: "Upload could not be completed", code: "upload_failed" }, { status: 500 });
+      }
+
+      sizeBytes = sanitized.data.byteLength;
+      storedPhoto = sanitized.data;
+      // A proof's tile is made from the watermarked copy below, never from these.
+      serverThumbnail = watermark ? null : await renderThumbnail(sanitized.data);
+      storedMimeType = "image/jpeg";
+      width = sanitized.info.width;
+      height = sanitized.info.height;
     }
-
-    const sanitized = await sanitizePhoto(decoded);
-
-    // This used to fall through to "store the original untouched", which was
-    // the wrong default in a way that only showed up when something broke: the
-    // bytes a camera produces carry GPS coordinates, a device serial and often
-    // the owner's name, and a gallery link is shareable. Rejecting a photo we
-    // cannot sanitise is a worse upload experience and a much better privacy
-    // guarantee, and it keeps one rule true everywhere: we store only bytes we
-    // produced ourselves.
-    if (!sanitized) {
-      await deleteBlobs([input.pathname]).catch(() => {});
-      return NextResponse.json(
-        { error: "That photo could not be processed. Try saving it as a JPEG first.", code: "photo_unprocessable" },
-        { status: 422 },
-      );
-    }
-
-    try {
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: process.env.R2_BUCKET_NAME,
-          Key: input.pathname,
-          Body: sanitized.data,
-          ContentType: "image/jpeg",
-        }),
-      );
-    } catch (error) {
-      // The original is still sitting at this key, so there is no version of
-      // this that ends with a usable row. Remove it rather than record a
-      // pointer to bytes we decided not to keep.
-      reportError("upload.store_failed", error);
-      await deleteBlobs([input.pathname]).catch(() => {});
-      return NextResponse.json({ error: "Upload could not be completed", code: "upload_failed" }, { status: 500 });
-    }
-
-    sizeBytes = sanitized.data.byteLength;
-    storedPhoto = sanitized.data;
-    // A proof's tile is made from the watermarked copy below, never from these.
-    serverThumbnail = watermark ? null : await renderThumbnail(sanitized.data);
-    storedMimeType = "image/jpeg";
-    width = sanitized.info.width;
-    height = sanitized.info.height;
   }
 
   // CAM-4: spend one shot from the guest's roll, or refuse. Conditional, so two

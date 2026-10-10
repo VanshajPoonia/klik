@@ -351,6 +351,8 @@ export const events = pgTable(
     showOnProfile: boolean("show_on_profile").notNull().default(false),
     // TRS-3: 'auto' follows each guest's browser. See lib/i18n/locale.ts.
     guestLanguage: text("guest_language").$type<"auto" | "en" | "es">().notNull().default("auto"),
+    // MED-8: the team's photos keep camera details, never location. lib/exif-scrub.ts.
+    keepPhotoDetails: boolean("keep_photo_details").notNull().default(false),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );

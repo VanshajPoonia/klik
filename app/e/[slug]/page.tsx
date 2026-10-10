@@ -265,6 +265,7 @@ export default async function GuestEventPage({
       event={publicEvent}
       proofs={proofs}
       referralHref={host ? `/r/${host.code}` : null}
+      keepPhotoDetails={isOwner && event.keepPhotoDetails && canUseProofs(plan.key)}
       isOwner={isOwner}
       initialMedia={initialMedia}
       syncedAt={syncedAt}

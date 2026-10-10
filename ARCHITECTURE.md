@@ -344,6 +344,8 @@ Any AI that needs a model. Error tracking beyond structured logging and email al
 
 **Billing after the sale, 2026-10-10 (PAY-5, PAY-8, ADM-2).** `BILLING.md` "Billing after the sale" is the description. In code: `entitlements.amount_cents` and `grace_started_at` (`drizzle/0043_grant_payments.sql`), `lib/billing-grace.ts` (start, clear, and the `notify.grace` job, which compares the grace's start before sending so a cleared or restarted grace stays quiet), `lib/revenue.ts` (pure), `/dashboard/billing` and `/admin/revenue`. A grace lapses through the existing daily `entitlements.reconcile`, so up to a day after its end date.
 
+**Keeping camera details, 2026-10-10 (MED-8).** `events.keep_photo_details`. When it is on and the uploader is the team, a JPEG skips the browser's compression (`keepOriginal` on the queue item) and registration calls `stripJpegLocation` instead of `sanitizePhoto`, storing the original with only its location zeroed; `null` from the scrubber falls back to re-encoding. This is the one path that stores bytes Klik did not produce, so anything that changes it needs `lib/exif-scrub.test.ts` and the MED-8 cases in `test/proofs.dbtest.ts` to keep passing.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

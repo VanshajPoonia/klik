@@ -13,6 +13,7 @@ import { endOfDayIso, toDateInputValue } from "@/lib/dates";
 import type { OrganizerEvent } from "@/lib/events";
 import type { Media, VenueClient } from "@/lib/schema";
 import { galleryPalette } from "@/lib/color";
+import { canUseProofs } from "@/lib/plans";
 
 const COVER_CHOICES = 30;
 
@@ -118,6 +119,9 @@ export function EventSettingsForm({
   const [momentsEnabled, setMomentsEnabled] = useState(event.momentsEnabled);
   const [showOnProfile, setShowOnProfile] = useState(event.showOnProfile);
   const [guestLanguage, setGuestLanguage] = useState(event.guestLanguage);
+  const [keepPhotoDetails, setKeepPhotoDetails] = useState(event.keepPhotoDetails);
+  // MED-8: for the plans with a photographer on the team.
+  const canKeepPhotoDetails = canUseProofs(event.planKey ?? "event");
   const [expiresAt, setExpiresAt] = useState(toDateInputValue(event.expiresAt));
   const [clientName, setClientName] = useState(event.clientName ?? "");
   const [clientEmail, setClientEmail] = useState(event.clientEmail ?? "");
@@ -182,6 +186,7 @@ export function EventSettingsForm({
           commentsEnabled,
           momentsEnabled,
           guestLanguage,
+          keepPhotoDetails: canKeepPhotoDetails ? keepPhotoDetails : undefined,
           // GRW-4: the owner's choice alone; a manager's save leaves it as it is.
           showOnProfile: profile ? showOnProfile && visibility !== "private" : undefined,
           expiresAt: endOfDayIso(expiresAt),
@@ -474,6 +479,15 @@ export function EventSettingsForm({
         >
           Show guests the gallery in moments
         </Checkbox>
+        {canKeepPhotoDetails && (
+          <Checkbox
+            checked={keepPhotoDetails}
+            onChange={(change) => setKeepPhotoDetails(change.target.checked)}
+            hint="For a photographer on your team: their JPEGs keep the camera, lens, settings and copyright, and are not shrunk on the way up. Where a photo was taken is always removed. Guests' photos are unchanged."
+          >
+            Keep camera details on the team&apos;s photos
+          </Checkbox>
+        )}
         {/* TRS-3: guests can still pick their own at the bottom of the gallery. */}
         <Field label="Language guests see" hint="Guests can still switch at the bottom of the gallery.">
           <select

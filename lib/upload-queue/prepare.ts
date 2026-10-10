@@ -14,7 +14,7 @@ import type { QueuedUpload } from "./record";
  * a page has already prepared.
  */
 export async function prepareUpload(
-  item: Pick<QueuedUpload, "file" | "kind" | "mimeType" | "preparedSize" | "capturedAt" | "maxVideoSeconds">,
+  item: Pick<QueuedUpload, "file" | "kind" | "mimeType" | "preparedSize" | "capturedAt" | "maxVideoSeconds" | "keepOriginal">,
 ): Promise<Partial<QueuedUpload>> {
   const { file, preparedSize } = item;
   const isPhoto = item.kind === "photo";
@@ -39,7 +39,9 @@ export async function prepareUpload(
 
   // Falls back to the original file (and the server's own compression) if the
   // browser cannot decode it, e.g. HEIC outside Safari.
-  const compressed = isPhoto && !preparedSize ? await compressImageForUpload(file) : null;
+  // MED-8: kept as shot when the host keeps camera details; the server removes
+  // the location and nothing else, and makes the sizes itself.
+  const compressed = isPhoto && !preparedSize && !item.keepOriginal ? await compressImageForUpload(file) : null;
 
   // A still and the duration, pulled out here. The still lets every viewer's
   // grid load an image instead of reaching into a 200 MB file for its moov
@@ -60,7 +62,7 @@ export async function prepareUpload(
   // The grid tile, made from pixels this device has already decoded. A photo
   // the browser could not decode has no source, and the server makes its
   // thumbnail instead.
-  const thumbSource = isPhoto ? (compressed?.blob ?? (preparedSize ? file : null)) : (probe?.poster ?? null);
+  const thumbSource = isPhoto ? (compressed?.blob ?? (preparedSize || item.keepOriginal ? file : null)) : (probe?.poster ?? null);
   const thumb = thumbSource ? await makeThumbnail(thumbSource) : null;
 
   return {

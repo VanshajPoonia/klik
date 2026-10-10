@@ -147,6 +147,7 @@ export function GuestGallery({
   linkedMissing = false,
   board: initialBoard = null,
   proofs = null,
+  keepPhotoDetails = false,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -180,6 +181,8 @@ export function GuestGallery({
    * watermark's words, or null when they have not made one yet.
    */
   proofs?: { label: string | null } | null;
+  /** MED-8: the team's JPEGs go up as shot, for the host's "keep camera details". */
+  keepPhotoDetails?: boolean;
 }) {
   // TRS-3: the guest's language, chosen by the page.
   const { t, locale } = useGuestCopy();
@@ -414,7 +417,14 @@ export function GuestGallery({
   }, [proofKey, proofs?.label]);
   const sendingProofs = Boolean(proofs?.label) && proofMode;
   const uploads = useUploadQueue(
-    { eventId: event.id, slug: event.slug, albumId: uploadAlbumId || null, maxVideoSeconds, proof: sendingProofs },
+    {
+      eventId: event.id,
+      slug: event.slug,
+      albumId: uploadAlbumId || null,
+      maxVideoSeconds,
+      proof: sendingProofs,
+      keepDetails: keepPhotoDetails && isOwner,
+    },
     onUploaded,
   );
   const { enqueue, clear: clearUploads } = uploads;

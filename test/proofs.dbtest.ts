@@ -284,3 +284,55 @@ describe("MED-10 releasing", () => {
     expect((await releaseAs({ id: admin, role: "superadmin" }, event.id)).body.released).toBe(1);
   });
 });
+
+describe("MED-8 keeping camera details on the team's photos", () => {
+  async function cameraJpeg() {
+    return sharp({ create: { width: 120, height: 80, channels: 3, background: "#456" } })
+      .withExif({
+        IFD0: { Make: "Canon", Model: "EOS R5" },
+        IFD3: { GPSLatitudeRef: "N", GPSLatitude: "40/1 26/1 46/1", GPSLongitudeRef: "W", GPSLongitude: "79/1 58/1 56/1" },
+      })
+      .jpeg()
+      .toBuffer();
+  }
+
+  async function sendAsShot(event: { id: string; slug: string }, mediaId: string) {
+    const bytes = await cameraJpeg();
+    const pathname = blobPathnameFor(event.id, mediaId, "jpg");
+    bucket.set(pathname, bytes);
+    const response = await register(
+      post(`/api/e/${event.slug}/media`, { mediaId, pathname, mimeType: "image/jpeg", sizeBytes: bytes.length, clientCompressed: false }),
+      { params: Promise.resolve({ slug: event.slug }) },
+    );
+    expect(response.status).toBe(201);
+    return bucket.get(pathname)!;
+  }
+
+  it("keeps the camera and removes the location when the host has it on", async () => {
+    const { owner, event } = await setup();
+    await testDb.update(events).set({ keepPhotoDetails: true }).where(eq(events.id, event.id));
+    const [fresh] = await testDb.select().from(events).where(eq(events.id, event.id));
+    viewer.ownerSession = { user: { id: owner } };
+
+    const stored = await sendAsShot(fresh, "keep_details_01");
+    const exif = (await sharp(stored).metadata()).exif!;
+    expect(exif.toString("latin1")).toContain("EOS R5");
+    expect(stored.includes(Buffer.from([0x28, 0, 0, 0, 1, 0, 0, 0]))).toBe(false);
+    const [row] = await testDb.select().from(media).where(eq(media.id, "keep_details_01"));
+    expect([row.width, row.height]).toEqual([120, 80]);
+  });
+
+  it("re-encodes a guest's photo, and the team's when the setting is off, so nothing is kept", async () => {
+    const { owner, event } = await setup();
+    await testDb.update(events).set({ keepPhotoDetails: true }).where(eq(events.id, event.id));
+    viewer.guestId = await makeGuest(event.id);
+    const fromGuest = await sendAsShot(event, "keep_details_02");
+    expect((await sharp(fromGuest).metadata()).exif).toBeUndefined();
+
+    await testDb.update(events).set({ keepPhotoDetails: false }).where(eq(events.id, event.id));
+    viewer.guestId = null;
+    viewer.ownerSession = { user: { id: owner } };
+    const offForTeam = await sendAsShot(event, "keep_details_03");
+    expect((await sharp(offForTeam).metadata()).exif).toBeUndefined();
+  });
+});
