@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uploadMediaId } from "@/lib/media-id";
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
@@ -17,7 +18,7 @@ import { reportError } from "@/lib/observability";
 
 const requestSchema = z.object({
   eventId: z.string().min(1),
-  mediaId: z.string().min(10).max(64).regex(/^[A-Za-z0-9_-]+$/),
+  mediaId: uploadMediaId,
   mimeType: z.string().min(1),
   sizeBytes: z.number().int().positive(),
   uploadId: z.string().min(1).max(1024),

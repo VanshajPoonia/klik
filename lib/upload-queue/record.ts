@@ -57,6 +57,8 @@ export interface QueuedUpload {
 
   albumId: string | null;
   challengeId: string | null;
+  /** MED-10: a photographer's upload, to be stored as a watermarked proof. Photos only. */
+  proof?: boolean;
 
   /** Progress that survives the page closing. */
   sent: SentProgress;
@@ -105,16 +107,17 @@ export interface NewUpload {
 export function newQueuedUpload(
   id: string,
   upload: NewUpload,
-  context: { eventId: string; slug: string; albumId: string | null; maxVideoSeconds: number },
+  context: { eventId: string; slug: string; albumId: string | null; maxVideoSeconds: number; proof?: boolean },
   now = Date.now(),
 ): QueuedUpload {
+  const kind = upload.file.type.startsWith("video/") ? "video" : "photo";
   return {
     id,
     eventId: context.eventId,
     slug: context.slug,
     addedAt: now,
     name: upload.file.name || "Photo",
-    kind: upload.file.type.startsWith("video/") ? "video" : "photo",
+    kind,
     file: upload.file,
     mimeType: upload.file.type,
     ready: false,
@@ -129,6 +132,7 @@ export function newQueuedUpload(
     maxVideoSeconds: context.maxVideoSeconds,
     albumId: context.albumId,
     challengeId: upload.challengeId ?? null,
+    proof: Boolean(context.proof) && kind === "photo",
     sent: { ...EMPTY_PROGRESS },
     tries: 0,
     serverFailures: 0,

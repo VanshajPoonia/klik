@@ -153,6 +153,14 @@ export function canUseSlideshow(planKey: PlanKey): boolean {
 }
 
 /** VEN-2: a tablet at the venue that only takes photos. Same tiers as the live display. */
+/**
+ * MED-10: watermarked proofs, for a photographer on the event's team. On the
+ * plans that have a team at all.
+ */
+export function canUseProofs(planKey: PlanKey): boolean {
+  return planKey === "premium" || planKey === "venue";
+}
+
 export function canUseKiosk(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }

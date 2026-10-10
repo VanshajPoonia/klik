@@ -49,6 +49,9 @@ const nextConfig: NextConfig = {
     "/api/events/[id]/qr": ["./node_modules/@img/**"],
     "/api/venue/qr": ["./node_modules/@img/**"],
     "/api/cron/jobs": ["./node_modules/@img/**"],
+    // MED-10: the photographer's watermark stamp and logo are checked and
+    // re-encoded with sharp.
+    "/api/me/watermark": ["./node_modules/@img/**"],
   },
 };
 

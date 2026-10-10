@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Download, X, MonitorPlay } from "lucide-react";
+import { ArrowLeft, Check, Download, X, MonitorPlay, Stamp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MediaGrid, type DashboardMedia } from "@/components/dashboard/media-grid";
@@ -404,6 +405,46 @@ export function EventDashboard({
     }
   }
 
+  // MED-10: the photographer hands over clean photos. Batches until done, for
+  // "release all", because the server releases a few hundred per request.
+  const myProofs = mediaItems.filter((item) => item.proof === "mine");
+  async function releaseProofs(ids: string[] | null) {
+    const count = ids?.length ?? myProofs.length;
+    if (
+      !window.confirm(
+        `Release ${count === 1 ? "this proof" : `${count} proofs`} without the watermark? Everyone who can see ${count === 1 ? "it" : "them"}, the event's owner included, will get the clean photo. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBulkBusy(true);
+    setMediaError(null);
+    const released = new Set<string>();
+    try {
+      for (let round = 0; round < 50; round += 1) {
+        const response = await fetch(`/api/events/${event.id}/proofs/release`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ids ? { mediaIds: ids } : {}),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.error ?? "Could not release the proofs.");
+        for (const id of (data?.ids ?? []) as string[]) released.add(id);
+        if (ids || !data?.more) break;
+      }
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "Could not release the proofs.");
+    } finally {
+      setBulkBusy(false);
+      if (released.size > 0) {
+        setMediaItems((items) => items.map((item) => (released.has(item.id) ? { ...item, proof: null } : item)));
+        clearSelection();
+        // The clean photos and their new tiles come from the server.
+        router.refresh();
+      }
+    }
+  }
+
   /** MED-4: the host picks a folder's cover from what is in it. */
   async function setFolderCover(folderId: string, mediaId: string) {
     setMediaError(null);
@@ -579,6 +620,26 @@ export function EventDashboard({
             )}
             {canModerateComments && (
               <ReportedComments slug={event.slug} rows={reportedComments} onOpenMedia={setLightboxId} />
+            )}
+            {/* MED-10: only the photographer sees this, about their own proofs. */}
+            {myProofs.length > 0 && (
+              <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-canvas-line bg-canvas-raised px-4 py-3">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <Stamp className="mt-0.5 h-4 w-4 shrink-0 text-volt" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-paper">
+                      {myProofs.length === 1 ? "1 of your proofs is" : `${myProofs.length} of your proofs are`} watermarked
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      You see them clean here. Everyone else, the event&apos;s owner included, sees your watermark
+                      until you release them. Select some to release a few.
+                    </p>
+                  </div>
+                </div>
+                <Button size="sm" variant="ghost" disabled={bulkBusy} onClick={() => void releaseProofs(null)}>
+                  Release all
+                </Button>
+              </section>
             )}
             {pending.length > 0 && (
               <section>
@@ -826,6 +887,9 @@ export function EventDashboard({
                   void runBulk({ action: "delete" }, ids);
                 }
               } else if (value === "share") setShareTarget({ scope: "selection", mediaIds: ids });
+              else if (value === "release") {
+                void releaseProofs(selectedItems.filter((item) => item.proof === "mine").map((item) => item.id));
+              }
               else if (value === "reject") void runBulk({ action: "reject" }, ids);
               else if (value === "private" || value === "gallery" || value === "link") {
                 void runBulk({ action: "visibility", visibility: value }, ids);
@@ -840,6 +904,11 @@ export function EventDashboard({
               {bulkBusy ? "Working…" : "Actions"}
             </option>
             {canManageShares && <option value="share">Make a share link</option>}
+            {selectedItems.some((item) => item.proof === "mine") && (
+              <option value="release">
+                Release clean photos ({selectedItems.filter((item) => item.proof === "mine").length})
+              </option>
+            )}
             <option value="private">Hide from guests</option>
             <option value="gallery">Show in the gallery</option>
             <option value="link">Link only</option>
@@ -944,7 +1013,8 @@ export function EventDashboard({
           // CAM-2: the team edits any photo; the copy keeps the original's
           // folder, time and visibility, and the original stays as it was.
           edit={{
-            canEdit: () => true,
+            // MED-10: someone else's locked proof is the photographer's to edit.
+            canEdit: (item) => item.proof !== "locked",
             save: async (original, edited) => {
               const registered = await uploadToGallery({
                 eventId: event.id,

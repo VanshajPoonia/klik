@@ -21,6 +21,7 @@ import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
 import { CommentButton, CommentsSheet, HeartButton } from "@/components/guest/media-social";
 import { MediaSharePanel } from "@/components/guest/media-share-panel";
 import { fetchMediaBlob } from "@/lib/media-share";
+import { ProofNote } from "@/components/guest/proof-note";
 
 // CAM-2. A few hundred kilobytes that only someone editing should download,
 // and it reaches for `window` the moment it loads.
@@ -45,6 +46,8 @@ export interface LightboxItem {
   /** CAM-3: a link to it only helps when others in the gallery can see it. */
   status?: "pending" | "approved" | "rejected";
   visibility?: "gallery" | "private" | "link";
+  /** MED-10: a watermarked proof. The dashboard says whose; guests get a boolean. */
+  proof?: boolean | "mine" | "locked" | null;
 }
 
 /** CAM-2: editing a photo, which saves an edited copy and leaves the original. */
@@ -507,6 +510,11 @@ export function Lightbox({
             className="touch-manipulation object-contain"
             priority
           />
+        )}
+
+        {/* MED-10. Not for the photographer looking at their own, clean. */}
+        {item.kind === "photo" && slug && (item.proof === true || item.proof === "locked") && !commentsOpen && !sharingOpen && reportingId !== item.id && (
+          <ProofNote key={item.id} slug={slug} mediaId={item.id} />
         )}
 
         {burst?.id === item.id && (

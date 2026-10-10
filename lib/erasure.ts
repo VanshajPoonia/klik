@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "./db";
-import { erasureLog, events, guests, media, mediaComments, users, eventInvites } from "./schema";
+import { erasureLog, events, guests, media, mediaComments, users, eventInvites, watermarks } from "./schema";
 import { deleteBlobs } from "./storage";
 import { MEDIA_OBJECT_COLUMNS, mediaObjectKeys, type MediaObjectRow } from "./media-objects";
 import { deleteEventExports, deleteExportsContaining } from "./exports";
@@ -287,6 +287,17 @@ export async function eraseUser(
   if (account?.email) {
     await db.delete(eventInvites).where(eq(eventInvites.email, account.email.trim().toLowerCase()));
   }
+
+  // MED-10: their watermark's stamp and logo. The row goes with the account;
+  // the objects are named only by it, so they go first. Proofs they made at
+  // other people's events stay watermarked: those belong to the event, and
+  // leaving Klik is not the same as handing the clean photos over.
+  const [mark] = await db
+    .select({ stampKey: watermarks.stampKey, logoKey: watermarks.logoKey })
+    .from(watermarks)
+    .where(eq(watermarks.userId, userId))
+    .limit(1);
+  if (mark) await deleteBlobs([mark.stampKey, ...(mark.logoKey ? [mark.logoKey] : [])]);
 
   await db.delete(users).where(eq(users.id, userId));
   await recordErasure("user", userId, total, requestedBy, reason);

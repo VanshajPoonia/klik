@@ -8,6 +8,7 @@ import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { r2 } from "@/lib/storage";
 import { canViewMedia, videoHeldBack } from "@/lib/media-access";
+import { cleanOriginalFor } from "@/lib/proof-access";
 
 export async function GET(
   request: Request,
@@ -100,7 +101,8 @@ export async function GET(
     r2,
     new GetObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
-      Key: item.blobPathname,
+      // MED-10: clean for the photographer alone while a proof is locked.
+      Key: cleanOriginalFor(item, viewer.ownerSession?.user?.id) ?? item.blobPathname,
       ResponseContentType: item.mimeType,
       ResponseContentDisposition: "inline",
     }),

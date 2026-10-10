@@ -11,6 +11,7 @@ import {
   Play,
   Share2,
   ShieldAlert,
+  Stamp,
   Trash2,
   X,
 } from "lucide-react";
@@ -22,6 +23,8 @@ import type { SignedMediaUrls } from "@/lib/media-urls";
 export type DashboardMedia = Media & Partial<SignedMediaUrls> & {
   /** Open reports from guests (TRS-1). Absent or 0 when there are none. */
   openReports?: number;
+  /** MED-10: a watermarked proof, and whether it is the viewer's own to release. */
+  proof?: "mine" | "locked" | null;
 };
 import { VISIBILITY_OPTIONS } from "@/lib/media-access";
 import { flattenFolders, type FolderNode } from "@/lib/folder-tree";
@@ -180,6 +183,16 @@ export function MediaGrid({
                 <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-paper backdrop-blur">
                   <badge.Icon className="h-3 w-3" aria-hidden="true" />
                   {badge.label}
+                </span>
+              )}
+              {/* MED-10. Under the visibility badge when there is one. */}
+              {item.proof && !selectionMode && (
+                <span
+                  className={`absolute left-2 ${badge ? "top-9" : "top-2"} flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-paper backdrop-blur`}
+                  title={item.proof === "mine" ? "Your proof. Guests see it watermarked until you release it." : "A watermarked proof. Only its photographer can release it."}
+                >
+                  <Stamp className="h-3 w-3" aria-hidden="true" />
+                  {item.proof === "mine" ? "Your proof" : "Proof"}
                 </span>
               )}
               {/* MED-9. What guests made of it, where the selection tick goes

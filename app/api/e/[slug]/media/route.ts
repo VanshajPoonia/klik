@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import { uploadMediaId } from "@/lib/media-id";
 import { and, eq, isNull } from "drizzle-orm";
 import heicConvert from "heic-convert";
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -41,14 +42,16 @@ import { log, reportError } from "@/lib/observability";
 import { mediaContentPath } from "@/lib/media-delivery";
 import { toGalleryMedia } from "@/lib/gallery-media";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
-import { canUseAlbums } from "@/lib/plans";
+import { canUseAlbums, canUseProofs } from "@/lib/plans";
+import { getWatermark, isLockedProof, type Watermark } from "@/lib/proofs";
+import { makeProof, readStoredObject } from "@/lib/proof-stamp";
 
 // sharp/heic-convert need native/WASM Node bindings, never the edge runtime.
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const registerSchema = z.object({
-  mediaId: z.string().min(10).max(64).regex(/^[A-Za-z0-9_-]+$/),
+  mediaId: uploadMediaId,
   pathname: z.string().min(1),
   mimeType: z.string().min(1),
   sizeBytes: z.number().int().positive(),
@@ -70,6 +73,8 @@ const registerSchema = z.object({
   // compression pass destroyed it. Zone-less by nature, so it is carried as a
   // plain string and range-checked rather than parsed into an instant here.
   capturedAt: z.string().max(19).optional(),
+  // MED-10: a photographer on the team asking for this to be a watermarked proof.
+  proof: z.boolean().optional(),
 });
 
 /**
@@ -259,6 +264,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   let derivedFrom: typeof media.$inferSelect | null = null;
   if (input.derivedFromId) {
     const editable = await editableOriginal(event, input.derivedFromId, {
+      userId: viewer.ownerSession?.user?.id ?? null,
       isManager: Boolean(viewer.ownerSession),
       guestId: viewer.guestId,
       kioskId: viewer.kioskId,
@@ -282,6 +288,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       input.albumId = live?.id ?? null;
     }
   }
+  // MED-10: is this a proof, and whose? A copy edited from a locked proof is
+  // one too, by the same photographer, or the editor would be a way round the
+  // watermark. Otherwise only someone on the team asks for one.
+  let proofOwner: string | null = null;
+  if (derivedFrom && isLockedProof(derivedFrom)) {
+    proofOwner = derivedFrom.proofBy;
+  } else if (input.proof) {
+    const userId = viewer.ownerSession?.user?.id;
+    if (!userId) {
+      await deleteBlobs([input.pathname]).catch(() => {});
+      return NextResponse.json({ error: "Only the event's team can upload proofs." }, { status: 403 });
+    }
+    if (!canUseProofs(plan.key)) {
+      await deleteBlobs([input.pathname]).catch(() => {});
+      return NextResponse.json({ error: "Watermarked proofs are part of Klik Premium and Venue." }, { status: 403 });
+    }
+    proofOwner = userId;
+  }
+  let watermark: Watermark | null = null;
+  if (proofOwner || (derivedFrom && isLockedProof(derivedFrom))) {
+    watermark = proofOwner ? await getWatermark(proofOwner) : null;
+    if (!watermark) {
+      await deleteBlobs([input.pathname]).catch(() => {});
+      return NextResponse.json(
+        { error: "Set up your watermark on your account page before uploading proofs." },
+        { status: 422 },
+      );
+    }
+  }
+
   if (input.albumId) {
     if (!canUseAlbums(plan.key)) {
       return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
@@ -330,6 +366,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const kind = isVideoMime(input.mimeType) ? "video" : "photo";
+  if (watermark && kind === "video") {
+    await deleteBlobs([input.pathname]).catch(() => {});
+    return NextResponse.json(
+      { error: "Videos cannot be watermarked yet. Add videos with proofs turned off." },
+      { status: 422 },
+    );
+  }
 
   // Read the actual leading bytes. The mime allowlist upstream only checks what
   // the client *claimed*, and R2 signs Content-Type without enforcing it (SEC-9,
@@ -395,6 +438,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   // Set when the server re-encodes the photo below, which is also the cheapest
   // moment to make its thumbnail: the decoded pixels are already in memory.
   let serverThumbnail: Buffer | null = null;
+  // The stored photo's bytes, when this request already has them.
+  let storedPhoto: Buffer | null = null;
 
   if (kind === "photo" && !input.clientCompressed) {
     let original: Buffer<ArrayBufferLike>;
@@ -470,7 +515,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
 
     sizeBytes = sanitized.data.byteLength;
-    serverThumbnail = await renderThumbnail(sanitized.data);
+    storedPhoto = sanitized.data;
+    // A proof's tile is made from the watermarked copy below, never from these.
+    serverThumbnail = watermark ? null : await renderThumbnail(sanitized.data);
     storedMimeType = "image/jpeg";
     width = sanitized.info.width;
     height = sanitized.info.height;
@@ -524,6 +571,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
   }
 
+  // MED-10: stamped before the row exists, so there is never a moment when a
+  // proof's row names its clean original. The original stays where it was
+  // uploaded and is recorded only in `proof_original_pathname`.
+  let proof: Awaited<ReturnType<typeof makeProof>> | null = null;
+  if (watermark && kind === "photo") {
+    try {
+      proof = await makeProof({
+        eventId: event.id,
+        mediaId: input.mediaId,
+        photo: storedPhoto ?? (await readStoredObject(input.pathname)),
+        watermark,
+      });
+    } catch (error) {
+      // Kept, not deleted: the queue retries with the same file.
+      reportError("upload.proof_failed", error, { mediaId: input.mediaId });
+      return NextResponse.json({ error: "The watermark could not be added. Trying again." }, { status: 503 });
+    }
+    thumbPathname = proof.thumbPathname;
+    width = proof.width;
+    height = proof.height;
+  }
+
   // GRW-3: a challenge the host removed while this was uploading is dropped,
   // not fatal. A kiosk takes no part: it is not a guest who can win one.
   const challengeId = viewer.kioskId ? null : await liveChallengeId(event.id, input.challengeId);
@@ -541,7 +610,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       kind,
       status: event.moderation && !viewer.ownerSession ? "pending" : "approved",
       blobUrl,
-      blobPathname: input.pathname,
+      blobPathname: proof?.blobPathname ?? input.pathname,
+      proofBy: proof ? proofOwner : null,
+      proofOriginalPathname: proof ? input.pathname : null,
       contentHash: input.contentHash ?? null,
       mimeType: storedMimeType,
       sizeBytes,

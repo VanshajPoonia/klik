@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { nanoid } from "nanoid";
-import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, Play } from "lucide-react";
+import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, Play, Stamp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { isLightColor, readableOn } from "@/lib/color";
@@ -78,6 +78,8 @@ interface MediaItem {
   burstId?: string | null;
   /** GRW-3. The challenge it was taken for. */
   challengeId?: string | null;
+  /** MED-10. A watermarked proof. */
+  proof?: boolean;
 }
 
 interface PendingUpload {
@@ -142,6 +144,7 @@ export function GuestGallery({
   linked = null,
   linkedMissing = false,
   board: initialBoard = null,
+  proofs = null,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -168,6 +171,11 @@ export function GuestGallery({
   linkedMissing?: boolean;
   /** GRW-3: the host's photo challenges, their counts, and the leaderboard. */
   board?: ChallengeBoard | null;
+  /**
+   * MED-10: this team member may upload watermarked proofs. `label` is their
+   * watermark's words, or null when they have not made one yet.
+   */
+  proofs?: { label: string | null } | null;
 }) {
   // The server's count. What the guest sees also takes off shots still in the
   // upload queue on this phone, which the server has not heard of yet.
@@ -382,25 +390,51 @@ export function GuestGallery({
     },
     [applyChanges, disposable, isOwner],
   );
+  // MED-10: remembered per event on this device, off until switched on.
+  const proofKey = `klik_proofs_${event.id}`;
+  const [proofMode, setProofMode] = useState(false);
+  useEffect(() => {
+    if (!proofs?.label) return;
+    let saved = false;
+    try {
+      saved = window.localStorage.getItem(proofKey) === "1";
+    } catch {
+      // Storage blocked: it starts off each visit.
+    }
+    if (saved) {
+      const timer = window.setTimeout(() => setProofMode(true), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [proofKey, proofs?.label]);
+  const sendingProofs = Boolean(proofs?.label) && proofMode;
   const uploads = useUploadQueue(
-    { eventId: event.id, slug: event.slug, albumId: uploadAlbumId || null, maxVideoSeconds },
+    { eventId: event.id, slug: event.slug, albumId: uploadAlbumId || null, maxVideoSeconds, proof: sendingProofs },
     onUploaded,
   );
   const { enqueue, clear: clearUploads } = uploads;
   const shotsLeft = Math.max(0, shotsOnServer - uploads.items.filter((item) => item.status !== "refused").length);
 
   const uploadFiles = useCallback(
-    (picked: PendingUpload[]) => {
-      if (picked.length === 0) return;
+    (chosen: PendingUpload[]) => {
+      // MED-10: a video cannot carry a watermark yet, so it is not sent
+      // unmarked while proofs are on. Said, so it is not a silent drop.
+      const picked = sendingProofs ? chosen.filter((upload) => !upload.file.type.startsWith("video/")) : chosen;
+      const skippedVideos = chosen.length - picked.length;
+      if (picked.length === 0) {
+        if (skippedVideos > 0) setNotice("Videos cannot be watermarked yet. Turn proofs off to add videos.");
+        return;
+      }
       const batch = picked.slice(0, MAX_FILES_PER_PICK);
       setNotice(
         picked.length > batch.length
           ? `Added the first ${batch.length} of ${picked.length}. Pick the rest again once these are on their way.`
-          : null,
+          : skippedVideos > 0
+            ? `Left out ${skippedVideos === 1 ? "a video" : `${skippedVideos} videos`}: videos cannot be watermarked yet. Turn proofs off to add ${skippedVideos === 1 ? "it" : "them"}.`
+            : null,
       );
       void enqueue(batch).catch(() => setNotice("Those could not be added. Try picking them again."));
     },
-    [enqueue],
+    [enqueue, sendingProofs],
   );
 
   const handleFiles = useCallback(
@@ -704,6 +738,42 @@ export function GuestGallery({
           </div>
           {event.uploadsEnabled && (
             <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* MED-10: for a photographer on the team. */}
+              {proofs &&
+                (proofs.label ? (
+                  <button
+                    type="button"
+                    aria-pressed={proofMode}
+                    onClick={() => {
+                      const next = !proofMode;
+                      setProofMode(next);
+                      try {
+                        window.localStorage.setItem(proofKey, next ? "1" : "0");
+                      } catch {
+                        // Lasts this visit only.
+                      }
+                    }}
+                    title={
+                      proofMode
+                        ? "Photos you add now are stored as proofs with your watermark."
+                        : "Turn on to add photos as proofs with your watermark."
+                    }
+                    className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm transition-colors ${
+                      proofMode ? "border-volt bg-volt text-on-volt" : "border-canvas-line text-paper hover:border-paper/40"
+                    }`}
+                  >
+                    <Stamp className="h-4 w-4" aria-hidden="true" />
+                    {proofMode ? "Proofs on" : "Proofs off"}
+                  </button>
+                ) : (
+                  <a
+                    href="/dashboard/account#watermark"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line px-4 text-sm text-muted hover:text-paper"
+                  >
+                    <Stamp className="h-4 w-4" aria-hidden="true" />
+                    Set up proofs
+                  </a>
+                ))}
               {folders.length > 0 && (
                 <select
                   aria-label="Add to folder"
@@ -1207,7 +1277,9 @@ export function GuestGallery({
             disposable && !isOwner
               ? undefined
               : {
-                  canEdit: (item) => isOwner || Boolean(item.mine),
+                  // MED-10: a proof is edited from the dashboard, where its
+                  // photographer sees it clean, never from the watermark.
+                  canEdit: (item) => !item.proof && (isOwner || Boolean(item.mine)),
                   save: saveEdit,
                   removeOriginal: isOwner ? undefined : removeOriginal,
                   accent: event.accentColor,

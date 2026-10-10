@@ -33,6 +33,8 @@ export function toPublicMedia(
     momentId?: string | null;
     burstId?: string | null;
     challengeId?: string | null;
+    proofOriginalPathname?: string | null;
+    proofReleasedAt?: Date | null;
   },
   slug: string,
 ) {
@@ -62,6 +64,9 @@ export function toPublicMedia(
     burstId: item.burstId ?? null,
     // GRW-3. The challenge it was taken for, so a card can show its photos.
     challengeId: item.challengeId ?? null,
+    // MED-10. A watermarked proof, so the viewer can say whose and how to get
+    // the clean one. Never the photographer's identity: that is fetched.
+    proof: Boolean(item.proofOriginalPathname && !item.proofReleasedAt),
   };
 }
 

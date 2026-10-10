@@ -8,6 +8,7 @@ import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
 import { extensionForMime, r2 } from "@/lib/storage";
 import { canViewMedia, videoHeldBack } from "@/lib/media-access";
+import { cleanOriginalFor } from "@/lib/proof-access";
 
 function downloadFilename(slug: string, mimeType: string, mediaId: string) {
   const extension = extensionForMime(mimeType);
@@ -64,7 +65,9 @@ export async function GET(
 
   const command = new GetObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME,
-    Key: item.blobPathname,
+    // MED-10: the photographer downloads their own proof clean; everyone
+    // else, the event's owner included, gets the watermarked copy.
+    Key: cleanOriginalFor(item, viewer.ownerSession?.user?.id) ?? item.blobPathname,
     ResponseContentType: item.mimeType,
     ResponseContentDisposition: `attachment; filename="${downloadFilename(
       event.slug,

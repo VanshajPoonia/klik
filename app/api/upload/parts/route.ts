@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uploadMediaId } from "@/lib/media-id";
 import { ListPartsCommand, type Part } from "@aws-sdk/client-s3";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -15,7 +16,7 @@ import { signPartUrls, signStillSlots } from "@/lib/upload-slots";
 
 const requestSchema = z.object({
   eventId: z.string().min(1),
-  mediaId: z.string().min(10).max(64).regex(/^[A-Za-z0-9_-]+$/),
+  mediaId: uploadMediaId,
   mimeType: z.string().min(1),
   sizeBytes: z.number().int().positive(),
   uploadId: z.string().min(1).max(1024),

@@ -17,6 +17,8 @@ export const MEDIA_OBJECT_COLUMNS = {
   blobPathname: media.blobPathname,
   posterPathname: media.posterPathname,
   thumbPathname: media.thumbPathname,
+  // MED-10: a locked proof's clean original, which `blobPathname` does not name.
+  proofOriginalPathname: media.proofOriginalPathname,
 } as const;
 
 export type MediaObjectRow = {

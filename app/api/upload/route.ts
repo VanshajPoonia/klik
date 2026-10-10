@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { uploadMediaId } from "@/lib/media-id";
 import { CreateMultipartUploadCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, eq, isNull } from "drizzle-orm";
@@ -18,7 +19,7 @@ import { signPartUrls, signStillSlots } from "@/lib/upload-slots";
 
 const requestSchema = z.object({
   eventId: z.string().min(1),
-  mediaId: z.string().min(10).max(64).regex(/^[A-Za-z0-9_-]+$/),
+  mediaId: uploadMediaId,
   mimeType: z.string().min(1),
   sizeBytes: z.number().int().positive(),
   /** Size of the poster still, when the client extracted one for a video. */

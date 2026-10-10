@@ -14,6 +14,8 @@ import { UsernameForm } from "@/components/account/username-form";
 import { PasswordForm } from "@/components/account/password-form";
 import { DeleteAccount } from "@/components/account/delete-account";
 import { PasskeysCard } from "@/components/account/passkeys-card";
+import { WatermarkCard } from "@/components/account/watermark-card";
+import { watermarkProfile } from "@/lib/proofs";
 import { listPasskeys } from "@/lib/passkeys";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 
@@ -49,11 +51,12 @@ export default async function AccountPage() {
     ? new Date(account.usernameChangedAt.getTime() + USERNAME_CHANGE_DAYS * 86_400_000)
     : null;
   // Offered only to someone still on the handle Klik generated for them.
-  const [suggestions, passkeys] = await Promise.all([
+  const [suggestions, passkeys, watermark] = await Promise.all([
     !account.usernameChangedAt && canChangeUsername
       ? availableSuggestions(account.id, account.name, account.email)
       : Promise.resolve([]),
     listPasskeys(account.id),
+    watermarkProfile(account.id),
   ]);
 
   return (
@@ -86,6 +89,10 @@ export default async function AccountPage() {
               <PasswordForm signInAs={account.email ?? account.username ?? ""} />
             </Card>
           )}
+          {/* MED-10. For anyone: a photographer is often someone else's co-host. */}
+          <Card>
+            <WatermarkCard initial={watermark} />
+          </Card>
           <Card>
             <PasskeysCard initial={passkeys} userHandle={isoBase64URL.fromUTF8String(account.id)} now={new Date(account.now).getTime()} />
           </Card>

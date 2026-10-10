@@ -28,6 +28,7 @@ const TEAM_VISIBLE = [
   "comment.shown",
   "kiosk.created",
   "kiosk.revoked",
+  "proofs.released",
 ] as const satisfies readonly AuditAction[];
 
 export interface ActivityEntry {
@@ -107,6 +108,8 @@ export function describeActivity(
       return detail ? `set up a kiosk, ${detail}` : "set up a kiosk";
     case "kiosk.revoked":
       return detail ? `switched off a kiosk, ${detail}` : "switched off a kiosk";
+    case "proofs.released":
+      return detail ? `released ${detail} without the watermark` : "released proofs without the watermark";
     default:
       return "made a change";
   }

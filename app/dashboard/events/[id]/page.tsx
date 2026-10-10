@@ -27,6 +27,7 @@ import {
 } from "@/lib/plans";
 import { withProtectedMediaUrl } from "@/lib/media-delivery";
 import { signMediaUrls } from "@/lib/media-urls";
+import { cleanOriginalFor, isLockedProof } from "@/lib/proof-access";
 import { EventDashboard } from "@/components/dashboard/event-dashboard";
 import { SupportCard } from "@/components/dashboard/support-card";
 import { resolveEventActor } from "@/lib/roles";
@@ -88,11 +89,19 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       // tiles is not hundreds of authorized round trips to the content route.
       .then((rows) =>
         Promise.all(
-          rows.map(async (item) => ({
-            ...withProtectedMediaUrl(item, event.slug),
-            ...(await signMediaUrls(item)),
-            openReports: reportCounts.get(item.id) ?? 0,
-          })),
+          rows.map(async (item) => {
+            // MED-10: the photographer sees their own proof clean; the rest of
+            // the team, the owner included, sees what guests see.
+            const clean = cleanOriginalFor(item, session.user.id);
+            return {
+              ...withProtectedMediaUrl(item, event.slug),
+              ...(await signMediaUrls(clean ? { ...item, blobPathname: clean } : item)),
+              openReports: reportCounts.get(item.id) ?? 0,
+              // The key itself stays on the server.
+              proofOriginalPathname: null,
+              proof: isLockedProof(item) ? (clean ? ("mine" as const) : ("locked" as const)) : null,
+            };
+          }),
         ),
       ),
     db.select().from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt), eq(albums.kind, "manual"))).orderBy(albums.position, albums.createdAt),

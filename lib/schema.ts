@@ -522,6 +522,12 @@ export const media = pgTable(
     // CAM-2: the photo this is an edited copy of. Editing never changes the
     // original; it makes this row, which keeps the original's place in time.
     derivedFromId: text("derived_from_id").references((): AnyPgColumn => media.id, { onDelete: "set null" }),
+    // MED-10: a watermarked proof. While locked, `blobPathname` names the
+    // watermarked copy and the clean original is here, read only for
+    // `proofBy`. See lib/proofs.ts and drizzle/0039_proofs.sql.
+    proofBy: text("proof_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    proofOriginalPathname: text("proof_original_pathname"),
+    proofReleasedAt: timestamp("proof_released_at", { withTimezone: true }),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),
@@ -533,6 +539,31 @@ export const media = pgTable(
     // recreate them as full indexes and quietly undo that.
   ],
 );
+
+export const WATERMARK_POSITIONS = ["center", "bottom-right", "bottom-left", "tiled"] as const;
+export type WatermarkPosition = (typeof WATERMARK_POSITIONS)[number];
+
+/**
+ * MED-10: a photographer's watermark, one per account. The stamp is a PNG the
+ * browser drew from their text and logo; the server lays it over proofs.
+ */
+export const watermarks = pgTable("watermarks", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  stampKey: text("stamp_key").notNull().unique(),
+  stampWidth: integer("stamp_width").notNull(),
+  stampHeight: integer("stamp_height").notNull(),
+  logoKey: text("logo_key"),
+  label: text("label").notNull(),
+  font: text("font").$type<"sans" | "serif">().notNull().default("sans"),
+  position: text("position").$type<WatermarkPosition>().notNull().default("bottom-right"),
+  opacity: real("opacity").notNull().default(0.5),
+  scale: real("scale").notNull().default(0.3),
+  buyNote: text("buy_note"),
+  buyUrl: text("buy_url"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * Postgres-backed counters for rate limiting. One row per key per window, and

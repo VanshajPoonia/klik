@@ -62,6 +62,8 @@ export interface QueueContext {
   slug: string;
   albumId: string | null;
   maxVideoSeconds: number;
+  /** MED-10: send photos as watermarked proofs. */
+  proof?: boolean;
 }
 
 export interface AddedEvent {

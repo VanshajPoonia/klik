@@ -37,6 +37,7 @@
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
+- Watermarked proofs for photographers **are** built (MED-10, 2026-10-10): the photographer sees their proofs clean, everyone else sees the watermark and the photographer's note on how to buy, and the photographer releases the clean photos when paid. Klik takes no money for it.
 - An offline upload queue **is** built (OPS-3, 2026-10-10): every pick is kept on the device until it is in the gallery, survives a reload or a closed tab, resumes a half-sent video part by part, and drains in the background on Android. The kiosk uses it too.
 - The print studio **is** built (QR-4a to QR-4f, 2026-10-10): a canvas editor with eleven templates, print-ready PDF and PNG export, and the four print checks. The QR route's server-drawn sign is still there for Premium's one-click download.
 - Error tracking (F-9 shipped structured logging and email alerts; Sentry is wired but has no DSN). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
@@ -689,7 +690,17 @@ Still open here:
 - Rate limit both (F-2). Reaction counts render from a denormalised counter on `media`, not a live `COUNT(*)`, for the same reason as F-4.
 
 ### MED-10. Watermarking for professionals
-**Size:** M. A photographer co-host (the `contributor` role from ORG-1) uploads proofs with a watermark, and clients buy the clean versions. Pairs with NEW-15.
+**DONE 2026-10-10** (`drizzle/0039_proofs.sql`, `lib/proofs.ts`, `lib/proof-stamp.ts`, `lib/proof-access.ts`, `lib/watermark*.ts`, `components/account/watermark-card.tsx`, `test/proofs.dbtest.ts`). A photographer on an event's team (any role, so the `contributor` a host invites is enough) sets up a watermark once on their account page: their words in one of two typefaces, an optional logo, where it goes (a corner, the middle, or all over), its size and strength, and a note and link for buying the full photo. With **Proofs on** in the gallery's upload controls, their photos are stored as proofs. Everyone else, the event's owner included, sees and downloads the watermarked copy and reads the photographer's note under it; the photographer sees their own clean on the dashboard, where a card counts them and **Release all** (or the selection's **Release clean photos**) hands them over. Premium and Venue, the plans with a team. Decisions, both recorded in Section C on 2026-10-10:
+- **No payments.** The photographer releases when they have been paid, however they are paid.
+- **The row names the watermark.** `blob_pathname` is the stamped copy while locked, so every path that serves a photo is safe by default.
+- **The stamp is drawn in the browser** (words and logo into a transparent PNG) and only composited on the server, because the server has no reliable fonts; the preview and the server share `stampPlacement`, so what is chosen is what lands.
+- **Stamped before the row exists**, inside registration, so there is no moment when a proof's row names its original; a failure answers 503 and the upload queue retries it.
+- **Only the photographer can release**, not the owner, who is usually the client. A superadmin can, for one who has left; leaving Klik does not release anything by itself.
+- **An edit of a locked proof is a proof too**, and only its photographer may make one, so the editor is not a way round the watermark.
+- **Videos are not proofs yet.** With proofs on, picked videos are left out and the gallery says so, rather than sent unmarked. Watermarking video waits for OPS-1's transcoding.
+- Changing a watermark applies to proofs uploaded afterwards; ones already stamped keep theirs.
+
+Found while building it, and fixed for every upload: the upload id is chosen by the browser, so an upload asking to be called `<another photo's id>-thumb` was handed a signed PUT for that photo's thumbnail and could replace what every guest saw in its tile (the same for `-poster`). `lib/media-id.ts` now refuses ids ending in a suffix the server derives keys with, in all four upload routes.
 
 ---
 
@@ -1173,6 +1184,16 @@ OPS-1 transcodes through Stream rather than ffmpeg in a function. Hobby's 300 se
 
 ### Face grouping: skipped. ANSWERED
 AI-3a and AI-3b are cut. Every other AI task stands. AI-4 smart folders and AI-8 highlights fall back to time, scene labels and similarity, which is what AI-3's own note said covers most of the value. Reversible later, but only with counsel, for the BIPA reasons written in AI-3.
+
+## Answered (2026-10-10)
+
+Asked with "take the best architectural and sustainable decision, note it, and proceed".
+
+### MED-10: photographers release clean photos themselves; Klik takes no money. ANSWERED
+"Clients buy the clean versions" would need Klik to take a payment and pay a photographer: Stripe Connect, payouts, refunds, tax forms for every photographer, and a dispute process, all for a feature whose users already have a way of being paid. That is a marketplace, and building one would break the rule that no payment grants anything by itself (`BILLING.md`). So the photographer is paid however they already are, and releases the clean photos with one action when they choose. Each proof shows their own note and link ("email me to buy the full set") so the sale still starts in Klik. If Klik ever takes a cut, it bolts onto exactly this action: a paid order calls the same release.
+
+### Proofs are stored twice, and the row names the watermark. ANSWERED
+While a proof is locked, `media.blob_pathname` is the **watermarked** copy and the clean original is a separate column that no delivery path reads. The alternative, a flag every route checks before serving, was rejected because it fails open: Klik has a dozen paths that serve a photo (the grid, share links, ZIPs, exports, the live display, link previews, the editor, sharing) and the next one added would forget the flag and leak the photographer's work. This way a new path is safe without knowing proofs exist, and the clean original is reachable in exactly two named places, both checked by `cleanOriginalFor`.
 
 ## Still open
 

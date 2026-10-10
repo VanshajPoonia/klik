@@ -139,6 +139,17 @@ export default function PrivacyPage() {
           Designs made in the print studio, and any photos or logos uploaded for them. These are kept
           with the event and deleted with it.
         </li>
+        <li>
+          <strong>Passkeys</strong>, if you add one: its public key, which kind of device or password
+          manager made it, its name and when it was last used. Your face, fingerprint and phone PIN
+          never leave your device and we never receive them.
+        </li>
+        <li>
+          <strong>Proofs and watermarks</strong>, if you are a photographer using them: the words and
+          logo of your watermark, and the clean original of each proof, which only you can see until
+          you release it. Everyone else sees the watermarked copy. They are deleted with the event, and
+          your watermark with your account.
+        </li>
       </ul>
       <p>
         <strong>We never see card details.</strong> Payment happens on a page hosted by Stripe. Card

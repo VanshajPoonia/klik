@@ -118,7 +118,7 @@ describe("routes that load sharp", () => {
   }
 
   const needing = routeFiles(appDir)
-    .filter((file) => /["']sharp["']|job-runner/.test(readFileSync(file, "utf8")))
+    .filter((file) => /["']sharp["']|job-runner|lib\/proof-stamp["']/.test(readFileSync(file, "utf8")))
     .map((file) => file.slice(appDir.length).replace(/\/route\.ts$/, ""));
 
   it("finds the routes it is meant to guard", () => {

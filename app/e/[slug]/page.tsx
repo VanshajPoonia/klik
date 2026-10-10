@@ -26,6 +26,7 @@ import {
   canCustomizeGallery,
   canUseAlbums,
   canUseSlideshow,
+  canUseProofs,
   removesKlikBranding,
 } from "@/lib/plans";
 import { resolveEventActor } from "@/lib/roles";
@@ -37,6 +38,7 @@ import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
 import { linkedMediaId } from "@/lib/media-share";
 import { activeKiosk } from "@/lib/kiosks";
 import { challengeBoard } from "@/lib/challenges";
+import { getWatermark } from "@/lib/proofs";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 
@@ -229,9 +231,17 @@ export default async function GuestEventPage({
     uploadsEnabled: canUpload(event) && !galleryFull,
   });
 
+  // MED-10: a photographer on the team can send their photos as watermarked
+  // proofs, once they have a watermark. Nobody else is offered it.
+  const watermark =
+    managerSession?.user?.id && canUseProofs(plan.key) && canUpload(event) ? await getWatermark(managerSession.user.id) : null;
+  const proofs =
+    managerSession?.user?.id && canUseProofs(plan.key) && canUpload(event) ? { label: watermark?.label ?? null } : null;
+
   return (
     <GuestGallery
       event={publicEvent}
+      proofs={proofs}
       isOwner={isOwner}
       initialMedia={initialMedia}
       syncedAt={syncedAt}

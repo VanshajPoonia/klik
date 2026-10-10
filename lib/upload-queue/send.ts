@@ -288,6 +288,7 @@ export async function sendUpload(item: QueuedUpload, context: SendContext): Prom
     capturedAt: item.capturedAt ?? undefined,
     albumId: item.albumId || null,
     challengeId: item.challengeId || null,
+    ...(item.proof ? { proof: true } : {}),
     ...context.extra,
   });
   if (response.ok) return { media: data.media ?? null };

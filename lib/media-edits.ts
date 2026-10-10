@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { media, type Event, type Media } from "./schema";
+import { isLockedProof } from "./proof-access";
 
 /**
  * CAM-2: which photo an edited copy may be made from, by whom.
@@ -11,18 +12,19 @@ import { media, type Event, type Media } from "./schema";
  * not edited. The copy is a new photo; the original is never written to.
  */
 
-export type EditRefusal = "kiosk" | "disposable" | "not_found";
+export type EditRefusal = "kiosk" | "disposable" | "not_found" | "proof";
 
 export const EDIT_REFUSAL_MESSAGES: Record<EditRefusal, string> = {
   kiosk: "A kiosk cannot edit photos.",
   disposable: "Photos on a disposable camera cannot be edited.",
   not_found: "That photo cannot be edited.",
+  proof: "Only the photographer can edit a proof before it is released.",
 };
 
 export async function editableOriginal(
   event: Pick<Event, "id" | "disposableMode">,
   originalId: string,
-  viewer: { isManager: boolean; guestId: string | null; kioskId: string | null },
+  viewer: { isManager: boolean; guestId: string | null; kioskId: string | null; userId?: string | null },
 ): Promise<{ original: Media } | { refused: EditRefusal }> {
   if (viewer.kioskId) return { refused: "kiosk" };
   if (!viewer.isManager && event.disposableMode) return { refused: "disposable" };
@@ -33,5 +35,10 @@ export async function editableOriginal(
     .limit(1);
   if (!original || original.kind !== "photo") return { refused: "not_found" };
   if (!viewer.isManager && (!viewer.guestId || original.guestId !== viewer.guestId)) return { refused: "not_found" };
+  // MED-10: anyone else editing a locked proof is editing the watermarked copy,
+  // and the photographer's own copy is stamped again on the way in.
+  if (isLockedProof(original) && (!viewer.userId || original.proofBy !== viewer.userId)) {
+    return { refused: "proof" };
+  }
   return { original };
 }

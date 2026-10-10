@@ -90,3 +90,12 @@ export function posterPathnameFor(eventId: string, mediaId: string) {
 export function thumbPathnameFor(eventId: string, mediaId: string) {
   return blobPathnameFor(eventId, `${mediaId}-thumb`, "jpg");
 }
+
+/**
+ * MED-10: the watermarked copy of a proof, which is what `blob_pathname` names
+ * while the proof is locked. Its suffix is reserved in lib/media-id.ts, like
+ * the two above, so no upload can be given this key.
+ */
+export function proofPathnameFor(eventId: string, mediaId: string) {
+  return blobPathnameFor(eventId, `${mediaId}-proof`, "jpg");
+}

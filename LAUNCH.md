@@ -369,6 +369,29 @@ And **passkeys**, which need nothing but your phone:
 - [ ] Got the "passkey added" email
 - [ ] Removed a passkey and saw it refused
 
+And **watermarked proofs**, which need a Premium or Venue event that is taking uploads and
+two accounts (yours as the owner, and a second as the photographer):
+
+- As the photographer, open **Your account** and fill in **Watermark for proofs**: your
+  words, a logo if you have one, a corner or "All over", and a note such as "Full photos are
+  $15 each" with your email. The preview shows what your photos will look like. Save.
+- Invite the photographer to the event's team (Contributor is enough). As the photographer,
+  open the gallery, tap **Proofs off** so it reads **Proofs on**, and add three photos.
+- On the dashboard, as the photographer: the three say **Your proof** and look clean, and a
+  card counts them. As the owner: they say **Proof** and carry the watermark, and so does
+  the download. As a guest on a phone: the watermark, and under the photo, your note and an
+  **Ask about the full photo** link.
+- As the photographer, select one and choose **Release clean photos**. Within a minute the
+  owner and the guest see it clean. Then **Release all**.
+- With proofs on, pick a video: the gallery says videos cannot be watermarked yet.
+
+The **Privacy Policy** gained two lines under "What we collect from organizers": passkeys
+(only the public key, never a face or fingerprint) and watermarks and proofs.
+
+- [ ] Set up a watermark and uploaded proofs as a photographer
+- [ ] Saw the watermark as the owner and as a guest, with the note and link
+- [ ] Released one proof, then all of them
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them
