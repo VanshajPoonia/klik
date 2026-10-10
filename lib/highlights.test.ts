@@ -62,6 +62,22 @@ describe("AI-8 highlights", () => {
     expect(picks).not.toContain("p51");
   });
 
+  it("never shows one picture twice, however far apart the copies arrived", () => {
+    const items = [
+      ...Array.from({ length: 12 }, (_, i) => photo(i)),
+      photo(60, { contentHash: "same", hash: "abcdefabcdefabcd", hearts: 9, at: 0 }),
+      photo(61, { contentHash: "same", hash: "abcdefabcdefabcd", hearts: 9, at: 300 * MINUTE }),
+      // Forwarded and recompressed: different bytes, the same picture.
+      photo(62, { hash: "abcdefabcdefabcf", hearts: 9, at: 600 * MINUTE }),
+    ];
+    const picks = pickHighlights(items, 20).picks;
+    expect(picks.filter((id) => ["p60", "p61", "p62"].includes(id))).toEqual(["p60"]);
+
+    const pinnedLater = items.map((item) => (item.id === "p61" ? { ...item, highlight: "pinned" as const } : item));
+    const again = pickHighlights(pinnedLater, 20).picks;
+    expect(again.filter((id) => ["p60", "p61", "p62"].includes(id))).toEqual(["p61"]);
+  });
+
   it("spreads the picks across the moments of the night", () => {
     const dinner = Array.from({ length: 20 }, (_, i) => photo(i, { momentId: "dinner", hearts: 8, sharpness: 300 }));
     const speeches = Array.from({ length: 5 }, (_, i) => photo(50 + i, { momentId: "speeches", hearts: 1 }));

@@ -1,4 +1,4 @@
-import { blurryPhotos, hammingDistance, seenByGuests, similarGroups, type ReviewedRow } from "./image-analysis";
+import { blurryPhotos, hammingDistance, seenByGuests, SIMILAR_BITS, similarGroups, type ReviewedRow } from "./image-analysis";
 import { momentTime, wallClockOffsetMinutes } from "./moments";
 
 /**
@@ -21,6 +21,8 @@ export const HIGHLIGHT_COUNT = 20;
 
 export type HighlightCandidate = {
   id: string;
+  /** The uploader's hash of the file: equal means the same file sent again. */
+  contentHash?: string | null;
   hash: string | null;
   sharpness: number | null;
   brightness: number | null;
@@ -107,11 +109,18 @@ export function pickHighlights(items: HighlightCandidate[], count = HIGHLIGHT_CO
     const best = burst.reduce((a, b) => ((scores.get(b.id) ?? 0) > (scores.get(a.id) ?? 0) ? b : a));
     for (const frame of burst) if (frame.id !== best.id) outshone.add(frame.id);
   }
+  // A file sent twice is one photo, however far apart the copies arrived: the
+  // pinned copy if there is one, else the first.
+  const copyKept = new Map<string, string>();
+  for (const item of [...items].sort((a, b) => Number(b.highlight === "pinned") - Number(a.highlight === "pinned") || a.at - b.at)) {
+    if (item.contentHash && !copyKept.has(item.contentHash)) copyKept.set(item.contentHash, item.id);
+  }
   const eligible = measured.filter(
     (item) =>
       item.highlight !== "pinned" &&
       !blurry.has(item.id) &&
       !outshone.has(item.id) &&
+      (!item.contentHash || copyKept.get(item.contentHash) === item.id) &&
       exposureScore(item.brightness) > 0,
   );
 
@@ -127,9 +136,12 @@ export function pickHighlights(items: HighlightCandidate[], count = HIGHLIGHT_CO
     for (const id of remaining) {
       const item = byId.get(id) as HighlightCandidate;
       let worth = (scores.get(id) ?? 0) * SAME_MOMENT ** (fromMoment.get(moment(item)) ?? 0);
-      if (item.hash && chosen.some((other) => other.hash && hammingDistance(item.hash as string, other.hash) <= LOOKS_PICKED_BITS)) {
-        worth *= LOOKS_PICKED;
-      }
+      const closest = item.hash
+        ? Math.min(64, ...chosen.map((other) => (other.hash ? hammingDistance(item.hash as string, other.hash) : 64)))
+        : 64;
+      // The same picture as one already in, at any distance in time, is out.
+      if (closest <= SIMILAR_BITS) continue;
+      if (closest <= LOOKS_PICKED_BITS) worth *= LOOKS_PICKED;
       if (worth > bestWorth || (worth === bestWorth && best && item.at < best.at)) {
         best = item;
         bestWorth = worth;
@@ -161,6 +173,7 @@ export function highlightsFor(rows: ReviewedRow[], count = HIGHLIGHT_COUNT): Hig
   return pickHighlights(
     shown.map((row) => ({
       id: row.id,
+      contentHash: row.contentHash,
       hash: row.perceptualHash,
       sharpness: row.sharpness,
       brightness: row.brightness,
