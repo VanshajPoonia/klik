@@ -32,7 +32,7 @@
 - Granting a plan automatically. **Deliberately**, confirmed 2026-10-08: payments keep human approval. The ledger has a `source` column so automating it later is one webhook handler.
 - Any usage measurement. Nothing counts storage, media, or guests, so nothing can warn about limits.
 - Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt. Usernames are still generated at signup, and since ID-2 can be changed on `/dashboard/account`.
-- Passkeys (ACC-6). Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09. Hearts and comments (MED-9) shipped the same day.
+- Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09, and passkeys (ACC-6) on 2026-10-10. Hearts and comments (MED-9) shipped on 2026-10-09.
 - Share links for a folder or a selection **are** built (2026-10-10), on top of MED-1 to MED-3's per-photo visibility, share links and revocable access, and MED-4's folders.
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
@@ -382,7 +382,12 @@ Original plan, for reference:
 When a signed-in person uploads, attribute the media to their account as well as the guest row, so the gallery can show a real name and avatar and so contributions survive a cleared cookie. Uploading must still work with no account, unchanged. Guard the response shape so an account email never reaches a guest-facing payload.
 
 ### ACC-6. Passkeys for returning guests
-**Size:** M. Depends on ACC-2. One thumb print to sign in on the phone they already used. `@simplewebauthn/server` plus a `user_credentials` table. Makes the "super simple account" promise real on the second visit.
+**DONE 2026-10-10** (`drizzle/0038_passkeys.sql`, `lib/passkeys.ts`, `lib/passkey-client.ts`, `app/api/passkeys/`, `test/passkeys.dbtest.ts`). The sign-in page offers a passkey in the email field's own suggestions and as a "Sign in with a passkey" button; `/me` offers "Sign in faster next time" once per phone after a code sign-in; `/dashboard/account` lists them with rename and remove. Decisions:
+- **Not Auth.js's WebAuthn provider.** It is experimental and pins `@simplewebauthn` 9. Version 14 is used directly, and sign-in is a Credentials provider, so it lands in the same JWT session and `credentialVersion` check as everything else. The table is `user_passkeys`, not `user_credentials`, because "credentials" already means passwords in this codebase.
+- **Challenges are single use without a table:** a signed five-minute cookie, spent through the rate limiter's atomic counter.
+- **Discoverable, verified, bound to Klik's address.** No address is typed first and nothing reveals whether an account exists; the phone's lock is always asked for; only `APP_URL` (and localhost in development) can make or use one, so a preview deployment cannot mint passkeys for a URL that will vanish.
+- **Every new passkey emails the owner** and goes on the account timeline. A passkey outlives every session, so it is exactly what a stolen session would add; the email is how the owner finds out. Removing one stops it at once and, where the browser supports WebAuthn signals, tells the phone to forget it.
+- Ten per account. A removed passkey that is still on a phone is reported as such, so the sign-in page can say so and ask the phone to drop it.
 
 ---
 

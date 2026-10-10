@@ -351,6 +351,24 @@ the guest's own device until they are sent.
 - [ ] Saw a half-sent video carry on after closing the tab
 - [ ] Took photos on a kiosk with the wifi off and saw them arrive
 
+And **passkeys**, which need nothing but your phone:
+
+- On your **iPhone**, sign in at `/login` with an email code (or your password). Open
+  `/me`: a card offers **Sign in faster next time**. Tap **Add a passkey** and use Face ID.
+  You get an email saying a passkey was added; check it arrived and does not look like spam.
+- Sign out, open `/login` again and tap the email field: the passkey is offered above
+  the keyboard. Pick it, use Face ID, and you are in. Try the **Sign in with a passkey**
+  button too.
+- On a laptop, open **Your account** (`/dashboard/account`): the passkey is listed with when
+  it was last used. Rename it, then add one for the laptop. On a Mac the passkey usually syncs
+  through iCloud Keychain, so the iPhone one may already work there.
+- Remove one of them and try to sign in with it: it is refused, and the message says it was
+  removed.
+
+- [ ] Added a passkey on an iPhone and signed in with it
+- [ ] Got the "passkey added" email
+- [ ] Removed a passkey and saw it refused
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

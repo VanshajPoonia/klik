@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Google from "next-auth/providers/google";
 import Resend from "next-auth/providers/resend";
 import Credentials from "next-auth/providers/credentials";
@@ -13,6 +13,18 @@ import { SIGN_IN_CODE_MINUTES, generateSignInCode, sendSignInCode } from "./sign
 import { usernameFromEmail } from "./signup";
 import { isUniqueViolation, raisedBy } from "./db-errors";
 import { reportError } from "./observability";
+import { authorizePasskey } from "./passkeys";
+
+/** ACC-6: why a passkey sign-in failed, as the code next-auth/react hands back. */
+class PasskeyUnknown extends CredentialsSignin {
+  code = "passkey_unknown";
+}
+class PasskeyExpired extends CredentialsSignin {
+  code = "passkey_expired";
+}
+class PasskeyRefused extends CredentialsSignin {
+  code = "passkey_refused";
+}
 
 const oauthProviders = [];
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
@@ -111,6 +123,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const valid = await verifyPassword(password, user.passwordHash);
         if (!valid) return null;
 
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          username: user.username,
+          credentialVersion: user.credentialVersion,
+        };
+      },
+    }),
+    // ACC-6: a passkey. The phone has already checked the face or finger; this
+    // checks the phone's signature over a challenge only this server issued.
+    Credentials({
+      id: "passkey",
+      name: "Passkey",
+      credentials: { response: { type: "text" } },
+      async authorize(credentials, request) {
+        const result = await authorizePasskey(credentials?.response, request as unknown as Request);
+        if (!result.ok) {
+          // An unknown passkey is one removed from the account but still on
+          // the phone. Saying so lets the page ask the phone to forget it.
+          if (result.reason === "unknown") throw new PasskeyUnknown();
+          if (result.reason === "expired") throw new PasskeyExpired();
+          if (result.reason === "invalid") throw new PasskeyRefused();
+          return null;
+        }
+        const { user } = result;
         return {
           id: user.id,
           name: user.name,

@@ -6,11 +6,12 @@ import { cookies } from "next/headers";
 import { and, count, eq, isNull, or } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { eventCoHosts, events } from "@/lib/schema";
+import { eventCoHosts, events, userPasskeys } from "@/lib/schema";
 import { claimGuestCookies, joinedGalleries } from "@/lib/guest-accounts";
 import { Card } from "@/components/ui/card";
 import { buttonClassName } from "@/components/ui/button";
 import { JoinedGalleryRow } from "@/components/me/joined-gallery-row";
+import { PasskeyPrompt } from "@/components/me/passkey-prompt";
 
 export const metadata: Metadata = { title: "Your galleries", robots: { index: false } };
 
@@ -27,13 +28,14 @@ export default async function MePage() {
   // ACC-3. Idempotent, so reloading the page is harmless.
   await claimGuestCookies(userId, (await cookies()).getAll());
 
-  const [galleries, [hosting]] = await Promise.all([
+  const [galleries, [hosting], [passkeys]] = await Promise.all([
     joinedGalleries(userId),
     db
       .select({ n: count() })
       .from(events)
       .leftJoin(eventCoHosts, and(eq(eventCoHosts.eventId, events.id), eq(eventCoHosts.userId, userId), isNull(eventCoHosts.deletedAt)))
       .where(and(isNull(events.deletedAt), or(eq(events.ownerId, userId), eq(eventCoHosts.userId, userId)))),
+    db.select({ n: count() }).from(userPasskeys).where(eq(userPasskeys.userId, userId)),
   ]);
   const hostsEvents = (hosting?.n ?? 0) > 0;
 
@@ -64,6 +66,9 @@ export default async function MePage() {
             galleries.map((gallery) => <JoinedGalleryRow key={gallery.eventId} gallery={gallery} />)
           )}
         </div>
+
+        {/* ACC-6: offered only to an account with no passkey yet. */}
+        {(passkeys?.n ?? 0) === 0 && <PasskeyPrompt />}
 
         {/* The guest to organizer path (ACC-4). One identity, so this is not a
             second sign-up: it is the same account, choosing a plan. */}

@@ -1,12 +1,19 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { SIGN_IN_CODE_COOKIE, describeSignInError } from "@/lib/sign-in-errors";
+import {
+  cancelPasskeyPrompt,
+  passkeyAutofillSupported,
+  passkeysSupported,
+  signInWithPasskey,
+} from "@/lib/passkey-client";
 
 type Mode = "password" | "email" | "code";
 
@@ -42,7 +49,60 @@ export function LoginForm({
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
+  const [passkeys, setPasskeys] = useState(false);
+  // Bumped to start the waiting passkey prompt over: after the button's own
+  // prompt replaced it, and before its challenge expires on an idle page.
+  const [autofillRound, setAutofillRound] = useState(0);
   const destination = next ?? "/after-sign-in";
+
+  // ACC-6: known only in the browser, so the button appears after the first
+  // paint rather than being guessed on the server.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setPasskeys(passkeysSupported()), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // ACC-6: a returning guest's passkey is offered in the field's own
+  // suggestions, beside saved addresses, with nothing to press first. Started
+  // again whenever the field changes, since the prompt is tied to the input.
+  useEffect(() => {
+    if (mode === "code") return;
+    let live = true;
+    const refresh = window.setTimeout(() => setAutofillRound((round) => round + 1), 4 * 60_000);
+    void (async () => {
+      if (!(await passkeyAutofillSupported().catch(() => false)) || !live) return;
+      const outcome = await signInWithPasskey({ autofill: true });
+      if (!live) return;
+      if (outcome.ok) {
+        setLoading(true);
+        router.push(destination);
+        router.refresh();
+      } else if (outcome.error) {
+        // Picked, and refused. Offer the prompt again for another try.
+        setError(outcome.error);
+        setAutofillRound((round) => round + 1);
+      }
+    })();
+    return () => {
+      live = false;
+      window.clearTimeout(refresh);
+      cancelPasskeyPrompt();
+    };
+  }, [mode, destination, router, autofillRound]);
+
+  async function handlePasskey() {
+    setError(null);
+    setLoading(true);
+    const outcome = await signInWithPasskey();
+    if (outcome.ok) {
+      router.push(destination);
+      router.refresh();
+      return;
+    }
+    setLoading(false);
+    if (outcome.error) setError(outcome.error);
+    setAutofillRound((round) => round + 1);
+  }
 
   async function handlePassword(event: FormEvent) {
     event.preventDefault();
@@ -123,7 +183,7 @@ export function LoginForm({
               className={inputClass}
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
+              autoComplete="username webauthn"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -154,7 +214,7 @@ export function LoginForm({
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
+              autoComplete="email webauthn"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -208,6 +268,12 @@ export function LoginForm({
         <div className="h-px flex-1 bg-canvas-line" />
       </div>
       <div className="space-y-2">
+        {passkeys && (
+          <Button type="button" variant="ghost" className="w-full" disabled={loading} onClick={() => void handlePasskey()}>
+            <KeyRound className="h-4 w-4" aria-hidden="true" />
+            Sign in with a passkey
+          </Button>
+        )}
         {mode !== "password" && (
           <Button
             type="button"

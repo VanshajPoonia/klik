@@ -99,6 +99,8 @@ export const TIMELINE_KINDS = [
   "event_created",
   "password_changed",
   "username_changed",
+  "passkey_added",
+  "passkey_removed",
 ] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
@@ -161,6 +163,32 @@ export const verificationTokens = pgTable("verificationTokens", {
   token: text("token").notNull(),
   expires: timestamp("expires", { withTimezone: true }).notNull(),
 });
+
+/**
+ * ACC-6: a passkey. Not Auth.js's `authenticators` table: sign-in goes through
+ * a Credentials provider that checks the signature itself (lib/passkeys.ts),
+ * because Auth.js's own WebAuthn provider is experimental and pins an old
+ * library. The id is the credential id, base64url.
+ */
+export const userPasskeys = pgTable(
+  "user_passkeys",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    publicKey: text("public_key").notNull(),
+    counter: bigint("counter", { mode: "number" }).notNull().default(0),
+    transports: jsonb("transports").$type<string[]>().notNull().default([]),
+    deviceType: text("device_type").$type<"singleDevice" | "multiDevice">().notNull(),
+    backedUp: boolean("backed_up").notNull().default(false),
+    aaguid: text("aaguid"),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (table) => [index("user_passkeys_user_idx").on(table.userId, table.createdAt)],
+);
 
 // --- Klik domain tables ---
 

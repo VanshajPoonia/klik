@@ -13,10 +13,13 @@ import { ProfileForm } from "@/components/account/profile-form";
 import { UsernameForm } from "@/components/account/username-form";
 import { PasswordForm } from "@/components/account/password-form";
 import { DeleteAccount } from "@/components/account/delete-account";
+import { PasskeysCard } from "@/components/account/passkeys-card";
+import { listPasskeys } from "@/lib/passkeys";
+import { isoBase64URL } from "@simplewebauthn/server/helpers";
 
 export const metadata: Metadata = { title: "Your account", robots: { index: false } };
 
-/** ID-2 and the account's own settings: name, handle, password, and leaving. */
+/** ID-2 and the account's own settings: name, handle, password, passkeys (ACC-6), and leaving. */
 export default async function AccountPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login?next=/dashboard/account");
@@ -32,6 +35,9 @@ export default async function AccountPage() {
       canChangeUsername: sql<boolean>`${users.usernameChangedAt} IS NULL OR ${users.usernameChangedAt} <= now() - (${USERNAME_CHANGE_DAYS}::int * interval '1 day')`,
       hasPassword: sql<boolean>`${users.passwordHash} IS NOT NULL`,
       role: users.role,
+      // The page's clock, for "last used 2h ago", taken from the database so
+      // rendering stays pure.
+      now: sql<string>`now()`,
     })
     .from(users)
     .where(eq(users.id, session.user.id))
@@ -43,10 +49,12 @@ export default async function AccountPage() {
     ? new Date(account.usernameChangedAt.getTime() + USERNAME_CHANGE_DAYS * 86_400_000)
     : null;
   // Offered only to someone still on the handle Klik generated for them.
-  const suggestions =
+  const [suggestions, passkeys] = await Promise.all([
     !account.usernameChangedAt && canChangeUsername
-      ? await availableSuggestions(account.id, account.name, account.email)
-      : [];
+      ? availableSuggestions(account.id, account.name, account.email)
+      : Promise.resolve([]),
+    listPasskeys(account.id),
+  ]);
 
   return (
     <div className="min-h-screen px-6 py-10 md:px-10">
@@ -78,6 +86,9 @@ export default async function AccountPage() {
               <PasswordForm signInAs={account.email ?? account.username ?? ""} />
             </Card>
           )}
+          <Card>
+            <PasskeysCard initial={passkeys} userHandle={isoBase64URL.fromUTF8String(account.id)} now={new Date(account.now).getTime()} />
+          </Card>
           {account.role !== "superadmin" && (
             <Card>
               <DeleteAccount confirmWith={account.username ?? account.email ?? ""} />
