@@ -42,6 +42,10 @@ export async function sendRecaps(payload: JobPayload<"recap.send">, context: Job
     log.info("recap.dropped", { eventId: payload.eventId, reason: !event ? "missing" : event.recapEnabled ? "gone" : "turned_off" });
     return;
   }
+  if (event.suspendedAt) {
+    // Held while Klik has the gallery paused, and sent if it reopens.
+    return { requeue: { delayMs: DAY } };
+  }
   if (!isRecapAvailable()) {
     // Held, not dropped: these people asked, and the fix is configuration.
     log.warn("recap.unavailable", { eventId: event.id });

@@ -46,6 +46,8 @@ const en = {
     notOpenBody: "The host is still setting it up. Check back closer to the event.",
     privateTitle: "This gallery is private.",
     privateBody: "Ask the organizer for access.",
+    pausedTitle: "This gallery is unavailable.",
+    pausedBody: "Klik has paused it for now. Nothing in it has been deleted.",
   },
   entry: {
     enterPassword: "Enter the gallery password to continue.",
@@ -419,6 +421,7 @@ const en = {
     wrong_password: "That password is not right.",
     too_many_tries: "Too many tries. Wait a little and try again.",
     recap_email_invalid: "That email address does not look right. Check it, or leave it empty.",
+    suspended: "This gallery is unavailable for now.",
   },
 };
 
@@ -441,6 +444,8 @@ const es: GuestCopy = {
     notOpenBody: "El anfitrión todavía la está preparando. Vuelve más cerca del evento.",
     privateTitle: "Esta galería es privada.",
     privateBody: "Pide acceso al organizador.",
+    pausedTitle: "Esta galería no está disponible.",
+    pausedBody: "Klik la ha pausado por ahora. No se ha borrado nada.",
   },
   entry: {
     enterPassword: "Escribe la contraseña de la galería para continuar.",
@@ -821,6 +826,7 @@ const es: GuestCopy = {
     wrong_password: "Esa contraseña no es correcta.",
     too_many_tries: "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
     recap_email_invalid: "Esa dirección de correo no parece correcta. Revísala o déjala vacía.",
+    suspended: "Esta galería no está disponible por ahora.",
   },
 };
 

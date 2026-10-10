@@ -127,14 +127,18 @@ export default async function GuestEventPage({
             ? copy.gate.endedTitle
             : access.reason === "not_open"
               ? copy.gate.notOpenTitle
-              : copy.gate.privateTitle}
+              : access.reason === "suspended"
+                ? copy.gate.pausedTitle
+                : copy.gate.privateTitle}
         </h1>
         <p className="mt-3 max-w-sm text-sm text-muted">
           {access.reason === "expired"
             ? copy.gate.endedBody
             : access.reason === "not_open"
               ? copy.gate.notOpenBody
-              : copy.gate.privateBody}
+              : access.reason === "suspended"
+                ? copy.gate.pausedBody
+                : copy.gate.privateBody}
         </p>
       </div>,
     );

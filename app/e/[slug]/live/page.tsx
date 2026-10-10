@@ -32,11 +32,13 @@ export default async function LiveDisplayPage({ params }: { params: Promise<{ sl
   const plan = eventPlan(event);
   const blocked = !manager
     ? "Open the live display from your dashboard, signed in as the host."
-    : eventLicenseState(event) === "draft"
-      ? "The live display starts when this event goes live."
-      : !canUseSlideshow(plan.key)
-        ? "The live display is part of Klik Premium and Klik Venue."
-        : null;
+    : event.suspendedAt
+      ? "Klik has paused this gallery. Your dashboard says why."
+      : eventLicenseState(event) === "draft"
+        ? "The live display starts when this event goes live."
+        : !canUseSlideshow(plan.key)
+          ? "The live display is part of Klik Premium and Klik Venue."
+          : null;
   if (blocked) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black px-6 text-center">

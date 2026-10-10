@@ -107,8 +107,10 @@ export { hashGalleryPassword };
 
 /** Owner-safe event shape that keeps operational fields but never exposes a password hash. */
 export function toOrganizerEvent(event: Event) {
-  const { passwordHash, ...rest } = event;
+  // Which superadmin paused it is Klik's record, not the organizer's.
+  const { passwordHash, suspendedByUserId, ...rest } = event;
   void passwordHash;
+  void suspendedByUserId;
   return rest;
 }
 

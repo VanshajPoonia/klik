@@ -15,6 +15,7 @@ function event(overrides: Partial<Parameters<typeof canUpload>[0] & Parameters<t
     planKey: "event" as const,
     isActive: true,
     uploadsEnabled: true,
+    suspendedAt: null,
     ...overrides,
   };
 }
@@ -58,6 +59,13 @@ describe("the rest of the pure rules", () => {
 });
 
 describe("access, given licensing", () => {
+  it("closes a gallery Klik paused to everyone but its team, and takes no uploads", () => {
+    const paused = event({ suspendedAt: ago(0) });
+    expect(canViewGallery(paused, { isOwner: false, hasUnlockCookie: true })).toEqual({ allowed: false, reason: "suspended" });
+    expect(canViewGallery(paused, { isOwner: true, hasUnlockCookie: false })).toEqual({ allowed: true });
+    expect(canUpload(paused)).toBe(false);
+  });
+
   it("keeps a draft from every guest and lets its team in", () => {
     const draft = event({ entitlementId: null, licensedAt: null });
     expect(canViewGallery(draft, { isOwner: false, hasUnlockCookie: false })).toEqual({

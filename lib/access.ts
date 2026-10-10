@@ -4,12 +4,12 @@ import type { Event } from "./schema";
 
 export type GalleryAccess =
   | { allowed: true }
-  | { allowed: false; reason: "private" | "password_required" | "expired" | "not_open" };
+  | { allowed: false; reason: "private" | "password_required" | "expired" | "not_open" | "suspended" };
 
 /** The event fields every access decision reads. */
 export type AccessEvent = Pick<
   Event,
-  "visibility" | "expiresAt" | "createdAt" | "licensedAt" | "entitlementId" | "planKey"
+  "visibility" | "expiresAt" | "createdAt" | "licensedAt" | "entitlementId" | "planKey" | "suspendedAt"
 >;
 
 /**
@@ -46,6 +46,8 @@ export function canViewGallery(
   // a revoked or expired plan stops new uploads, never guests seeing their own
   // memories (ROADMAP.md C-6).
   if (eventLicenseState(event) === "draft") return { allowed: false, reason: "not_open" };
+  // ADM-5: paused by Klik. Before everything a guest could do something about.
+  if (event.suspendedAt) return { allowed: false, reason: "suspended" };
   if (isExpired(event)) return { allowed: false, reason: "expired" };
   if (event.visibility === "private") return { allowed: false, reason: "private" };
   if (event.visibility === "password" && !hasUnlockCookie) {
@@ -58,10 +60,12 @@ export function canViewGallery(
 export function canUpload(
   event: Pick<
     Event,
-    "isActive" | "uploadsEnabled" | "expiresAt" | "createdAt" | "licensedAt" | "entitlementId" | "planKey"
+    "isActive" | "uploadsEnabled" | "expiresAt" | "createdAt" | "licensedAt" | "entitlementId" | "planKey" | "suspendedAt"
   >,
 ): boolean {
   if (eventLicenseState(event) !== "live") return false;
+  // ADM-5: a paused gallery takes nothing new, from the team either.
+  if (event.suspendedAt) return false;
   if (!event.isActive || !event.uploadsEnabled || isExpired(event)) return false;
   return (
     getPlanDeadline(windowStart(event), eventPlan(event).uploadWindowDays).getTime() >= Date.now()

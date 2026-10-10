@@ -17,6 +17,7 @@ import { GrantControl } from "@/components/admin/grant-control";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { ActivationRequests } from "@/components/admin/activation-requests";
 import { ReportsQueue } from "@/components/admin/reports-queue";
+import { PausedGalleries } from "@/components/admin/paused-galleries";
 import { REPORT_REASON_LABELS, listOpenReports } from "@/lib/reports";
 import { COMMENT_REPORT_LABELS, listOpenCommentReports, type CommentReportReason } from "@/lib/comments";
 import { CommentReportsQueue } from "@/components/admin/comment-reports-queue";
@@ -63,7 +64,7 @@ export default async function AdminPage() {
   if (!session?.user) redirect("/login");
   if (session.user.role !== "superadmin") redirect("/dashboard");
 
-  const [pending, signups, requests, reports, commentReports] = await Promise.all([
+  const [pending, signups, requests, reports, commentReports, paused] = await Promise.all([
     getPendingActivations(),
     getPendingSignups(),
     // ACT-4: drafts their organizer asked to have activated, soonest event first.
@@ -92,6 +93,20 @@ export default async function AdminPage() {
       .orderBy(sql`${events.eventDate} ASC NULLS LAST`, asc(events.activationRequestedAt)),
     listOpenReports(),
     listOpenCommentReports(),
+    // ADM-5: galleries Klik has paused, longest first.
+    db
+      .select({
+        eventId: events.id,
+        eventName: events.name,
+        eventSlug: events.slug,
+        ownerEmail: users.email,
+        since: events.suspendedAt,
+        reason: events.suspendedReason,
+      })
+      .from(events)
+      .innerJoin(users, eq(users.id, events.ownerId))
+      .where(and(isNotNull(events.suspendedAt), isNull(events.deletedAt)))
+      .orderBy(asc(events.suspendedAt)),
   ]);
   const shortDate = (date: Date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
@@ -279,6 +294,9 @@ export default async function AdminPage() {
         <ReportsQueue
           rows={reports.map((row) => ({
             mediaId: row.mediaId,
+            eventId: row.eventId,
+            eventSuspended: row.eventSuspended,
+            organizerNotified: row.organizerNotifiedAt ? shortDate(row.organizerNotifiedAt) : null,
             eventName: row.eventName,
             eventSlug: row.eventSlug,
             held: row.held,
@@ -302,6 +320,16 @@ export default async function AdminPage() {
             notes: row.notes,
             count: row.count,
             latest: shortDate(row.latest),
+          }))}
+        />
+        <PausedGalleries
+          rows={paused.map((row) => ({
+            eventId: row.eventId,
+            eventName: row.eventName,
+            eventSlug: row.eventSlug,
+            ownerEmail: row.ownerEmail,
+            since: row.since ? shortDate(row.since) : "",
+            reason: row.reason ?? "",
           }))}
         />
         <ActivationRequests

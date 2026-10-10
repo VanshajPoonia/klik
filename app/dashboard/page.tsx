@@ -243,6 +243,7 @@ export default async function DashboardPage() {
                   )}
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  {event.suspendedAt && <Badge tone="danger">paused by Klik</Badge>}
                   {eventLicenseState(event) === "draft" ? (
                     <Badge tone="warning">draft</Badge>
                   ) : eventLicenseState(event) === "lapsed" ? (

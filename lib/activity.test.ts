@@ -9,6 +9,9 @@ describe("describeActivity", () => {
     expect(line("media.bulk", "delete on 3 items.")).toBe("deleted 3 photos and videos");
     expect(line("media.bulk", "approve on 1 items.")).toBe("approved 1 photo or video");
     expect(line("media.bulk", "visibility to private on 2 items.")).toBe("hid 2 photos and videos");
+    expect(line("media.bulk", "highlight to pinned on 1 items.")).toBe("pinned 1 photo or video to the highlights");
+    expect(line("media.bulk", "highlight to excluded on 2 items.")).toBe("kept 2 photos and videos out of the highlights");
+    expect(line("media.bulk", "highlight to scored on 1 items.")).toBe("let the score choose for 1 photo or video in the highlights");
     expect(line("media.bulk", "visibility to gallery on 2 items.")).toBe("showed 2 photos and videos in the gallery");
     expect(line("media.bulk", "something new")).toBe("changed several photos and videos");
   });

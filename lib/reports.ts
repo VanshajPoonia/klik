@@ -254,6 +254,7 @@ export async function listOpenReports() {
       eventSlug: events.slug,
       legalHoldAt: media.legalHoldAt,
       status: media.status,
+      eventSuspended: events.suspendedAt,
     })
     .from(mediaReports)
     .innerJoin(events, eq(events.id, mediaReports.eventId))
@@ -274,6 +275,10 @@ export async function listOpenReports() {
       notes: string[];
       count: number;
       latest: Date;
+      /** ADM-5: Klik has the whole gallery paused. */
+      eventSuspended: boolean;
+      /** ADM-5: when Klik asked the organizer to look, if it has. */
+      organizerNotifiedAt: Date | null;
     }
   >();
   for (const row of rows) {
@@ -282,6 +287,7 @@ export async function listOpenReports() {
       existing.count += 1;
       if (!existing.reasons.includes(row.report.reason)) existing.reasons.push(row.report.reason);
       if (row.report.note) existing.notes.push(row.report.note);
+      existing.organizerNotifiedAt ??= row.report.organizerNotifiedAt;
     } else {
       byMedia.set(row.report.mediaId, {
         mediaId: row.report.mediaId,
@@ -294,6 +300,8 @@ export async function listOpenReports() {
         notes: row.report.note ? [row.report.note] : [],
         count: 1,
         latest: row.report.createdAt,
+        eventSuspended: Boolean(row.eventSuspended),
+        organizerNotifiedAt: row.report.organizerNotifiedAt,
       });
     }
   }

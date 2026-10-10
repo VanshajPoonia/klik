@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { recordAudit } from "@/lib/audit";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { media } from "@/lib/schema";
+import { media, mediaReports } from "@/lib/schema";
+import { notifyOrganizerOfReport } from "@/lib/suspensions";
 import { requireSuperadmin } from "@/lib/roles";
 import { releaseLegalHold, resolveReports } from "@/lib/reports";
 import { log } from "@/lib/observability";
 
 const requestSchema = z.object({
-  action: z.enum(["dismiss", "remove", "release_hold", "reported_to_ncmec"]),
+  action: z.enum(["dismiss", "remove", "release_hold", "reported_to_ncmec", "notify_organizer"]),
   note: z.string().trim().min(3, "Say what you found, for the record").max(300),
 });
 
@@ -24,6 +25,9 @@ const requestSchema = z.object({
  * - `reported_to_ncmec`: it was what was reported, and it has been reported to
  *   the CyberTipline. The photo stays hidden and held, because the law requires
  *   it be preserved after a report; nothing here ever deletes held material.
+ * - `notify_organizer`: ask the host to look at it themselves. The reports stay
+ *   open. Refused for a held photo: whoever runs the gallery may be the person
+ *   a child-safety report is about, and is never tipped off.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ mediaId: string }> }) {
   const session = await requireSuperadmin();
@@ -41,6 +45,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ med
   const by = session.user.id;
 
   switch (action) {
+    case "notify_organizer": {
+      if (item.legalHoldAt) {
+        return NextResponse.json({ error: "Never tell the organizer about a child-safety report." }, { status: 409 });
+      }
+      const open = await db
+        .select({ reason: mediaReports.reason })
+        .from(mediaReports)
+        .where(and(eq(mediaReports.mediaId, mediaId), isNull(mediaReports.resolvedAt)));
+      if (open.length === 0) return NextResponse.json({ error: "No open reports on this photo" }, { status: 409 });
+      const sent = await notifyOrganizerOfReport(mediaId, item.eventId, [...new Set(open.map((row) => row.reason))]);
+      if (!sent.sent) return NextResponse.json({ error: "The email could not be sent" }, { status: 502 });
+      break;
+    }
     case "dismiss":
       if (item.legalHoldAt) {
         return NextResponse.json({ error: "Release the hold first if the report was false." }, { status: 409 });
@@ -66,7 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ med
   log.info("reports.admin_action", { mediaId, action });
   await recordAudit({
     actor: session,
-    action: "report.resolved",
+    action: action === "notify_organizer" ? "report.organizer_notified" : "report.resolved",
     targetType: "media",
     targetId: mediaId,
     eventId: item.eventId,

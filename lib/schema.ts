@@ -356,6 +356,11 @@ export const events = pgTable(
     keepPhotoDetails: boolean("keep_photo_details").notNull().default(false),
     // GRW-1: guests are offered the morning-after recap. See lib/recap.ts.
     recapEnabled: boolean("recap_enabled").notNull().default(true),
+    // ADM-5: Klik paused it. Only the team sees it while set; nothing is
+    // deleted. The reason is what the organizer is told. lib/suspensions.ts.
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    suspendedReason: text("suspended_reason"),
+    suspendedByUserId: text("suspended_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -960,6 +965,8 @@ export const mediaReports = pgTable("media_reports", {
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   resolvedByUserId: text("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
   resolution: text("resolution"),
+  // ADM-5: when Klik asked the organizer to look at it.
+  organizerNotifiedAt: timestamp("organizer_notified_at", { withTimezone: true }),
 });
 
 export type MediaReport = typeof mediaReports.$inferSelect;

@@ -61,6 +61,9 @@ const row: Event = {
   guestLanguage: "auto",
   keepPhotoDetails: false,
   recapEnabled: true,
+  suspendedAt: null,
+  suspendedReason: null,
+  suspendedByUserId: null,
 };
 
 /**
@@ -140,6 +143,10 @@ const WITHHELD: Record<string, string> = {
   keepPhotoDetails: "host configuration for the team's uploads",
   // GRW-1. The page decides whether to offer the recap and passes that alone.
   recapEnabled: "decides what the server sends, never needed raw",
+  // ADM-5. A paused gallery answers guests with a gate, not with these.
+  suspendedAt: "Klik's moderation state, told to the organizer, not guests",
+  suspendedReason: "Klik's message to the organizer",
+  suspendedByUserId: "which superadmin acted",
 };
 
 describe("toPublicEvent", () => {

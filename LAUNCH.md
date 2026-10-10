@@ -504,6 +504,15 @@ And two new dashboard views for every event, both built without any AI key:
 
 - [ ] Opened Tidy up and Highlights on an event with photos
 
+And for you on `/admin`, under **Reports**: each reported photo can now be **sent to its
+organizer to review** (they get an email saying what it was reported for, never who
+reported it) or have its **whole gallery paused**. Pausing asks for the words the organizer
+will read, apart from your note: never put a report number or what you found in that box.
+A paused gallery shuts to guests, uploads and share links, its organizer keeps everything,
+and **Paused galleries** on `/admin` reopens it. Try it once on a test event of your own.
+
+- [ ] Paused and reopened a test gallery, and read both emails
+
 ### 11. Turn on the morning-after email
 
 Guests can now leave their email when they join, with its own tick, and get **one** email

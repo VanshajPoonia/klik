@@ -60,6 +60,7 @@ describe("GRW-4 what a profile lists", () => {
     await listedEvent(owner, { name: "Closed", isActive: false });
     await listedEvent(owner, { name: "Expired", expiresAt: new Date("2020-01-01T00:00:00Z") });
     await listedEvent(owner, { name: "Purged", purgedAt: new Date() });
+    await listedEvent(owner, { name: "Paused", suspendedAt: new Date(), suspendedReason: "Paused while Klik reviews a report." });
     await listedEvent(await makeUser(), { name: "Someone else's" });
 
     const profile = await profileFor("JoLens");

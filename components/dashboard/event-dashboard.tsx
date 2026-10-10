@@ -42,6 +42,7 @@ import { PrintStudioCard } from "@/components/dashboard/print-studio-card";
 import { TidyPanel } from "@/components/dashboard/tidy-panel";
 import { HighlightsPanel } from "@/components/dashboard/highlights-panel";
 import { nanoid } from "nanoid";
+import { SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 import { uploadToGallery } from "@/lib/upload-client";
 
 type Tab = "gallery" | "highlights" | "insights" | "links" | "settings" | "qr" | "trash";
@@ -579,10 +580,29 @@ export function EventDashboard({
             {!event.isActive && <Badge tone="neutral">event ended</Badge>}
             {!event.uploadsEnabled && <Badge tone="danger">uploads closed</Badge>}
             {event.purgedAt && <Badge tone="danger">storage cleared</Badge>}
+            {event.suspendedAt && <Badge tone="danger">paused by Klik</Badge>}
           </div>
         </header>
 
         {transferOffer && <TransferOffer eventId={event.id} fromName={transferOffer.fromName} />}
+        {/* ADM-5: Klik paused it. Above everything, since nothing else works for guests. */}
+        {event.suspendedAt && (
+          <section
+            role="status"
+            className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm"
+          >
+            <p className="font-medium text-paper">Klik has paused this gallery</p>
+            <p className="mt-1 text-paper/85">{event.suspendedReason}</p>
+            <p className="mt-2 text-xs text-muted">
+              Guests cannot open it, add to it or use its share links until it reopens. Nothing has been
+              deleted, and you can still see and download everything here. Questions? Call or text{" "}
+              <a href={SUPPORT_PHONE_HREF} className="font-medium text-paper underline underline-offset-2">
+                {SUPPORT_PHONE}
+              </a>
+              .
+            </p>
+          </section>
+        )}
         <LicenseBanner eventId={event.id} license={license} />
         {usage && license.state !== "draft" && <UsageMeter usage={usage} />}
 

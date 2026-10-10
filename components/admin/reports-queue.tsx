@@ -10,6 +10,11 @@ import { inputClass } from "@/components/ui/field";
 
 export interface ReportRow {
   mediaId: string;
+  eventId: string;
+  /** ADM-5: the whole gallery is paused. */
+  eventSuspended: boolean;
+  /** ADM-5: when the organizer was asked to look, already formatted. */
+  organizerNotified: string | null;
   eventName: string;
   eventSlug: string;
   held: boolean;
@@ -19,7 +24,10 @@ export interface ReportRow {
   latest: string;
 }
 
-type Action = "dismiss" | "remove" | "release_hold" | "reported_to_ncmec";
+type Action = "dismiss" | "remove" | "release_hold" | "reported_to_ncmec" | "notify_organizer";
+
+/** What the organizer is told by default when a gallery is paused. Theirs to read, so nothing internal. */
+const DEFAULT_PAUSE_REASON = "We received a report about content in this gallery and have paused it while we review it.";
 
 /**
  * ADM-5: every photo with an open report, held ones first.
@@ -50,8 +58,28 @@ function ReportItem({ row }: { row: ReportRow }) {
   const router = useRouter();
   const [show, setShow] = useState(false);
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState<Action | null>(null);
+  const [busy, setBusy] = useState<Action | "suspend" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pausing, setPausing] = useState(false);
+  const [pauseReason, setPauseReason] = useState(DEFAULT_PAUSE_REASON);
+
+  async function pause() {
+    setBusy("suspend");
+    setError(null);
+    const response = await fetch(`/api/admin/events/${row.eventId}/suspension`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "suspend", reason: pauseReason, note }),
+    });
+    const body = await response.json().catch(() => ({}));
+    setBusy(null);
+    if (!response.ok) {
+      setError(body.error ?? "That did not work");
+      return;
+    }
+    setPausing(false);
+    router.refresh();
+  }
 
   async function act(action: Action) {
     setBusy(action);
@@ -85,7 +113,11 @@ function ReportItem({ row }: { row: ReportRow }) {
             </p>
           ))}
         </div>
-        {row.held && <Badge tone="danger">legal hold</Badge>}
+        <div className="flex flex-wrap gap-1.5">
+          {row.held && <Badge tone="danger">legal hold</Badge>}
+          {row.eventSuspended && <Badge tone="warning">gallery paused</Badge>}
+          {row.organizerNotified && <Badge tone="neutral">organizer asked {row.organizerNotified}</Badge>}
+        </div>
       </div>
 
       {show ? (
@@ -130,9 +162,43 @@ function ReportItem({ row }: { row: ReportRow }) {
             <Button variant="ghost" size="sm" disabled={!ready} onClick={() => void act("dismiss")}>
               {busy === "dismiss" ? "Saving…" : "Keep it"}
             </Button>
+            {/* Never for a held photo: the organizer may be who it is about. */}
+            {!row.organizerNotified && (
+              <Button variant="ghost" size="sm" disabled={!ready} onClick={() => void act("notify_organizer")}>
+                {busy === "notify_organizer" ? "Sending…" : "Ask the organizer to review"}
+              </Button>
+            )}
           </>
         )}
+        {!row.eventSuspended && (
+          <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => setPausing((open) => !open)} aria-expanded={pausing}>
+            Pause the whole gallery
+          </Button>
+        )}
       </div>
+      {pausing && (
+        <div className="space-y-2 rounded-lg border border-canvas-line p-3">
+          <label className="block text-xs text-muted" htmlFor={`pause-${row.mediaId}`}>
+            What the organizer is told, by email and on their dashboard. Keep anything you found, and any report
+            number, in the note above, which only Klik sees.
+          </label>
+          <textarea
+            id={`pause-${row.mediaId}`}
+            className={`${inputClass} min-h-20`}
+            value={pauseReason}
+            onChange={(event) => setPauseReason(event.target.value)}
+            maxLength={500}
+          />
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={!ready || pauseReason.trim().length < 10}
+            onClick={() => void pause()}
+          >
+            {busy === "suspend" ? "Pausing…" : "Pause it and tell the organizer"}
+          </Button>
+        </div>
+      )}
       {error && (
         <p className="text-xs text-red-400" role="alert">
           {error}

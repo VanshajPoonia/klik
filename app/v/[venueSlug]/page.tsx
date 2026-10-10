@@ -28,7 +28,9 @@ export default async function VenueHubPage({
   const venueEvents = await db
     .select()
     .from(events)
-    .where(and(eq(events.ownerId, venue.id), ne(events.visibility, "private"), isNull(events.deletedAt)))
+    .where(
+      and(eq(events.ownerId, venue.id), ne(events.visibility, "private"), isNull(events.deletedAt), isNull(events.suspendedAt)),
+    )
     .orderBy(desc(events.createdAt));
   // Never a draft: the reusable venue QR must not lead anyone into a gallery
   // that has not gone live.

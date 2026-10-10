@@ -80,6 +80,13 @@ export function describeActivity(
         if (visibility === "link") return `made ${items} link-only`;
         return `showed ${items} in the gallery`;
       }
+      if (verb === "highlight") {
+        // AI-8.
+        const items = plural(Number(count));
+        if (visibility === "pinned") return `pinned ${items} to the highlights`;
+        if (visibility === "excluded") return `kept ${items} out of the highlights`;
+        return `let the score choose for ${items} in the highlights`;
+      }
       return `${BULK_VERBS[verb] ?? "changed"} ${plural(Number(count))}`;
     }
     case "team.changed": {

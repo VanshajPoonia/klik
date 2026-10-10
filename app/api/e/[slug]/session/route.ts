@@ -47,6 +47,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (eventLicenseState(event) === "draft") {
     return NextResponse.json({ error: "This gallery is not open yet", code: "not_open" }, { status: 403 });
   }
+  // ADM-5: paused by Klik.
+  if (event.suspendedAt) {
+    return NextResponse.json({ error: "This gallery is unavailable for now", code: "suspended" }, { status: 403 });
+  }
   if (isExpired(event)) {
     return NextResponse.json({ error: "This event has ended", code: "ended" }, { status: 410 });
   }

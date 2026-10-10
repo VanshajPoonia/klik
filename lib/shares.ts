@@ -83,7 +83,8 @@ export async function loadShareByToken(token: string): Promise<ResolvedShare | n
   const [row] = await db
     .select({ share: mediaShares, event: events, item: media, folder: albums })
     .from(mediaShares)
-    .innerJoin(events, and(eq(events.id, mediaShares.eventId), isNull(events.deletedAt)))
+    // ADM-5: a gallery Klik has paused opens nothing through its links either.
+    .innerJoin(events, and(eq(events.id, mediaShares.eventId), isNull(events.deletedAt), isNull(events.suspendedAt)))
     .leftJoin(media, and(eq(media.id, mediaShares.mediaId), isNull(media.deletedAt)))
     // A folder in the trash takes its links with it, the way a deleted photo
     // does, and brings them back if it is restored. Smart folders are worked

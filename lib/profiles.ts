@@ -95,6 +95,7 @@ export async function profileFor(handle: string, now = new Date()): Promise<Prof
         eq(events.showOnProfile, true),
         isNull(events.deletedAt),
         isNull(events.purgedAt),
+        isNull(events.suspendedAt),
         ne(events.visibility, "private"),
         // Live: never a draft nobody can open yet, nor a lapsed one.
         isNotNull(events.entitlementId),

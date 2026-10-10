@@ -36,6 +36,7 @@
 - Share links for a folder or a selection **are** built (2026-10-10), on top of MED-1 to MED-3's per-photo visibility, share links and revocable access, and MED-4's folders.
 - Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times. Duplicate and blur cleanup (AI-7) and highlights (AI-8) are built without one too, 2026-10-10, from three numbers measured per photo by a background job.
 - The morning-after recap email (GRW-1) **is** built, 2026-10-10, and dormant until `COMPANY_POSTAL_ADDRESS` is set (LAUNCH.md step 11).
+- Klik can pause a gallery and ask an organizer to review a reported photo (ADM-5, 2026-10-10). AI-flagged media joins that queue when AI-6 has its key.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
 - Billing after the sale **is** built (PAY-5, PAY-8, ADM-2, 2026-10-10): grants record what was paid, organizers have a billing page, a failed Venue payment gets a 7-day grace with three emails, and `/admin/revenue` adds it up. All by hand, as payments are.
@@ -1131,6 +1132,8 @@ A table of accounts and events sorted by percentage of plan consumed, with every
 Table `audit_log` (id, actor_user_id, action, target_type, target_id, metadata jsonb, ip, created_at). Log every admin action, plan override, password reset, ownership transfer, and media deletion. Impersonation is allowed but shows a persistent banner to the impersonating admin and writes an audit entry on entry and exit.
 
 ### ADM-5. Abuse and reports queue
+**DONE 2026-10-10, except AI-flagged media, which waits for AI-6's key** (`drizzle/0047_suspensions.sql`, `lib/suspensions.ts`, `app/api/admin/events/[id]/suspension`, `components/admin/paused-galleries.tsx`, `test/suspensions.dbtest.ts`). The queue TRS-1 started now also **asks the organizer to review** a reported photo (an email saying what it was reported for, never by whom; the report stays open and the row shows when they were asked), and **pauses the whole gallery**. Pausing (`events.suspended_at`) closes every door that is not the event's team, in the shared rules rather than per route: `canViewGallery` and `canUpload` (so the gallery and everything behind it, kiosks included), joining, share links (`loadShareByToken`), the live display, the venue hub, public profiles and recaps (held, and sent if it reopens). The team keeps the dashboard, with a banner, and nothing is deleted. The organizer is emailed a reason the superadmin writes **separately from the note for the record**, and asking the organizer is refused outright for a held child-safety report, because the person running the gallery may be who it is about. `/admin` lists paused galleries with a reopen button, which emails the organizer too. Guests' own export and erasure keep working while paused.
+
 **Size:** M. **Depends on:** AI-6, NEW-9.
 Guest-reported media and AI-flagged media in one queue, with actions to hide, delete, notify the organizer, or suspend an event.
 
