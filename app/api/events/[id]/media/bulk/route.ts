@@ -22,6 +22,12 @@ const requestSchema = z.discriminatedUnion("action", [
     ids: z.array(z.string().min(1).max(64)).min(1).max(500),
     albumId: z.string().min(1).max(64).nullable(),
   }),
+  // AI-8: the host's word on the highlights. Null hands it back to the score.
+  z.object({
+    action: z.literal("highlight"),
+    ids: z.array(z.string().min(1).max(64)).min(1).max(500),
+    highlight: z.enum(["pinned", "excluded"]).nullable(),
+  }),
   z.object({ action: z.literal("delete"), ids: z.array(z.string().min(1).max(64)).min(1).max(500) }),
   z.object({ action: z.literal("restore"), ids: z.array(z.string().min(1).max(64)).min(1).max(500) }),
 ]);
@@ -71,6 +77,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       changed = await db
         .update(media)
         .set({ visibility: input.visibility })
+        .where(and(scope, isNull(media.deletedAt)))
+        .returning({ id: media.id });
+      break;
+    case "highlight":
+      changed = await db
+        .update(media)
+        .set({ highlight: input.highlight })
         .where(and(scope, isNull(media.deletedAt)))
         .returning({ id: media.id });
       break;
@@ -125,7 +138,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       targetType: "event",
       targetId: event.id,
       eventId: event.id,
-      detail: `${input.action}${"visibility" in input ? ` to ${input.visibility}` : ""} on ${changed.length} items.`,
+      detail: `${input.action}${"visibility" in input ? ` to ${input.visibility}` : ""}${
+        "highlight" in input ? ` to ${input.highlight ?? "scored"}` : ""
+      } on ${changed.length} items.`,
     });
   }
   return NextResponse.json({ ok: true, changed: changed.map((row) => row.id) });

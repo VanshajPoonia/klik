@@ -61,6 +61,10 @@ export const JOB_PAYLOADS = {
   "moments.refresh": z.object({ eventId: z.string().min(1).max(64) }),
   /** AI-1: refresh every event with recent media. */
   "moments.backfill": z.object({}),
+  /** AI-7, AI-8: measure one photo (hash, sharpness, brightness). */
+  "media.analyze": z.object({ mediaId: z.string().min(1).max(64) }),
+  /** AI-7: queue a measurement for photos that have none. */
+  "media.backfill_analysis": z.object({}),
   /** SEC-5: erase one event whose 30-day trash has closed. Idempotent: a gone event is done. */
   "events.purge_deleted": z.object({ eventId: z.string().min(1).max(64) }),
   /** PAY-8: one of the three emails during a failed payment's 7-day grace. */
@@ -79,6 +83,11 @@ export type JobPayload<K extends JobKind> = z.infer<(typeof JOB_PAYLOADS)[K]>;
 /** Queues a thumbnail for one media row, at most once while one is pending. */
 export function enqueueThumbnail(mediaId: string) {
   return enqueue("media.thumbnail", { mediaId }, { dedupeKey: `thumb:${mediaId}`, maxAttempts: 3 });
+}
+
+/** Queues the measurement of one photo, at most once while one is pending. */
+export function enqueueAnalysis(mediaId: string) {
+  return enqueue("media.analyze", { mediaId }, { dedupeKey: `analyze:${mediaId}`, maxAttempts: 3 });
 }
 
 /** Queues the location scrub for one video, at most once while one is pending. */
@@ -210,6 +219,8 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     { kind: "media.backfill_video_scrubs", payload: {} },
     // AI-1: anything a kick missed, and capture times found after the fact.
     { kind: "moments.backfill", payload: {} },
+    // AI-7: photos from before measuring existed, and any whose job was lost.
+    { kind: "media.backfill_analysis", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

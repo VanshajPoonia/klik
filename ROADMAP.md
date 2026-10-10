@@ -34,7 +34,7 @@
 - Passwordless sign-up. `/signup` exists but asks for a password, so ACC-2's email-code path is still unbuilt. Usernames are still generated at signup, and since ID-2 can be changed on `/dashboard/account`.
 - Guest accounts, guest event history and the guest to organizer path **are** built: ACC-1 to ACC-5 shipped 2026-10-09, and passkeys (ACC-6) on 2026-10-10. Hearts and comments (MED-9) shipped on 2026-10-09.
 - Share links for a folder or a selection **are** built (2026-10-10), on top of MED-1 to MED-3's per-photo visibility, share links and revocable access, and MED-4's folders.
-- Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times.
+- Any AI that needs a model. Moments and bursts (AI-1) are built and need none: they come from capture times. Duplicate and blur cleanup (AI-7) and highlights (AI-8) are built without one too, 2026-10-10, from three numbers measured per photo by a background job.
 - A kiosk tablet for the venue **is** built (VEN-2, 2026-10-09), and so are photo challenges with an optional leaderboard (GRW-3) the camera's burst, level and blocked-camera recovery (CAM-1), and a photo editor that saves edits as copies (CAM-2), the same day.
 - Sharing one photo out of the gallery **is** built (CAM-3, 2026-10-09): send the file, a story image with the gallery's QR code, a link that opens the photo, and saving full size or smaller.
 - Billing after the sale **is** built (PAY-5, PAY-8, ADM-2, 2026-10-10): grants record what was paid, organizers have a billing page, a failed Venue payment gets a 7-day grace with three emails, and `/admin/revenue` adds it up. All by hand, as payments are.
@@ -788,6 +788,8 @@ A folder whose `kind = 'smart'` holds a stored query (time range, label, person 
 A public QR at a public venue will eventually receive something you do not want in a shared gallery. Run an NSFW and violence classifier on upload; anything flagged goes to `pending` regardless of the moderation setting, with a reason shown to the organizer only. Cheap insurance, and it belongs in the same job pipeline as AI-2.
 
 ### AI-7. Duplicate and quality cleanup
+**DONE 2026-10-10, without a model** (`drizzle/0045_image_analysis.sql`, `lib/image-analysis.ts`, `lib/job-handlers/analyze.ts`, `components/dashboard/tidy-panel.tsx`, `test/image-analysis.dbtest.ts`). The `media.analyze` job measures each photo once from its grid tile: a 64-bit difference hash, the variance of the Laplacian, and mean brightness, on the row. Uploads queue it; a daily backfill catches the rest. "Tidy up" on the gallery tab offers three things, each previewed photo by photo: the same file sent twice (by `content_hash`, which is finally read, at any distance in time; the first copy is kept), bursts of near-identical frames (a few bits apart within ten minutes; the sharpest is kept, and any frame can be chosen instead), and photos far softer than the event's median. Hiding is the bulk visibility change, with undo. Pinned highlights are never offered. Near-duplicates use the hash rather than AI-2's embeddings; see "Answered (2026-10-10)".
+
 **Size:** M. **Depends on:** AI-2. **Promoted from NEW-6 on 2026-09-30.**
 Organizers will reach for this on every single event, which is more than can be said for most of Phase AI.
 - **Exact duplicates** by `content_hash`, which the schema already stores and nothing currently reads. ARCHITECTURE specced a duplicate badge and it was never built, so start by finally shipping that.
@@ -796,6 +798,8 @@ Organizers will reach for this on every single event, which is more than can be 
 - The payoff is one action: "47 similar photos, keep the sharpest of each group", with a preview of exactly what will be hidden and an undo. **Hide, do not delete**, at least on the first pass. Deleting a guest's photo because an algorithm called it blurry is not a mistake you can take back, and the sharpest frame is not always the best one.
 
 ### AI-8. Highlight selection
+**DONE 2026-10-10, without a model** (`lib/highlights.ts`, `components/dashboard/highlights-panel.tsx`, `media.highlight`). Up to 20 photos, scored on sharpness against the rest of the event, exposure, and hearts and comments (a comment counts double), then chosen greedily so each photo already taken from a moment (AI-1's, or half-hour spans without them) and each one that looks like a pick lowers the next one's worth. Blurry photos, nearly black or white ones and all but the best frame of a burst are left out. The Highlights tab shows them in the order they were taken, with the next twelve in line. The host pins (always in) or removes (never in), from the tab or from a gallery selection, and can hand either back to the score. Only photos guests can see are chosen, since a recap goes to guests. `highlightsFor` is pure and shared, so the recap (GRW-1) sends exactly what the tab shows. No faces or composition: AI-3 is cut, and scene labels wait for AI-2's key.
+
 **Size:** M. **Depends on:** AI-2, AI-7. **Blocks:** GRW-1, GRW-2.
 Score each photo for recap-worthiness: sharpness (AI-7), faces present and looking at the camera (or scene labels if AI-3 is skipped), exposure, composition, and diversity so the top 20 are not twenty shots of one moment. Spread the selection across the moments from AI-1 so a recap tells the story of the night rather than showing the best-lit ten minutes of it. Expose it as "Highlights" in the dashboard with manual override, because the organizer's judgement beats the score and they will want the shot of their grandmother whether or not it scored well.
 
@@ -1247,6 +1251,9 @@ The hosted Payment Links never tell Klik a payment failed, and automating that w
 
 ### GRW-5: $10 of credit each side, spent by a superadmin. ANSWERED
 Ten dollars is a quarter of the cheapest pass: enough to notice, small enough that farming it costs more than it pays (it only arrives after a real purchase). It is credit, not a coupon, because a coupon would have to be created in Stripe and attached to Payment Links that accept codes from anyone. A person refunds it from the next payment, which is the same human step every grant already has. Change it in `lib/referrals.ts`.
+
+### AI-7, AI-8: measured, not modelled. ANSWERED
+Both tasks were written to depend on AI-2's embeddings, which need a Cloudflare key. A difference hash finds the near-identical frames everyone shoots of one toast just as well, because those frames are near-identical pixel for pixel; embeddings earn their keep finding "the same scene from across the room", which is not what a tidy should hide. The variance of the Laplacian is what the task already named for blur, and brightness keeps black frames out of highlights. All three come from one pass over the 480px tile the gallery already made, cost nothing per photo, and run inside the existing job queue, so the feature works on day one with no key and no per-image bill. When AI-2 lands, its embeddings can join the same groupings (`similarGroups` takes any distance) without changing the screens. Highlights stay in the dashboard as a pure function, not a stored list, so the host's pins are the only state and nothing goes stale when a guest hearts a photo.
 
 ## Still open
 
@@ -1715,6 +1722,8 @@ The `klik_g_<eventId>` cookie is a signed JWT holding a guest id. Nothing server
 ### 6. Duplicate detection was specced, built halfway, and never wired up
 
 `media.content_hash` exists, has an index, and is populated. **Nothing reads it.** ARCHITECTURE.md §3 describes a duplicate badge that was never built. AI-7 now covers it properly. Noting it because a populated, indexed, unread column is the kind of thing that reads as working when it is not.
+
+**Resolved 2026-10-10 (AI-7).** "Tidy up" reads it to find the same file sent twice. It is the uploader's own hash, so a guest could forge a match, but the worst that does is offer a photo for hiding in a preview the host reviews.
 
 ---
 

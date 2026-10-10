@@ -550,6 +550,13 @@ export const media = pgTable(
     proofBy: text("proof_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
     proofOriginalPathname: text("proof_original_pathname"),
     proofReleasedAt: timestamp("proof_released_at", { withTimezone: true }),
+    // AI-7, AI-8: measured once by the `media.analyze` job. lib/image-analysis.ts.
+    perceptualHash: text("perceptual_hash"),
+    sharpness: real("sharpness"),
+    brightness: real("brightness"),
+    analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
+    // AI-8: the host pinned it into the highlights or kept it out.
+    highlight: text("highlight").$type<"pinned" | "excluded">(),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),

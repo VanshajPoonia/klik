@@ -39,10 +39,12 @@ import { ReportedComments, type ReportedCommentRow } from "@/components/dashboar
 import { KioskPanel } from "@/components/dashboard/kiosk-panel";
 import { ChallengesPanel } from "@/components/dashboard/challenges-panel";
 import { PrintStudioCard } from "@/components/dashboard/print-studio-card";
+import { TidyPanel } from "@/components/dashboard/tidy-panel";
+import { HighlightsPanel } from "@/components/dashboard/highlights-panel";
 import { nanoid } from "nanoid";
 import { uploadToGallery } from "@/lib/upload-client";
 
-type Tab = "gallery" | "insights" | "links" | "settings" | "qr" | "trash";
+type Tab = "gallery" | "highlights" | "insights" | "links" | "settings" | "qr" | "trash";
 
 export function EventDashboard({
   event,
@@ -362,10 +364,12 @@ export function EventDashboard({
   type BulkRequest =
     | { action: "approve" | "reject" | "delete" | "restore" }
     | { action: "visibility"; visibility: MediaVisibility }
-    | { action: "move"; albumId: string | null };
+    | { action: "move"; albumId: string | null }
+    | { action: "highlight"; highlight: "pinned" | "excluded" | null };
 
-  async function runBulk(request: BulkRequest, ids: string[]) {
-    if (ids.length === 0) return;
+  /** Resolves to the ids that changed, or null when the request failed. */
+  async function runBulk(request: BulkRequest, ids: string[]): Promise<Set<string> | null> {
+    if (ids.length === 0) return new Set();
     setBulkBusy(true);
     setMediaError(null);
     try {
@@ -393,6 +397,7 @@ export function EventDashboard({
             if (request.action === "reject") return { ...item, status: "rejected" as MediaStatus };
             if (request.action === "visibility") return { ...item, visibility: request.visibility };
             if (request.action === "move") return { ...item, albumId: request.albumId };
+            if (request.action === "highlight") return { ...item, highlight: request.highlight };
             return item;
           }),
         );
@@ -401,8 +406,10 @@ export function EventDashboard({
       if (changed.size < ids.length && request.action !== "restore") {
         setMediaError(`${ids.length - changed.size} could not be changed. Anything Klik is reviewing stays as it is.`);
       }
+      return changed;
     } catch (error) {
       setMediaError(error instanceof Error ? error.message : "Could not update the selection.");
+      return null;
     } finally {
       setBulkBusy(false);
     }
@@ -583,6 +590,7 @@ export function EventDashboard({
           {(
             [
               "gallery",
+              "highlights",
               ...(license.state !== "draft" ? ["insights"] : []),
               ...(canManageShares ? ["links"] : []),
               "settings",
@@ -644,6 +652,13 @@ export function EventDashboard({
                 </Button>
               </section>
             )}
+            {/* AI-7. Only once there is something to tidy. */}
+            <TidyPanel
+              items={approved}
+              busy={bulkBusy}
+              onVisibility={(ids, visibility) => runBulk({ action: "visibility", visibility }, ids)}
+              onOpen={setLightboxId}
+            />
             {pending.length > 0 && (
               <section>
                 <h2 className="mb-4 text-xs font-medium tracking-wide text-muted uppercase">
@@ -830,6 +845,24 @@ export function EventDashboard({
         )}
         {tab === "trash" && canManageTrash && <TrashPanel eventId={event.id} />}
         {tab === "insights" && <InsightsPanel eventId={event.id} slug={event.slug} />}
+        {tab === "highlights" && (
+          <>
+            {mediaError && (
+              <div
+                className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+                role="alert"
+              >
+                {mediaError}
+              </div>
+            )}
+            <HighlightsPanel
+              items={mediaItems}
+              busy={bulkBusy}
+              onHighlight={(ids, highlight) => void runBulk({ action: "highlight", highlight }, ids)}
+              onOpen={setLightboxId}
+            />
+          </>
+        )}
         {tab === "qr" &&
           (license.state === "draft" ? (
             // ACT-3: no QR code before the event is live. One printed now
@@ -895,6 +928,9 @@ export function EventDashboard({
                 void releaseProofs(selectedItems.filter((item) => item.proof === "mine").map((item) => item.id));
               }
               else if (value === "reject") void runBulk({ action: "reject" }, ids);
+              else if (value === "pin") void runBulk({ action: "highlight", highlight: "pinned" }, ids);
+              else if (value === "unpin") void runBulk({ action: "highlight", highlight: null }, ids);
+              else if (value === "exclude") void runBulk({ action: "highlight", highlight: "excluded" }, ids);
               else if (value === "private" || value === "gallery" || value === "link") {
                 void runBulk({ action: "visibility", visibility: value }, ids);
               } else if (value.startsWith("move:")) {
@@ -913,6 +949,11 @@ export function EventDashboard({
                 Release clean photos ({selectedItems.filter((item) => item.proof === "mine").length})
               </option>
             )}
+            <optgroup label="Highlights">
+              <option value="pin">Pin to highlights</option>
+              <option value="exclude">Keep out of highlights</option>
+              <option value="unpin">Let the score decide</option>
+            </optgroup>
             <option value="private">Hide from guests</option>
             <option value="gallery">Show in the gallery</option>
             <option value="link">Link only</option>

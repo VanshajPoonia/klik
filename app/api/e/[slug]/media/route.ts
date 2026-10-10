@@ -25,7 +25,7 @@ import {
 import { acceptDerivedObject } from "@/lib/derived-objects";
 import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
 import { renderThumbnail } from "@/lib/thumbnail";
-import { enqueue, enqueueMomentsRefresh, enqueueThumbnail, enqueueVideoScrub, kickJobRunner } from "@/lib/jobs";
+import { enqueue, enqueueAnalysis, enqueueMomentsRefresh, enqueueThumbnail, enqueueVideoScrub, kickJobRunner } from "@/lib/jobs";
 import { claimUsageWarning } from "@/lib/notices";
 import { spendShot } from "@/lib/disposable";
 import { liveChallengeId } from "@/lib/challenges";
@@ -684,6 +684,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   if (row.kind === "video") {
     await enqueueVideoScrub(row.id).catch((error) => reportError("upload.video_scrub_enqueue_failed", error));
+  }
+
+  // AI-7, AI-8: measured once, after the response, for tidying and highlights.
+  if (row.kind === "photo") {
+    await enqueueAnalysis(row.id).catch((error) => reportError("upload.analysis_enqueue_failed", error));
   }
 
   // AI-1: every photo can move the event's moments. Collapsed while a refresh

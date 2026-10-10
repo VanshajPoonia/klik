@@ -63,6 +63,8 @@ const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   "media.backfill_video_scrubs": async () => (await import("./job-handlers/video-scrub")).backfillVideoScrubs,
   "moments.refresh": async () => (await import("./job-handlers/moments")).refreshMoments,
   "moments.backfill": async () => (await import("./job-handlers/moments")).backfillMoments,
+  "media.analyze": async () => (await import("./job-handlers/analyze")).analyzeMedia,
+  "media.backfill_analysis": async () => (await import("./job-handlers/analyze")).backfillAnalysis,
   "events.purge_deleted": async () => async (payload) => {
     await (await import("./purge")).purgeDeletedEvent(payload.eventId);
   },
