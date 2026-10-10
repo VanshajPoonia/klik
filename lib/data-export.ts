@@ -189,6 +189,10 @@ export async function guestExport(guestId: string, appUrl: string) {
       consentedAt: guests.consentedAt,
       consentVersion: guests.consentVersion,
       shotsUsed: guests.shotsUsed,
+      recapEmail: guests.recapEmail,
+      recapConsent: guests.recapConsent,
+      recapConsentedAt: guests.recapConsentedAt,
+      recapSentAt: guests.recapSentAt,
       eventId: guests.eventId,
       userId: guests.userId,
       eventName: events.name,
@@ -229,6 +233,17 @@ export async function guestExport(guestId: string, appUrl: string) {
       joinedAt: iso(guest.createdAt),
       consent: { version: guest.consentVersion, agreedAt: iso(guest.consentedAt) },
       ...(guest.disposable ? { shotsTaken: guest.shotsUsed } : {}),
+      // GRW-1. The address is held only until the one email goes.
+      ...(guest.recapConsentedAt
+        ? {
+            highlightsByEmail: {
+              askedAt: iso(guest.recapConsentedAt),
+              consent: guest.recapConsent,
+              address: guest.recapEmail,
+              sentAt: iso(guest.recapSentAt),
+            },
+          }
+        : {}),
     },
     photosAndVideos: uploads.map((row, index) => ({
       file: zipEntryName(index, row),

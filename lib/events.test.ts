@@ -60,6 +60,7 @@ const row: Event = {
   showOnProfile: false,
   guestLanguage: "auto",
   keepPhotoDetails: false,
+  recapEnabled: true,
 };
 
 /**
@@ -137,6 +138,8 @@ const WITHHELD: Record<string, string> = {
   guestLanguage: "decides what the server sends, never needed raw",
   // MED-8. Applies to the team's own uploads; guests are never told.
   keepPhotoDetails: "host configuration for the team's uploads",
+  // GRW-1. The page decides whether to offer the recap and passes that alone.
+  recapEnabled: "decides what the server sends, never needed raw",
 };
 
 describe("toPublicEvent", () => {

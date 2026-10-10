@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { db } from "./db";
@@ -65,6 +65,10 @@ export const JOB_PAYLOADS = {
   "media.analyze": z.object({ mediaId: z.string().min(1).max(64) }),
   /** AI-7: queue a measurement for photos that have none. */
   "media.backfill_analysis": z.object({}),
+  /** GRW-1: send one event's due recaps, then wait for the next one due. */
+  "recap.send": z.object({ eventId: z.string().min(1).max(64) }),
+  /** GRW-1: any event with a recap past due and no job to send it. */
+  "recap.backfill": z.object({}),
   /** SEC-5: erase one event whose 30-day trash has closed. Idempotent: a gone event is done. */
   "events.purge_deleted": z.object({ eventId: z.string().min(1).max(64) }),
   /** PAY-8: one of the three emails during a failed payment's 7-day grace. */
@@ -88,6 +92,21 @@ export function enqueueThumbnail(mediaId: string) {
 /** Queues the measurement of one photo, at most once while one is pending. */
 export function enqueueAnalysis(mediaId: string) {
   return enqueue("media.analyze", { mediaId }, { dedupeKey: `analyze:${mediaId}`, maxAttempts: 3 });
+}
+
+/**
+ * GRW-1: makes sure one event's recap job will run by `due`. One job per event:
+ * if one is already waiting, it is brought forward rather than doubled.
+ */
+export async function scheduleRecap(eventId: string, due: Date) {
+  const dedupeKey = `recap:${eventId}`;
+  const { enqueued } = await enqueue("recap.send", { eventId }, { dedupeKey, runAfter: due, maxAttempts: 5 });
+  if (!enqueued) {
+    await db
+      .update(jobs)
+      .set({ runAfter: sql`LEAST(${jobs.runAfter}, ${due.toISOString()}::timestamptz)` })
+      .where(and(eq(jobs.dedupeKey, dedupeKey), eq(jobs.status, "queued")));
+  }
 }
 
 /** Queues the location scrub for one video, at most once while one is pending. */
@@ -221,6 +240,8 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     { kind: "moments.backfill", payload: {} },
     // AI-7: photos from before measuring existed, and any whose job was lost.
     { kind: "media.backfill_analysis", payload: {} },
+    // GRW-1: a recap past due whose job was lost.
+    { kind: "recap.backfill", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

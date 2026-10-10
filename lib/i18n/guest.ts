@@ -55,6 +55,10 @@ const en = {
     namePlaceholder: "Maya",
     joining: "Joining…",
     continue: "Continue",
+    recapEmail: "Email (optional)",
+    recapHint: "Get the best photos the morning after.",
+    recapPlaceholder: "you@example.com",
+    recapConsent: "Email me the highlights the morning after. One email, then Klik deletes my address.",
   },
   gallery: {
     linkedMissing: "That photo is not in the gallery any more, or not yet. Here is everything else.",
@@ -414,6 +418,7 @@ const en = {
     password_required: "Enter the gallery password.",
     wrong_password: "That password is not right.",
     too_many_tries: "Too many tries. Wait a little and try again.",
+    recap_email_invalid: "That email address does not look right. Check it, or leave it empty.",
   },
 };
 
@@ -445,6 +450,10 @@ const es: GuestCopy = {
     namePlaceholder: "Maya",
     joining: "Entrando…",
     continue: "Continuar",
+    recapEmail: "Correo (opcional)",
+    recapHint: "Recibe las mejores fotos a la mañana siguiente.",
+    recapPlaceholder: "tu@ejemplo.com",
+    recapConsent: "Envíame lo mejor a la mañana siguiente. Un solo correo, y después Klik borra mi dirección.",
   },
   gallery: {
     linkedMissing: "Esa foto ya no está en la galería, o todavía no. Aquí tienes todo lo demás.",
@@ -811,6 +820,7 @@ const es: GuestCopy = {
     password_required: "Escribe la contraseña de la galería.",
     wrong_password: "Esa contraseña no es correcta.",
     too_many_tries: "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
+    recap_email_invalid: "Esa dirección de correo no parece correcta. Revísala o déjala vacía.",
   },
 };
 

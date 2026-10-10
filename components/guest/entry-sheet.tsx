@@ -14,10 +14,13 @@ export function EntrySheet({
   slug,
   eventName,
   requiresPassword,
+  offerRecap = false,
 }: {
   slug: string;
   eventName: string;
   requiresPassword: boolean;
+  /** GRW-1: the host offers the morning-after email and Klik can send it. */
+  offerRecap?: boolean;
 }) {
   const router = useRouter();
   const { t, locale } = useGuestCopy();
@@ -25,6 +28,9 @@ export function EntrySheet({
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [consent, setConsent] = useState(false);
+  const [recapEmail, setRecapEmail] = useState("");
+  const [recapConsent, setRecapConsent] = useState(false);
+  const wantsRecap = offerRecap && recapEmail.trim().length > 0;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +49,10 @@ export function EntrySheet({
           password: requiresPassword ? password : undefined,
           // TRS-3: recorded with the consent, so it says which words were agreed to.
           locale,
+          // GRW-1: only with its own tick, and the phone's zone for "the morning after".
+          ...(wantsRecap && recapConsent
+            ? { recapEmail: recapEmail.trim(), recapConsent: true, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }
+            : {}),
         }),
       });
 
@@ -92,6 +102,30 @@ export function EntrySheet({
               autoComplete="given-name"
             />
           </Field>
+          {offerRecap && (
+            <div className="space-y-3">
+              <Field label={t.entry.recapEmail} htmlFor="guest-recap-email" hint={t.entry.recapHint}>
+                <input
+                  id="guest-recap-email"
+                  type="email"
+                  className={inputClass}
+                  value={recapEmail}
+                  onChange={(event) => setRecapEmail(event.target.value)}
+                  placeholder={t.entry.recapPlaceholder}
+                  maxLength={254}
+                  autoComplete="email"
+                  inputMode="email"
+                />
+              </Field>
+              {/* A separate tick from the gallery's own consent, and only once
+                  there is an address to send to. */}
+              {wantsRecap && (
+                <Checkbox checked={recapConsent} onChange={(event) => setRecapConsent(event.target.checked)} required>
+                  {t.entry.recapConsent}
+                </Checkbox>
+              )}
+            </div>
+          )}
           <Checkbox
             checked={consent}
             onChange={(event) => setConsent(event.target.checked)}
@@ -119,7 +153,7 @@ export function EntrySheet({
               {t.common.privacyPolicy}
             </a>
           </p>
-          <Button type="submit" disabled={loading || !consent} className="w-full">
+          <Button type="submit" disabled={loading || !consent || (wantsRecap && !recapConsent)} className="w-full">
             {loading ? t.entry.joining : t.entry.continue}
           </Button>
         </form>

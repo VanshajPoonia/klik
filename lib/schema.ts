@@ -6,6 +6,7 @@ import {
   boolean,
   bigint,
   integer,
+  smallint,
   real,
   index,
   uniqueIndex,
@@ -353,6 +354,8 @@ export const events = pgTable(
     guestLanguage: text("guest_language").$type<"auto" | "en" | "es">().notNull().default("auto"),
     // MED-8: the team's photos keep camera details, never location. lib/exif-scrub.ts.
     keepPhotoDetails: boolean("keep_photo_details").notNull().default(false),
+    // GRW-1: guests are offered the morning-after recap. See lib/recap.ts.
+    recapEnabled: boolean("recap_enabled").notNull().default(true),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );
@@ -455,6 +458,15 @@ export const guests = pgTable(
      * always will be: an account is never required to join or upload.
      */
     userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    // GRW-1: asked for the recap. The address is cleared when it is sent, so
+    // only `recapSentAt` outlives it. See drizzle/0046_recap.sql.
+    recapEmail: text("recap_email"),
+    recapConsent: text("recap_consent"),
+    recapConsentedAt: timestamp("recap_consented_at", { withTimezone: true }),
+    recapLocale: text("recap_locale"),
+    recapDueAt: timestamp("recap_due_at", { withTimezone: true }),
+    recapFailures: smallint("recap_failures").notNull().default(0),
+    recapSentAt: timestamp("recap_sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   // guests_user_idx is partial and lives in drizzle/0028 (constraint 4).
@@ -568,6 +580,13 @@ export const media = pgTable(
     // recreate them as full indexes and quietly undo that.
   ],
 );
+
+/** GRW-1: addresses that asked never to be emailed again, hashed. drizzle/0046. */
+export const emailSuppressions = pgTable("email_suppressions", {
+  emailHash: text("email_hash").primaryKey(),
+  reason: text("reason").$type<"unsubscribed" | "complained" | "bounced">().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** GRW-5: who brought whom. See drizzle/0041_referrals.sql. */
 export const referrals = pgTable(

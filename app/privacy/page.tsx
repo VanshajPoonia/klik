@@ -78,6 +78,17 @@ export default function PrivacyPage() {
         to it. Signing in is never needed to view, upload or download.
       </p>
       <p>
+        Where the organizer offers it, a guest <strong>may choose</strong> to leave an email address
+        when they join, with a separate tick, to be sent the gallery&apos;s best photos the morning
+        after. We store the address, which words they agreed to and when, their language, and their
+        phone&apos;s time zone so the email arrives in their morning. We send <strong>one</strong>{" "}
+        email and then delete the address; we keep only the time it was sent. The photos in it are
+        chosen automatically from how sharp, well lit and loved they are, and the organizer can
+        change the choice. A photo the organizer later hides stops showing in the email. The email
+        has a link to stop all such emails for good: we then keep a one-way fingerprint (a SHA-256
+        hash) of the address, which lets us refuse to send to it without being able to read it.
+      </p>
+      <p>
         If the organizer turns them on, a guest can also <strong>heart</strong> a photo and{" "}
         <strong>comment</strong> on it. A heart is recorded against the guest&apos;s cookie for that
         gallery, and other guests see only how many hearts a photo has, never whose they are. A
@@ -222,7 +233,7 @@ export default function PrivacyPage() {
           <strong>Vercel</strong> runs the application.
         </li>
         <li>
-          <strong>Resend</strong> sends account email.
+          <strong>Resend</strong> sends account email, and the one highlights email a guest asks for.
         </li>
         <li>
           <strong>Stripe</strong> processes payments and holds the card details we never see.
@@ -269,8 +280,9 @@ export default function PrivacyPage() {
         for any event from &ldquo;Your galleries&rdquo;, and deleting your account removes everything
         you shared everywhere. Otherwise write to us at{" "}
         <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a> and tell us which event.
-        Unless you signed in we hold no email address for you, so we will usually need the organizer
-        to confirm which guest record is yours.
+        Unless you signed in, or asked for the highlights and they have not gone yet, we hold no
+        email address for you, so we will usually need the organizer to confirm which guest record
+        is yours.
       </p>
       <p>
         <strong>Organizers:</strong> delete your account and everything in it yourself, from the

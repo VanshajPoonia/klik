@@ -491,6 +491,45 @@ check the details in your computer's file info after downloading it.
 
 - [ ] Uploaded a camera JPEG with the setting on and saw its details kept, location gone
 
+And two new dashboard views for every event, both built without any AI key:
+
+- **Tidy up**, on the gallery tab, appears once there is something to tidy: the same photo
+  sent twice, bursts of near-identical shots, and photos far blurrier than the rest. Each
+  set shows which photo stays (tap another to keep that one instead) and nothing is deleted:
+  the others are hidden from guests, with an Undo. Try it on a gallery with a few bursts.
+- **Highlights**, a new tab: up to 20 photos picked for being sharp, well lit and loved, in
+  the order they were taken, spread across the night. Pin or remove any of them; from the
+  gallery, select photos and choose **Pin to highlights**. Older photos are measured by the
+  04:00 job, so a gallery from before today fills in over the next day or two.
+
+- [ ] Opened Tidy up and Highlights on an event with photos
+
+### 11. Turn on the morning-after email
+
+Guests can now leave their email when they join, with its own tick, and get **one** email
+the morning after (9am where they are) with the 12 best photos and a link back. Then Klik
+deletes the address. It is switched off until you do two things, because US law (CAN-SPAM)
+requires a postal address in the footer of any email like it:
+
+1. In Vercel, **Settings, Environment Variables**, add `COMPANY_POSTAL_ADDRESS` for
+   Production: a real address where the business receives mail, on one line, for example
+   `Kreativ Vantage, 123 Example St, Suite 4, Austin, TX 78701, USA`. A PO box or a
+   registered mail service is fine. Redeploy. The entry sheet then shows the email field.
+2. **Check your Resend plan.** The free plan sends 100 emails a day and 3,000 a month, and a
+   single 200-guest wedding can pass the daily limit on its own morning. Resend **Pro** ($20 a
+   month, 50,000 a month) removes the problem. Sends that are refused are retried twice, six
+   hours apart, and then dropped.
+
+Then try it: join one of your galleries on your phone, signed out, with your own email and
+the tick. The email comes at 9am the next day (on Vercel Hobby, at the first job run after
+that, which may be the 04:00 UTC cron; Pro, step 6, makes it on time). Check it is not in
+spam, that the photos show, and that "Never email me a recap again" works. Hosts can turn the
+offer off per event in **Settings**.
+
+- [ ] Set COMPANY_POSTAL_ADDRESS in Vercel and redeployed
+- [ ] Checked the Resend plan against the size of the events you expect
+- [ ] Received a recap on a test event and pressed its unsubscribe link
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them
@@ -502,7 +541,10 @@ early if you would rather not be asked mid-task.
 |---|---|---|
 | **OPS-1** video transcoding | Cloudflare dashboard, **Stream**, subscribe (from $5 a month). Then **My Profile, API Tokens, Create Token**, custom token, permission **Account, Stream, Edit**, scoped to this account only | The token, as `CLOUDFLARE_STREAM_API_TOKEN` in `.env.local` and Vercel Production. Claude creates the signing key and the webhook through the API, so you do not have to |
 | **F-9** Sentry | sentry.io, project type **Next.js**, named `klik`. Then **Settings, Auth Tokens** with `project:releases` | `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` |
-| **AI** phase (scene search, duplicates, safety screening) | Cloudflare **API Tokens**, permission **Account, Workers AI, Read** | `CLOUDFLARE_AI_API_TOKEN` |
+| **AI-2, AI-6** scene search, similar-scene grouping, safety screening (duplicates and highlights already work without it) | Cloudflare **API Tokens**, permission **Account, Workers AI, Read** | `CLOUDFLARE_AI_API_TOKEN` |
+| **AI-5** cloud enhancement (restore, upscale, low light) | replicate.com, **Account, API tokens** | `REPLICATE_API_TOKEN` |
+| **VEN-3** custom domains for venues | Vercel, **Account Settings, Tokens**, scoped to this team, plus the team id | `VERCEL_API_TOKEN`, `VERCEL_TEAM_ID` |
+| **GRW-6** print orders | prodigi.com, sign up, **Settings, API**: start with the sandbox key | `PRODIGI_API_KEY` (sandbox first) |
 | **ACC** sign in with Google, optional | Google Cloud Console OAuth client. Redirect URI `https://klik.kreativvantage.com/api/auth/callback/google` | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` |
 
 ---

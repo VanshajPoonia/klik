@@ -59,6 +59,8 @@ const TABLES = [
   "entitlements",
   "erasure_log",
   "rate_limits",
+  // GRW-1. Stands alone: a hash, pointing at nothing.
+  "email_suppressions",
   // VEN-2, before `guests`, `albums`, `events` and `users`.
   "kiosks",
   // QR-4, before `events` and `users`.

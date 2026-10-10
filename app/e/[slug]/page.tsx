@@ -40,6 +40,7 @@ import { activeKiosk } from "@/lib/kiosks";
 import { challengeBoard } from "@/lib/challenges";
 import { getWatermark } from "@/lib/proofs";
 import { EntrySheet } from "@/components/guest/entry-sheet";
+import { isRecapAvailable } from "@/lib/recap";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 import { GuestCopyProvider } from "@/components/guest/guest-copy";
 import { GUEST_COPY } from "@/lib/i18n/guest";
@@ -112,9 +113,12 @@ export default async function GuestEventPage({
     </GuestCopyProvider>
   );
 
+  // GRW-1: offered only where the host allows it and Klik can send it.
+  const offerRecap = event.recapEnabled && isRecapAvailable();
+
   if (!access.allowed) {
     if (access.reason === "password_required") {
-      return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword />);
+      return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword offerRecap={offerRecap} />);
     }
     return speak(
       <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
@@ -149,7 +153,7 @@ export default async function GuestEventPage({
   const hasConsented = Boolean(guestSession && guestSession.eventId === event.id);
 
   if (!hasConsented && !isOwner) {
-    return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword={false} />);
+    return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword={false} offerRecap={offerRecap} />);
   }
 
   // GRW-7: an open by someone other than the event's team. Counted after the

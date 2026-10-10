@@ -28,6 +28,8 @@ export type EmailMessage = {
    * mail.
    */
   text: string;
+  /** GRW-1: `List-Unsubscribe` and its one-click partner, for mail that offers one. */
+  headers?: Record<string, string>;
 };
 
 export type SendResult =
@@ -82,6 +84,7 @@ export async function sendEmail(message: EmailMessage): Promise<SendResult> {
       subject: message.subject,
       html: message.html,
       text: message.text,
+      ...(message.headers ? { headers: message.headers } : {}),
     });
 
     // Resend answers with `{ data, error }` rather than throwing on a rejected

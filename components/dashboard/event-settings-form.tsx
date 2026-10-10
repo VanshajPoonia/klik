@@ -117,6 +117,7 @@ export function EventSettingsForm({
   const [reactionsEnabled, setReactionsEnabled] = useState(event.reactionsEnabled);
   const [commentsEnabled, setCommentsEnabled] = useState(event.commentsEnabled);
   const [momentsEnabled, setMomentsEnabled] = useState(event.momentsEnabled);
+  const [recapEnabled, setRecapEnabled] = useState(event.recapEnabled);
   const [showOnProfile, setShowOnProfile] = useState(event.showOnProfile);
   const [guestLanguage, setGuestLanguage] = useState(event.guestLanguage);
   const [keepPhotoDetails, setKeepPhotoDetails] = useState(event.keepPhotoDetails);
@@ -185,6 +186,7 @@ export function EventSettingsForm({
           reactionsEnabled,
           commentsEnabled,
           momentsEnabled,
+          recapEnabled,
           guestLanguage,
           keepPhotoDetails: canKeepPhotoDetails ? keepPhotoDetails : undefined,
           // GRW-4: the owner's choice alone; a manager's save leaves it as it is.
@@ -478,6 +480,13 @@ export function EventSettingsForm({
           hint="Klik splits the gallery wherever there was a long pause in the photos, like before and after the ceremony. Rename them from the gallery tab."
         >
           Show guests the gallery in moments
+        </Checkbox>
+        <Checkbox
+          checked={recapEnabled}
+          onChange={(change) => setRecapEnabled(change.target.checked)}
+          hint="Guests can leave an email when they join, with its own tick. The morning after, each gets one email of the highlights and a link back here, and Klik deletes the address. Nobody is sent anything they did not ask for."
+        >
+          Offer guests the best photos by email the morning after
         </Checkbox>
         {canKeepPhotoDetails && (
           <Checkbox

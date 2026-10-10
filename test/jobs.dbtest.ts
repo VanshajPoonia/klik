@@ -191,6 +191,7 @@ describe("scheduleDailyJobs", () => {
       "media.backfill_video_scrubs",
       "moments.backfill",
       "media.backfill_analysis",
+      "recap.backfill",
     ];
     const morning = new Date("2026-10-08T04:00:00Z");
     expect(await scheduleDailyJobs(morning)).toEqual(daily);

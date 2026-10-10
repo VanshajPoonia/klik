@@ -13,6 +13,9 @@ import { consentRecordId } from "@/lib/consent";
 import { LOCALES } from "@/lib/i18n/locale";
 import { eventLicenseState } from "@/lib/license";
 import { clientIp, consume } from "@/lib/ratelimit";
+import { isRecapAvailable, normalizeEmail, RECAP_CONSENT_ID, recapDueAt } from "@/lib/recap";
+import { scheduleRecap } from "@/lib/jobs";
+import { reportError } from "@/lib/observability";
 import {
   signGuestSession,
   guestCookieName,
@@ -26,6 +29,11 @@ const bodySchema = z.object({
   password: z.string().max(200).optional(),
   // TRS-3: the language the consent was shown in, recorded with it.
   locale: z.enum(LOCALES).optional(),
+  // GRW-1: the morning-after recap. Optional, and only with its own tick.
+  recapEmail: z.string().max(320).optional(),
+  recapConsent: z.literal(true).optional(),
+  // The phone's zone, so "nine in the morning" is the guest's morning.
+  timeZone: z.string().max(64).optional(),
 });
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
@@ -65,6 +73,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Consent is required", code: "consent_required" }, { status: 400 });
+  }
+
+  // GRW-1. Only when the host offers it and it can actually be sent; an
+  // address without its own tick is not kept.
+  let recap: Partial<typeof guests.$inferInsert> = {};
+  const offersRecap = event.recapEnabled && isRecapAvailable();
+  if (offersRecap && parsed.data.recapConsent && parsed.data.recapEmail?.trim()) {
+    const email = normalizeEmail(parsed.data.recapEmail);
+    if (!email) {
+      return NextResponse.json({ error: "That email address does not look right", code: "recap_email_invalid" }, { status: 400 });
+    }
+    const now = new Date();
+    recap = {
+      recapEmail: email,
+      recapConsent: `${RECAP_CONSENT_ID}:${parsed.data.locale ?? "en"}`,
+      recapConsentedAt: now,
+      recapLocale: parsed.data.locale ?? "en",
+      recapDueAt: recapDueAt({ eventDate: event.eventDate, joinedAt: now, timeZone: parsed.data.timeZone ?? null }),
+      recapFailures: 0,
+      recapSentAt: null,
+    };
   }
 
   const response = NextResponse.json({ ok: true });
@@ -118,6 +147,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           consentedAt: new Date(),
           consentVersion: consentRecordId(parsed.data.locale ?? "en"),
           ...(parsed.data.name ? { displayName: parsed.data.name } : {}),
+          ...recap,
         })
         .where(eq(guests.id, returning.id))
         .returning()
@@ -130,8 +160,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           consentedAt: new Date(),
           consentVersion: consentRecordId(parsed.data.locale ?? "en"),
           userId,
+          ...recap,
         })
         .returning();
+
+  if (recap.recapDueAt) {
+    // A lost schedule is caught by the daily recap.backfill, so joining never fails on it.
+    await scheduleRecap(event.id, recap.recapDueAt).catch((error) => reportError("recap.schedule_failed", error));
+  }
 
   const guestToken = await signGuestSession({ guestId: guest.id, eventId: event.id });
   response.cookies.set(guestCookieName(event.id), guestToken, {

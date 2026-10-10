@@ -52,6 +52,8 @@ const patchSchema = z.object({
   commentsEnabled: z.boolean().optional(),
   // AI-1. On by default; the team always sees moments either way.
   momentsEnabled: z.boolean().optional(),
+  // GRW-1. On by default: it only offers, each guest still chooses.
+  recapEnabled: z.boolean().optional(),
   // GRW-4. Listed on the owner's public profile, so only the owner sets it.
   showOnProfile: z.boolean().optional(),
   // TRS-3. The language guests see, unless they choose their own.
