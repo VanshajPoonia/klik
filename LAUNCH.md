@@ -564,6 +564,11 @@ early if you would rather not be asked mid-task.
       years. Not retroactive, so cover starts the day it is filed.
 - [ ] **Diary the DMCA renewal**, three years out
 - [ ] **Decide sales tax nexus** with an accountant (`ROADMAP.md` LAW-6)
+- [ ] **Delete the old EU bucket**, `klik-media`, once you are happy nothing needs it.
+      Production moved to `klik-media-us` on 7 October and the backup is
+      `klik-media-backup`; the old one holds the original 12 test objects and costs
+      next to nothing, so there is no hurry. Cloudflare dashboard, **R2**, the bucket,
+      **Settings**, **Delete bucket**. Check the name twice.
 
 ---
 

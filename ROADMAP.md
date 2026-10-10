@@ -258,6 +258,8 @@ Writing the tests also fixed the test database itself: `scripts/test-db.sh` now 
 AI embeddings, transcoding, large exports, and email all need work that outlives a request. Add table `jobs` (id, kind, payload jsonb, status, attempts, run_after, locked_at, locked_by, last_error, created_at) and `lib/jobs.ts` with `enqueue(kind, payload)` plus a claim query using `FOR UPDATE SKIP LOCKED`. A Vercel cron hits `/api/cron/jobs` every minute and drains up to N jobs within the function time budget, with exponential backoff and a dead-letter status. Do not reach for Redis or a queue service yet; Postgres handles this volume fine and keeps the stack at two services.
 
 ### F-6. Zod env validation and boot checks
+**DONE** (`lib/env.ts`): every variable has a schema, parsed once at module load, and a missing one names itself. Noted 2026-10-10, when the roadmap was checked against the code.
+
 **Size:** S.
 `lib/env.ts` currently reads `process.env` ad hoc and `lib/storage.ts` uses non-null assertions on R2 credentials, which fails at request time instead of at deploy time. Add a Zod schema for every variable, parsed once at module load, with a clear error naming the missing key.
 
@@ -288,6 +290,8 @@ The type checker caught a mistake while writing these: there is no `"free"` plan
 Still to do: rate limiter concurrency under real contention, and Playwright for four flows (guest joins and uploads, organizer moderates and downloads, activation applies, share link expires). Run all of it in CI.
 
 ### F-8. Transactional email
+**DONE** across the phases that needed each one (`lib/emails/`, sent through `lib/email.ts`, the slow ones through the job runner): invitations (ORG-2), storage warnings (usage), retention warnings at 30, 7 and 1 days (SEC-1), the activation and going-live mails (ACT), payment grace (PAY-8), export ready, passkey added, referral credit, and the guest recap (GRW-1). A payment receipt is Stripe's, and a "media purged" mail is not sent because the three retention warnings come first. Noted 2026-10-10.
+
 **Size:** S. **Depends on:** F-5.
 Resend is already a dependency for magic links. Add `lib/email/` with typed templates: co-host invite, quota warning at 75 and 90 percent, payment receipt, payment failed, gallery expiring in 7 days, media purged, guest recap. Send through the job runner so a slow SMTP call never blocks a request.
 
@@ -1004,6 +1008,11 @@ Resuming across a page reload: **DONE 2026-10-10** in OPS-3, through `POST /api/
 ### OPS-4. Move the media bucket to a US jurisdiction
 **Size:** S today, L after launch. **Do this before anything else in the plan.**
 
+> **DONE 2026-10-07: production serves from `klik-media-us`** (ARCHITECTURE.md
+> section 1 and the Production `R2_*` variables, checked 2026-10-10). The old EU
+> bucket `klik-media` is left in place and unused; deleting it is LAUNCH.md's
+> "Soon" list. The original note follows.
+>
 > **IN PROGRESS 2026-10-07. The bytes have moved; production has not.**
 > `klik-media-us` and `klik-media-backup` exist, both unpinned (jurisdiction
 > `default`) with an ENAM location hint, and all 12 objects are copied and
