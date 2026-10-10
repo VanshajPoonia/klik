@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -77,19 +78,16 @@ export function ShareSheet({
 
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  // Escape closes, and focus starts inside the dialog and returns to whatever
-  // opened it. Same contract as the lightbox.
+  // Escape closes, and focus starts inside the dialog, stays there, and
+  // returns to whatever opened it (TRS-3). Same contract as the lightbox.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, { initial: closeRef });
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      opener?.focus?.();
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   async function handleCreate() {
@@ -116,6 +114,7 @@ export function ShareSheet({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={`Share links for ${words.noun}`}

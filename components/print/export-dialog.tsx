@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { AlertTriangle, CheckCircle2, Info, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,17 +67,16 @@ export function ExportDialog({
     };
   }, [doc, size, env, missingImages.length]);
 
+  // TRS-3: focus in, kept in, and returned, separately from Escape, which
+  // changes with `working` and would otherwise pull focus back each time.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, { initial: closeRef });
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !working) onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      opener?.focus?.();
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [onClose, working]);
 
   const readBack: Finding[] = (unreadable ?? []).map((id) => ({
@@ -142,6 +142,7 @@ export function ExportDialog({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Export"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
@@ -267,12 +268,10 @@ export function Lightbox({
     return () => window.clearTimeout(timer);
   }, [commentsOpen, index, item, items.length, onIndexChange, sharingOpen, slideshowPlaying]);
 
-  // Move focus into the viewer, and hand it back to the tile that opened it.
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    return () => opener?.focus?.();
-  }, []);
+  // Move focus into the viewer, keep it there, and hand it back to the tile
+  // that opened it (TRS-3).
+  const viewerRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(viewerRef, { initial: closeRef });
 
   // Keep the page behind from scrolling under the viewer.
   useEffect(() => {
@@ -319,6 +318,7 @@ export function Lightbox({
 
   return (
     <div
+      ref={viewerRef}
       role="dialog"
       aria-modal="true"
       aria-label="Media viewer"

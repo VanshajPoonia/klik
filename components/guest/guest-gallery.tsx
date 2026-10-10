@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, Play, Stamp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
-import { isLightColor, readableOn } from "@/lib/color";
+import { ensureContrast, galleryPalette, readableOn } from "@/lib/color";
 import { formatDuration } from "@/lib/video-poster";
 import { uploadToGallery } from "@/lib/upload-client";
 import { UploadTray } from "@/components/upload/upload-tray";
@@ -692,26 +692,36 @@ export function GuestGallery({
   // Premium galleries pick their own colors. Keep text, borders, and buttons
   // readable whatever was chosen. The camera and viewer sit outside the content
   // wrapper on purpose: they are always dark, so they only take the accent.
+  // TRS-3: every colour held to WCAG AA against the chosen background, the
+  // accent included where it is a link, an icon or a button (lib/color.ts).
   const customBackground = event.backgroundColor.toLowerCase() !== DEFAULT_BACKGROUND;
-  const lightBackground = isLightColor(event.backgroundColor);
-  const blendToward = lightBackground ? "black" : "white";
-  const contentTheme = customBackground
-    ? {
-        ["--color-paper" as string]: lightBackground ? "#141412" : "#f3f1e9",
-        ["--color-muted" as string]: lightBackground ? "#5c5a52" : "#a3a196",
-        ["--color-canvas-raised" as string]: `color-mix(in srgb, ${event.backgroundColor} 94%, ${blendToward})`,
-        ["--color-canvas-line" as string]: `color-mix(in srgb, ${event.backgroundColor} 84%, ${blendToward})`,
-      }
-    : undefined;
+  const palette = galleryPalette(event.accentColor, event.backgroundColor);
+  const blendToward = palette.light ? "black" : "white";
+  const contentTheme = {
+    ["--color-volt" as string]: palette.volt,
+    ["--color-on-volt" as string]: palette.onVolt,
+    ...(customBackground
+      ? {
+          ["--color-paper" as string]: palette.paper,
+          ["--color-muted" as string]: palette.muted,
+          ["--color-canvas-raised" as string]: `color-mix(in srgb, ${event.backgroundColor} 94%, ${blendToward})`,
+          ["--color-canvas-line" as string]: `color-mix(in srgb, ${event.backgroundColor} 84%, ${blendToward})`,
+        }
+      : {}),
+  };
+  // The camera and the viewer are always near black, outside the content.
+  const darkVolt = ensureContrast(event.accentColor, "#050505", 3);
 
   return (
     <div
       className="min-h-screen px-6 py-10 md:px-10"
       style={{
         backgroundColor: event.backgroundColor,
+        // The viewer and camera are always dark, so out here the accent is
+        // held to that; the content wrapper holds it to the chosen background.
         ["--event-accent" as string]: event.accentColor,
-        ["--color-volt" as string]: event.accentColor,
-        ["--color-on-volt" as string]: readableOn(event.accentColor),
+        ["--color-volt" as string]: darkVolt,
+        ["--color-on-volt" as string]: readableOn(darkVolt),
         ["--color-canvas" as string]: event.backgroundColor,
       }}
     >

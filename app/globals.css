@@ -217,3 +217,30 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .klik-heart-burst { animation: klik-live-fade 400ms ease-out both; }
 }
+
+/* TRS-3: motion a person has asked their device not to show. Whatever moves
+   arrives at once instead, smooth scrolling jumps, and spinners stand still
+   (the icon still says something is working). Fades are kept where they say
+   something happened: a heart's fade is a change of opacity, which reduced
+   motion allows, so it keeps its time. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .klik-heart-burst {
+    animation-duration: 400ms !important;
+  }
+}
+
+/* TRS-3: the film grain is atmosphere, and in high contrast or forced colours
+   it is only noise over the words. */
+@media (prefers-contrast: more), (forced-colors: active) {
+  body::before {
+    display: none;
+  }
+}

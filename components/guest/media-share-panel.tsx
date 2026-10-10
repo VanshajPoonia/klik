@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { ArrowLeft, Check, Download, Link2, Send, Smartphone, Share2 } from "lucide-react";
 import { saveBlob } from "@/lib/enhance-view";
 import {
@@ -102,10 +103,13 @@ export function MediaSharePanel({
     return pending.current;
   };
 
+  // TRS-3: focus to the heading on open, and back to the Share button on close.
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(panelRef, { initial: headingRef, trap: false });
+
   // A photo is a megabyte or two: fetch it now so Send can open the share
   // sheet the instant it is tapped.
   useEffect(() => {
-    headingRef.current?.focus();
     if (canTakeFile && item.kind === "photo") {
       prepare().catch((error) => {
         if ((error as Error).name !== "AbortError") setMessage((error as Error).message);
@@ -164,6 +168,7 @@ export function MediaSharePanel({
   if (story) {
     return (
       <div
+        ref={panelRef}
         role="dialog"
         aria-label="Story image"
         className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[calc(100%-1.5rem)] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
@@ -220,6 +225,7 @@ export function MediaSharePanel({
 
   return (
     <div
+      ref={panelRef}
       role="dialog"
       aria-label={`Share this ${noun}`}
       className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[calc(100%-1.5rem)] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"

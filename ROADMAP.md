@@ -1065,6 +1065,14 @@ Endpoints: `DELETE /api/me` (self-service, requires typing your own username or 
 **Size:** M. Depends on F-5. Self-service "download everything you have on me" and "delete my account and uploads". Becomes mandatory rather than optional the moment AI-3 ships.
 
 ### TRS-3. Accessibility and internationalisation pass
+**Accessibility half DONE 2026-10-10** (`components/ui/use-dialog-focus.ts`, `lib/color.ts`, `lib/color.test.ts`, `app/globals.css`):
+- **Focus in every sheet and full-screen view.** One hook moves focus in on open, keeps Tab inside a modal (a stack, so a panel inside the viewer takes over while it is open), and hands focus back to whatever opened it. On the camera, the viewer, the share-link sheet and the print studio's two dialogs; the viewer's share and comment panels and the photo editor move focus in and back without trapping, because they are not modal or, for the editor, its own popovers render outside its box. Three dialogs used to re-run their focus code whenever a dependency changed and pull focus back to their close button mid-task; that is gone. Verified with real key presses in Chrome.
+- **The camera is a labelled dialog**, its zoom, look and mode buttons say which is on (`aria-pressed`, grouped), and the start-up spinner is announced.
+- **Custom gallery colours are held to WCAG AA** by `galleryPalette`: body text 7:1 where the background allows and never under 4.5:1, secondary text 4.5:1, the accent 3:1 where it is a link, icon or button, and a button's label 4.5:1 on it. Each colour moves as little as it can, in whichever direction is shorter, so a yellow on mid grey becomes a paler yellow rather than olive. The camera and viewer, always near black, take the accent held to that instead. Settings shows a live preview drawn with the same function, and says when the accent was adjusted. Tested across every pairing of ten backgrounds and eight accents.
+- **Reduced motion** stops every animation and transition and makes scrolling jump, except a heart's short fade; **high contrast and forced colours** drop the film grain.
+- **Still to do here:** the translation layer for the guest-facing surface.
+
+Original scope:
 **Size:** L. Keyboard navigation in the lightbox already exists. Missing: focus management in sheets and modals, screen-reader labelling on the camera controls, contrast verification for custom gallery colours (a Premium organizer can currently pick a colour combination that fails WCAG and Klik will happily render it), reduced-motion handling for the grain and animations, and a translation layer for the guest-facing surface, which is the one strangers actually read.
 
 ---

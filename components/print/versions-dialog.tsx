@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { History, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api-client";
@@ -44,15 +45,13 @@ export function VersionsDialog({
     });
   }, [designId, eventId]);
 
+  // TRS-3: focus in, kept in, and returned to what opened it.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, { initial: closeRef });
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      opener?.focus?.();
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   async function restore(version: Version) {
@@ -74,6 +73,7 @@ export function VersionsDialog({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Earlier versions"

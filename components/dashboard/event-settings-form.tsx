@@ -12,6 +12,7 @@ import { VisibilityField, type Visibility } from "@/components/dashboard/visibil
 import { endOfDayIso, toDateInputValue } from "@/lib/dates";
 import type { OrganizerEvent } from "@/lib/events";
 import type { Media, VenueClient } from "@/lib/schema";
+import { galleryPalette } from "@/lib/color";
 
 const COVER_CHOICES = 30;
 
@@ -367,7 +368,8 @@ export function EventSettingsForm({
               />
             </Field>
           </div>
-          <p className="text-xs text-muted">Text and buttons adjust automatically to stay readable.</p>
+          {/* TRS-3: the gallery's own palette, so what is seen here is what guests get. */}
+          <GalleryColorPreview accent={accentColor} background={backgroundColor} />
         </fieldset>
       )}
 
@@ -602,3 +604,34 @@ function toDateTimeLocalValue(value: Date | string | null): string {
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** TRS-3: a small gallery in the chosen colours, held to WCAG as the real one is. */
+function GalleryColorPreview({ accent, background }: { accent: string; background: string }) {
+  const palette = galleryPalette(accent, background);
+  return (
+    <div className="space-y-2">
+      <div className="rounded-xl border border-canvas-line p-4" style={{ backgroundColor: background }} aria-hidden="true">
+        <p className="font-display text-lg" style={{ color: palette.paper }}>
+          Ana and Bo&apos;s wedding
+        </p>
+        <p className="mt-0.5 text-xs" style={{ color: palette.muted }}>
+          128 items shared
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <span className="rounded-full px-4 py-2 text-sm font-medium" style={{ backgroundColor: palette.volt, color: palette.onVolt }}>
+            Camera
+          </span>
+          <span className="text-sm font-medium underline" style={{ color: palette.volt }}>
+            Add media
+          </span>
+        </div>
+      </div>
+      <p className="text-xs text-muted">
+        {palette.accentAdjusted
+          ? "Your accent is a little darker or lighter on this background, where it is a button or a link, so everyone can read it. The camera and photo viewer keep it as chosen."
+          : "Text and buttons are checked to stay readable for everyone."}
+      </p>
+    </div>
+  );
+}
+

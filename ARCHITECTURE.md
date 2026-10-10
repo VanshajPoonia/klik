@@ -338,6 +338,8 @@ Any AI that needs a model. Error tracking beyond structured logging and email al
 
 **Data export, 2026-10-10 (TRS-2).** `lib/data-export.ts` builds both shapes. The account file is JSON with no secrets and nobody else's names; the guest download is `streamZip` with a `data.json` as an extra entry (the `extras` argument), and it reads the guest cookie from the request header, falling back to a signed-in account's guest row at that event. Anything added to what Klik stores about a person should be added to one of these two, or a subject access request gets an incomplete answer. `DELETE /api/events/[id]?erase=true` now finds events in the trash too.
 
+**Accessibility, 2026-10-10 (TRS-3).** Any new sheet or full-screen view uses `useDialogFocus` from `components/ui/use-dialog-focus.ts` (`trap: false` if it is not modal). Any colour a host chooses goes through `galleryPalette` or `ensureContrast` in `lib/color.ts` before it is drawn on something; `lib/color.test.ts` is the guarantee. Global reduced-motion and high-contrast rules are at the end of `app/globals.css`.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import FilerobotImageEditor, { TABS, TOOLS } from "react-filerobot-image-editor";
 
 /**
@@ -115,8 +116,13 @@ export default function ImageEditor({
     };
   }, [accent]);
 
+  // TRS-3: focus in on open and back to Edit on close. Not trapped: the
+  // editor's own popovers render outside this box.
+  const editorRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(editorRef, { trap: false });
+
   return (
-    <div className="fixed inset-0 z-[130] flex flex-col bg-canvas" role="dialog" aria-modal="true" aria-label="Edit photo">
+    <div ref={editorRef} className="fixed inset-0 z-[130] flex flex-col bg-canvas" role="dialog" aria-modal="true" aria-label="Edit photo">
       <div className="relative min-h-0 flex-1 [&_.FIE_root]:!h-full">
         <FilerobotImageEditor
           source={source}

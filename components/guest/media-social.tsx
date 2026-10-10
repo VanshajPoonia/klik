@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { Flag, Heart, MessageCircle, X } from "lucide-react";
 import { timeAgo } from "@/lib/time-ago";
 
@@ -258,10 +259,15 @@ export function CommentsSheet({
       },
     );
 
+  // TRS-3: focus into the thread on open, back to the comment button on close.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(sheetRef, { trap: false });
+
   const remaining = MAX_LENGTH - draft.length;
 
   return (
     <div
+      ref={sheetRef}
       role="dialog"
       aria-label={`Comments on this ${kind}`}
       // Swipes inside the sheet scroll the thread; they must not reach the

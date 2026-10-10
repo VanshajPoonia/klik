@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import {
   Camera,
   Check,
@@ -158,6 +159,7 @@ export function CameraCapture({
   disposable?: { shotsLeft: number };
 }) {
   const allowVideo = allowVideoProp && !disposable;
+  const cameraRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
@@ -708,8 +710,12 @@ export function CameraCapture({
     return () => window.removeEventListener("keydown", onKey);
   }, [cleanupAndClose, handleShutter, preview, switchCamera, toggleGrid]);
 
+  // TRS-3: focus stays in the camera while it is open, and goes back to the
+  // Camera button when it closes.
+  useDialogFocus(cameraRef);
+
   return (
-    <div className="fixed inset-0 z-[120] flex flex-col bg-black text-paper">
+    <div ref={cameraRef} role="dialog" aria-modal="true" aria-label="Camera" className="fixed inset-0 z-[120] flex flex-col bg-black text-paper">
       {/* Viewfinder */}
       <div
         className="relative flex-1 overflow-hidden"
@@ -933,12 +939,19 @@ export function CameraCapture({
 
         {/* Zoom presets: tap to jump, pinch or double-tap for the rest */}
         {!error && !starting && zoomPresets.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 p-1 backdrop-blur">
+          <div
+            role="group"
+            aria-label="Zoom"
+            className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 p-1 backdrop-blur"
+          >
             {zoomPresets.map((f) => {
               const active = f === nearestPreset;
               return (
                 <button
                   key={f}
+                  type="button"
+                  aria-label={`Zoom ${f} times`}
+                  aria-pressed={active}
                   onClick={(e) => {
                     e.stopPropagation();
                     setZoomPreset(f);
@@ -955,8 +968,8 @@ export function CameraCapture({
         )}
 
         {starting && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-volt" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black" role="status" aria-label="Starting the camera">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-volt" aria-hidden="true" />
           </div>
         )}
       </div>
@@ -966,10 +979,16 @@ export function CameraCapture({
         <div className="shrink-0 bg-black px-6 pb-8 pt-4">
           {/* Looks: hidden only where video can't carry them */}
           {looksApplyHere && (
-            <div className="-mx-6 mb-4 flex gap-2 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div
+              role="group"
+              aria-label="Looks"
+              className="-mx-6 mb-4 flex gap-2 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               {LOOKS.map((l) => (
                 <button
                   key={l.id}
+                  type="button"
+                  aria-pressed={look === l.id}
                   onClick={() => selectLook(l.id, l.label)}
                   className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
                     look === l.id ? "bg-volt text-on-volt" : "bg-white/10 text-paper"
@@ -983,14 +1002,18 @@ export function CameraCapture({
 
           {/* Mode switch */}
           {allowVideo && (
-            <div className="mb-4 flex items-center justify-center gap-6 text-sm font-medium">
+            <div role="group" aria-label="Camera mode" className="mb-4 flex items-center justify-center gap-6 text-sm font-medium">
               <button
+                type="button"
+                aria-pressed={mode === "photo"}
                 onClick={() => !recording && setMode("photo")}
                 className={mode === "photo" ? "text-volt" : "text-white/50"}
               >
                 Photo
               </button>
               <button
+                type="button"
+                aria-pressed={mode === "video"}
                 onClick={() => !recording && setMode("video")}
                 className={mode === "video" ? "text-volt" : "text-white/50"}
               >
@@ -1084,7 +1107,7 @@ export function CameraCapture({
               aria-label="Switch camera"
               className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/10 transition-transform active:scale-90 disabled:opacity-40"
             >
-              <SwitchCamera className="h-6 w-6" />
+              <SwitchCamera className="h-6 w-6" aria-hidden="true" />
             </button>
           </div>
 
