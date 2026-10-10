@@ -94,8 +94,11 @@ export async function fetchMediaBlob(
     }
   }
   const response = await fetch(urls.blobUrl, { signal, credentials: "same-origin" });
-  if (response.status === 409) throw new Error("This video is still being prepared. Try again in a minute.");
-  if (!response.ok) throw new Error("It could not be loaded. Try again.");
+  // TRS-3: a code beside the English, so the share sheet can say it in the guest's language.
+  if (response.status === 409) {
+    throw Object.assign(new Error("This video is still being prepared. Try again in a minute."), { code: "video_preparing" });
+  }
+  if (!response.ok) throw Object.assign(new Error("It could not be loaded. Try again."), { code: "load_failed" });
   return readWithProgress(response, onProgress);
 }
 

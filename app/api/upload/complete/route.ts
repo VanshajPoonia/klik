@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const { eventId, mediaId, mimeType, sizeBytes, uploadId } = parsed.data;
-  if (!isAllowedMime(mimeType)) return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
+  if (!isAllowedMime(mimeType)) return NextResponse.json({ error: "Unsupported file type", code: "unsupported_type" }, { status: 400 });
 
   const [event] = await db
     .select()
@@ -47,10 +47,10 @@ export async function POST(request: Request) {
     .where(and(eq(events.id, eventId), isNull(events.deletedAt)))
     .limit(1);
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-  if (!canUpload(event)) return NextResponse.json({ error: "Uploads are closed for this event" }, { status: 403 });
+  if (!canUpload(event)) return NextResponse.json({ error: "Uploads are closed for this event", code: "uploads_closed" }, { status: 403 });
   const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed || (!viewer.ownerSession && !viewer.guestId)) {
-    return NextResponse.json({ error: "Not authorized to upload to this event" }, { status: 401 });
+    return NextResponse.json({ error: "Not authorized to upload to this event", code: "not_authorized" }, { status: 401 });
   }
 
   // Derived, never taken from the request, so an upload id can only ever be
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
   } catch (error) {
     reportError("upload.multipart_complete_failed", error, { eventId, mediaId });
     await abort();
-    return NextResponse.json({ error: "The upload could not be finished. Try again." }, { status: 502 });
+    return NextResponse.json({ error: "The upload could not be finished. Try again.", code: "upload_failed" }, { status: 502 });
   }
   return NextResponse.json({ ok: true, pathname: key });
 }

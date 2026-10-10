@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Stamp } from "lucide-react";
+import { useGuestCopy } from "@/components/guest/guest-copy";
 
 type Note = { by: string; note: string | null; url: string | null };
 
@@ -26,6 +27,7 @@ function loadNote(slug: string, mediaId: string): Promise<Note | null> {
  * photo, in the photographer's own words. Klik takes no part in the sale.
  */
 export function ProofNote({ slug, mediaId }: { slug: string; mediaId: string }) {
+  const { t } = useGuestCopy();
   const [note, setNote] = useState<{ id: string; value: Note | null } | null>(null);
 
   useEffect(() => {
@@ -44,10 +46,7 @@ export function ProofNote({ slug, mediaId }: { slug: string; mediaId: string }) 
       <div className="pointer-events-auto flex max-w-md items-start gap-2 rounded-2xl bg-black/75 px-3 py-2 text-xs text-paper backdrop-blur">
         <Stamp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-volt" aria-hidden="true" />
         <div className="min-w-0">
-          <p>
-            A proof{value ? <> from <span className="font-medium">{value.by}</span></> : null}. The watermark comes off
-            when the photographer releases it.
-          </p>
+          <p>{t.proof.note(value?.by ?? null)}</p>
           {value?.note && <p className="mt-1 text-paper/80">{value.note}</p>}
           {value?.url && (
             <a
@@ -56,7 +55,7 @@ export function ProofNote({ slug, mediaId }: { slug: string; mediaId: string }) 
               rel="noopener noreferrer nofollow"
               className="mt-1.5 inline-flex min-h-8 items-center font-medium text-volt underline-offset-2 hover:underline"
             >
-              Ask about the full photo
+              {t.proof.ask}
             </a>
           )}
         </div>

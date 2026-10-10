@@ -113,7 +113,7 @@ export async function drainQueue(options: DrainOptions): Promise<DrainSummary> {
           const counted = failure.status !== 0 && failure.status !== 429;
           const serverFailures = current.serverFailures + (counted ? 1 : 0);
           if (!failure.transient || serverFailures >= MAX_SERVER_FAILURES) {
-            return { claim: null, serverFailures, refused: { message: failure.message, status: failure.status } };
+            return { claim: null, serverFailures, refused: refusalFrom(failure) };
           }
           // Offline: no point counting down, the drain waits for `online`.
           const delay =
@@ -150,4 +150,14 @@ export async function drainQueue(options: DrainOptions): Promise<DrainSummary> {
   await Promise.all(Array.from({ length: Math.max(1, options.concurrency) }, worker));
   const left = await store.all().catch(() => []);
   return { sent, remaining: left.filter((item) => item.ready && !item.refused).length };
+}
+
+/** The refusal to keep: the server's words, and its code when it sent one. */
+function refusalFrom(failure: { message: string; status: number; detail?: Record<string, unknown> }) {
+  const code = typeof failure.detail?.code === "string" ? failure.detail.code : undefined;
+  const values =
+    failure.detail?.values && typeof failure.detail.values === "object"
+      ? (failure.detail.values as Record<string, number | string>)
+      : undefined;
+  return { message: failure.message, status: failure.status, ...(code ? { code } : {}), ...(values ? { values } : {}) };
 }

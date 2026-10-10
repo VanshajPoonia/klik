@@ -347,6 +347,8 @@ export const events = pgTable(
     leaderboardEnabled: boolean("leaderboard_enabled").notNull().default(false),
     // GRW-4: listed on the owner's public profile, by name and date only.
     showOnProfile: boolean("show_on_profile").notNull().default(false),
+    // TRS-3: 'auto' follows each guest's browser. See lib/i18n/locale.ts.
+    guestLanguage: text("guest_language").$type<"auto" | "en" | "es">().notNull().default("auto"),
   },
   (table) => [index("events_owner_idx").on(table.ownerId)],
 );

@@ -30,7 +30,7 @@ const requestSchema = z.object({
 
 function throttled(retryAfter: number) {
   return NextResponse.json(
-    { error: "Too many uploads. Try again shortly." },
+    { error: "Too many uploads. Try again shortly.", code: "too_many_uploads" },
     { status: 429, headers: { "Retry-After": String(retryAfter) } },
   );
 }
@@ -56,23 +56,23 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
   const plan = eventPlan(event);
   if (!canUpload(event)) {
-    return NextResponse.json({ error: "Uploads are closed for this event" }, { status: 403 });
+    return NextResponse.json({ error: "Uploads are closed for this event", code: "uploads_closed" }, { status: 403 });
   }
   if (!isAllowedMime(mimeType)) {
-    return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
+    return NextResponse.json({ error: "Unsupported file type", code: "unsupported_type" }, { status: 400 });
   }
   // PAY-6: the event's storage, from the counter the triggers keep on the row.
   // Checked here, before a byte is sent, so a full gallery refuses the upload
   // rather than accepting it and refusing it afterwards. Guests are told it is
   // full and nothing about plans, which are the host's business.
   if (wouldExceedStorage(event, plan, sizeBytes + (parsed.data.posterBytes ?? 0) + (parsed.data.thumbBytes ?? 0))) {
-    return NextResponse.json({ error: GALLERY_FULL_MESSAGE, full: true }, { status: 413 });
+    return NextResponse.json({ error: GALLERY_FULL_MESSAGE, full: true, code: "gallery_full" }, { status: 413 });
   }
 
   const maxBytes = maxBytesForMime(mimeType, plan);
   if (sizeBytes > maxBytes) {
     return NextResponse.json(
-      { error: `File is too large for the ${plan.name} plan`, maxBytes },
+      { error: `File is too large for the ${plan.name} plan`, maxBytes, code: "too_large", values: { maxMb: Math.round(maxBytes / (1024 * 1024)) } },
       { status: 413 },
     );
   }
@@ -92,10 +92,10 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {
-    return NextResponse.json({ error: "Gallery access is required to upload" }, { status: 403 });
+    return NextResponse.json({ error: "Gallery access is required to upload", code: "access_required" }, { status: 403 });
   }
   if (!viewer.ownerSession && !viewer.guestId) {
-    return NextResponse.json({ error: "Not authorized to upload to this event" }, { status: 401 });
+    return NextResponse.json({ error: "Not authorized to upload to this event", code: "not_authorized" }, { status: 401 });
   }
 
   // Per-guest bucket on top of the per-IP one above, since a whole venue shares
@@ -114,7 +114,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // cannot both pass.
   if (event.disposableMode && !viewer.ownerSession && viewer.guestId && !viewer.kioskId) {
     if (isVideoMime(mimeType)) {
-      return NextResponse.json({ error: "This event is a disposable camera: photos only." }, { status: 403 });
+      return NextResponse.json({ error: "This event is a disposable camera: photos only.", code: "disposable_photos_only" }, { status: 403 });
     }
     const [guest] = await db
       .select({ shotsUsed: guests.shotsUsed })
@@ -122,7 +122,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       .where(eq(guests.id, viewer.guestId))
       .limit(1);
     if (guest && guest.shotsUsed >= event.shotsPerGuest) {
-      return NextResponse.json({ error: "Your roll is finished. Every shot has been taken.", rollFinished: true }, { status: 403 });
+      return NextResponse.json({ error: "Your roll is finished. Every shot has been taken.", rollFinished: true, code: "roll_finished" }, { status: 403 });
     }
   }
 

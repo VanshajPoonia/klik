@@ -440,6 +440,27 @@ The **Privacy Policy** now says guests and organizers can download their data th
 - [ ] Downloaded my own data and read the file
 - [ ] Downloaded a guest's ZIP from a gallery
 
+And **Spanish**, which every guest screen now speaks:
+
+- **Have the Spanish consent checked by your lawyer** with the English one. It is in
+  `lib/consent.ts`, under `translations`, and it is what Spanish-speaking guests agree to.
+  A guest who agreed in Spanish is recorded as such.
+- On your phone, open a gallery and tap **Español** at the bottom: everything a guest sees
+  changes, including the camera and the upload box. Tap **English** to go back.
+- On a phone set to Spanish, open a gallery you have never visited: it starts in Spanish.
+- In an event's **Settings**, **Language guests see** can force Spanish (or English) for
+  everyone, for a family wedding say. Guests can still switch.
+- Have someone who speaks Spanish read the screens once, and send Claude anything that sounds
+  stiff. The words are in `lib/i18n/guest.ts`.
+
+Also new for everyone: a Premium gallery's custom colours are now kept readable (Settings
+shows a preview), keyboard users stay inside the camera and viewer while they are open, and
+"reduce motion" on a phone stops the animations.
+
+- [ ] Spanish consent reviewed
+- [ ] Switched a gallery to Español and back
+- [ ] A Spanish speaker read the guest screens
+
 ---
 
 ## Keys Claude will ask for, in the order the work needs them

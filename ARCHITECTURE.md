@@ -340,6 +340,8 @@ Any AI that needs a model. Error tracking beyond structured logging and email al
 
 **Accessibility, 2026-10-10 (TRS-3).** Any new sheet or full-screen view uses `useDialogFocus` from `components/ui/use-dialog-focus.ts` (`trap: false` if it is not modal). Any colour a host chooses goes through `galleryPalette` or `ensureContrast` in `lib/color.ts` before it is drawn on something; `lib/color.test.ts` is the guarantee. Global reduced-motion and high-contrast rules are at the end of `app/globals.css`.
 
+**Guest languages, 2026-10-10 (TRS-3).** Words on guest screens live in `lib/i18n/guest.ts` and are read through `useGuestCopy()`; the page picks the locale with `chooseLocale` (the `klik_lang` cookie, then `events.guest_language`, then Accept-Language) and wraps its screens in `GuestCopyProvider` with `lang` set. A new guest-facing string goes in both dictionaries or the test fails. A new refusal a guest can see gets a `code` (and `values` for numbers) in its JSON and a line under `errors` or `uploads.refusals`. Consent ids carry the language after a colon; `consentVersionById` and `consentShown` read both forms.
+
 `ROADMAP.md` has all of it with task IDs and an order.
 
 ## 13. Known operational gaps

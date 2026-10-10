@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   const ipLimit = await consume(`upload-resume:ip:${clientIp(request)}`, 300, 60 * 60);
   if (!ipLimit.allowed) {
     return NextResponse.json(
-      { error: "Too many uploads. Try again shortly." },
+      { error: "Too many uploads. Try again shortly.", code: "too_many_uploads" },
       { status: 429, headers: { "Retry-After": String(ipLimit.retryAfter) } },
     );
   }
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const { eventId, mediaId, mimeType, sizeBytes, uploadId } = parsed.data;
-  if (!isAllowedMime(mimeType)) return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
+  if (!isAllowedMime(mimeType)) return NextResponse.json({ error: "Unsupported file type", code: "unsupported_type" }, { status: 400 });
   if (sizeBytes <= MULTIPART_THRESHOLD) {
     return NextResponse.json({ error: "That file goes up in one piece" }, { status: 400 });
   }
@@ -65,11 +65,11 @@ export async function POST(request: Request) {
     .where(and(eq(events.id, eventId), isNull(events.deletedAt)))
     .limit(1);
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-  if (!canUpload(event)) return NextResponse.json({ error: "Uploads are closed for this event" }, { status: 403 });
+  if (!canUpload(event)) return NextResponse.json({ error: "Uploads are closed for this event", code: "uploads_closed" }, { status: 403 });
   const plan = eventPlan(event);
   const maxBytes = maxBytesForMime(mimeType, plan);
   if (sizeBytes > maxBytes) {
-    return NextResponse.json({ error: `File is too large for the ${plan.name} plan`, maxBytes }, { status: 413 });
+    return NextResponse.json({ error: `File is too large for the ${plan.name} plan`, maxBytes, code: "too_large", values: { maxMb: Math.round(maxBytes / (1024 * 1024)) } }, { status: 413 });
   }
 
   // Registered already: the device lost the answer, not the upload. Same rule
@@ -83,10 +83,10 @@ export async function POST(request: Request) {
 
   const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {
-    return NextResponse.json({ error: "Gallery access is required to upload" }, { status: 403 });
+    return NextResponse.json({ error: "Gallery access is required to upload", code: "access_required" }, { status: 403 });
   }
   if (!viewer.ownerSession && !viewer.guestId) {
-    return NextResponse.json({ error: "Not authorized to upload to this event" }, { status: 401 });
+    return NextResponse.json({ error: "Not authorized to upload to this event", code: "not_authorized" }, { status: 401 });
   }
 
   const key = blobPathnameFor(event.id, mediaId, extensionForMime(mimeType));

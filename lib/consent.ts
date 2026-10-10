@@ -13,6 +13,8 @@
  * terms they were actually shown.
  */
 
+import { DEFAULT_LOCALE, isLocale, type Locale } from "./i18n/locale";
+
 export interface ConsentVersion {
   /** Stored on `guests.consent_version`. Date-stamped so ordering is obvious. */
   id: string;
@@ -21,6 +23,12 @@ export interface ConsentVersion {
   /** Plain-language expansion shown beneath it. Not a substitute for LAW-1. */
   detail: string;
   effectiveFrom: string;
+  /**
+   * TRS-3: the same agreement in other languages. A guest shown one of these
+   * is recorded as `<id>:<locale>`, so the record still says exactly which
+   * words they agreed to. English is the statement and detail above.
+   */
+  translations?: Partial<Record<Locale, { statement: string; detail: string }>>;
 }
 
 /**
@@ -39,13 +47,41 @@ export const CONSENT_VERSIONS: ConsentVersion[] = [
     detail:
       "Your uploads stay with this one event. You can delete anything you upload, and the host can remove it too. We do not use your photos anywhere else.",
     effectiveFrom: "2026-09-30",
+    translations: {
+      es: {
+        statement:
+          "Entiendo que las fotos y videos que suba pueden ser visibles para todas las personas con acceso a la galería de este evento, y que tengo derecho a compartirlos.",
+        detail:
+          "Lo que subes se queda en este evento. Puedes borrar todo lo que subas, y el anfitrión también puede quitarlo. No usamos tus fotos en ningún otro lugar.",
+      },
+    },
   },
 ];
 
 export const CURRENT_CONSENT = CONSENT_VERSIONS[CONSENT_VERSIONS.length - 1];
 
+/** The words of a version in a language, falling back to English. */
+export function consentText(version: ConsentVersion, locale: Locale): { statement: string; detail: string } {
+  return (locale !== DEFAULT_LOCALE && version.translations?.[locale]) || { statement: version.statement, detail: version.detail };
+}
+
+/** What is stored on the guest: the version, and the language when not English. */
+export function consentRecordId(locale: Locale, version: ConsentVersion = CURRENT_CONSENT): string {
+  return locale === DEFAULT_LOCALE || !version.translations?.[locale] ? version.id : `${version.id}:${locale}`;
+}
+
 /** Looks up the text a given guest actually agreed to, for support and disputes. */
 export function consentVersionById(id: string | null | undefined): ConsentVersion | null {
   if (!id) return null;
-  return CONSENT_VERSIONS.find((version) => version.id === id) ?? null;
+  const [versionId] = id.split(":");
+  return CONSENT_VERSIONS.find((version) => version.id === versionId) ?? null;
+}
+
+/** The exact words behind a stored consent id, in the language that was shown. */
+export function consentShown(id: string | null | undefined): { statement: string; detail: string; locale: Locale } | null {
+  const version = consentVersionById(id);
+  if (!version || !id) return null;
+  const suffix = id.split(":")[1];
+  const locale = isLocale(suffix) ? suffix : DEFAULT_LOCALE;
+  return { ...consentText(version, locale), locale };
 }

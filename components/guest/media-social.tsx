@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { Flag, Heart, MessageCircle, X } from "lucide-react";
 import { timeAgo } from "@/lib/time-ago";
+import { useGuestCopy } from "@/components/guest/guest-copy";
 
 /**
  * MED-9 on the gallery side: the heart, the comment button, and the comments
@@ -25,15 +26,8 @@ export interface CommentView {
 
 type CommentReportReason = "harassment" | "nudity" | "privacy" | "spam" | "child_safety" | "other";
 
-/** Mirrors COMMENT_REPORT_LABELS in lib/comments.ts. */
-const COMMENT_REPORT_OPTIONS: Array<[CommentReportReason, string]> = [
-  ["harassment", "Bullying, harassment or hate"],
-  ["nudity", "Sexual or explicit"],
-  ["privacy", "It's about me, and I don't want it here"],
-  ["spam", "Spam or nothing to do with this event"],
-  ["child_safety", "Suggests a child is being exploited or put at risk"],
-  ["other", "Something else"],
-];
+/** Mirrors COMMENT_REPORT_LABELS in lib/comments.ts. The words are in lib/i18n/guest.ts (TRS-3). */
+const COMMENT_REPORT_OPTIONS: CommentReportReason[] = ["harassment", "nudity", "privacy", "spam", "child_safety", "other"];
 
 const MAX_LENGTH = 500;
 const REFRESH_MS = 20_000;
@@ -53,12 +47,13 @@ export function HeartButton({
   /** Absent where hearting is not offered: the count is shown, not a button. */
   onToggle?: () => void;
 }) {
+  const { t } = useGuestCopy();
   if (!onToggle) {
     return (
       <span className="flex min-h-11 items-center gap-2 px-2 text-sm tabular-nums text-muted">
         <Heart className="h-5 w-5" aria-hidden="true" />
         <span>
-          {count} <span className="sr-only">{count === 1 ? "heart" : "hearts"}</span>
+          {count} <span className="sr-only">{t.social.hearts(count)}</span>
         </span>
       </span>
     );
@@ -68,7 +63,7 @@ export function HeartButton({
       type="button"
       onClick={onToggle}
       aria-pressed={reacted}
-      aria-label={reacted ? `Remove your heart from this ${kind}` : `Heart this ${kind}`}
+      aria-label={reacted ? t.social.removeHeart(kind) : t.social.heart(kind)}
       className={chip}
     >
       <Heart
@@ -81,11 +76,12 @@ export function HeartButton({
 }
 
 export function CommentButton({ count, onOpen }: { count: number; onOpen: () => void }) {
+  const { t } = useGuestCopy();
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-label={count === 0 ? "Comments" : `${count} ${count === 1 ? "comment" : "comments"}`}
+      aria-label={t.social.commentsLabel(count)}
       className={chip}
     >
       <MessageCircle className="h-5 w-5" aria-hidden="true" />
@@ -94,11 +90,6 @@ export function CommentButton({ count, onOpen }: { count: number; onOpen: () => 
   );
 }
 
-const HIDDEN_LABEL: Record<NonNullable<CommentView["hidden"]>, { team: string; author: string }> = {
-  host: { team: "Hidden by the team", author: "Only you can see this. The host hid it." },
-  reports: { team: "Hidden after reports", author: "Only you can see this. It was hidden after reports." },
-  klik: { team: "Hidden by Klik", author: "Only you can see this. Klik hid it." },
-};
 
 /**
  * One item's thread. Keyed by the item where it is used, so moving to another
@@ -127,6 +118,7 @@ export function CommentsSheet({
   /** Called after the team hides or shows one. */
   onModerated?: () => void;
 }) {
+  const { t, locale } = useGuestCopy();
   const base = `/api/e/${encodeURIComponent(slug)}/media/${encodeURIComponent(mediaId)}/comments`;
   const [comments, setComments] = useState<CommentView[] | null>(null);
   const [now, setNow] = useState<number | null>(null);
@@ -154,18 +146,18 @@ export function CommentsSheet({
   const load = useCallback(async () => {
     const response = await fetch(base, { cache: "no-store" }).catch(() => null);
     if (!response) {
-      setLoadError("Could not load comments. Check your connection.");
+      setLoadError(t.social.loadFailedOffline);
       return;
     }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setLoadError(body.error ?? "Could not load comments.");
+      setLoadError(body.error ?? t.social.loadFailed);
       return;
     }
     setLoadError(null);
     setSignedIn(Boolean(body.signedIn));
     apply(body.comments ?? []);
-  }, [apply, base]);
+  }, [apply, base, t]);
 
   // Loaded on open and kept fresh while it stays open and the tab is visible,
   // so a conversation at the party reads as one.
@@ -193,13 +185,13 @@ export function CommentsSheet({
     }).catch(() => null);
     setSending(false);
     if (!response) {
-      setSendError("Could not send it. Check your connection.");
+      setSendError(t.social.sendFailedOffline);
       return;
     }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (body.signIn) setSignedIn(false);
-      setSendError(body.error ?? "Could not send it. Try again.");
+      setSendError(body.error ?? t.social.sendFailed);
       return;
     }
     setDraft("");
@@ -216,7 +208,7 @@ export function CommentsSheet({
     setBusyId(null);
     if (!response?.ok) {
       const body = response ? await response.json().catch(() => ({})) : {};
-      setActionError({ id: comment.id, message: body.error ?? "That did not work. Try again." });
+      setActionError({ id: comment.id, message: body.error ?? t.social.actionFailed });
       return;
     }
     onDone();
@@ -269,7 +261,7 @@ export function CommentsSheet({
     <div
       ref={sheetRef}
       role="dialog"
-      aria-label={`Comments on this ${kind}`}
+      aria-label={t.social.sheet(kind)}
       // Swipes inside the sheet scroll the thread; they must not reach the
       // viewer underneath and change the photo.
       onTouchStart={(event) => event.stopPropagation()}
@@ -281,7 +273,7 @@ export function CommentsSheet({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close comments"
+          aria-label={t.social.closeComments}
           className="flex h-11 w-11 items-center justify-center rounded-full text-paper"
         >
           <X className="h-5 w-5" aria-hidden="true" />
@@ -289,32 +281,35 @@ export function CommentsSheet({
       </div>
 
       <ul ref={listRef} className="min-h-24 flex-1 space-y-4 overflow-y-auto px-4 py-3" aria-live="polite">
-        {comments === null && !loadError && <li className="text-sm text-muted">Loading…</li>}
+        {comments === null && !loadError && <li className="text-sm text-muted">{t.social.loading}</li>}
         {loadError && (
           <li className="text-sm text-red-400" role="alert">
             {loadError}
           </li>
         )}
         {comments?.length === 0 && (
-          <li className="text-sm text-muted">No comments yet. Say something nice.</li>
+          <li className="text-sm text-muted">{t.social.none}</li>
         )}
         {comments?.map((comment) => {
           const busy = busyId === comment.id;
           const hiddenLabel = comment.hidden
             ? canModerate
-              ? HIDDEN_LABEL[comment.hidden].team
-              : HIDDEN_LABEL[comment.hidden].author
+              ? t.social.hiddenTeam[comment.hidden]
+              : t.social.hiddenAuthor[comment.hidden]
             : null;
           return (
             <li key={comment.id} className={comment.hidden ? "opacity-60" : undefined}>
               <div className="flex flex-wrap items-baseline gap-x-2">
                 <span className="text-sm font-medium text-paper">{comment.author.name}</span>
                 {comment.author.team && (
-                  <span className="rounded-full bg-volt px-1.5 py-px text-[10px] font-medium text-on-volt">Host</span>
+                  <span className="rounded-full bg-volt px-1.5 py-px text-[10px] font-medium text-on-volt">{t.social.host}</span>
                 )}
                 {now !== null && (
                   <time dateTime={comment.createdAt} className="text-xs text-muted">
-                    {timeAgo(comment.createdAt, now)}
+                    {(() => {
+                      const ago = timeAgo(comment.createdAt, now, locale === "es" ? "es-US" : "en-US");
+                      return ago === "now" ? t.social.justNow : ago;
+                    })()}
                   </time>
                 )}
               </div>
@@ -325,29 +320,29 @@ export function CommentsSheet({
               {canModerate && !comment.hidden && comment.openReports ? (
                 <p className="mt-1 flex items-center gap-1 text-xs text-red-300">
                   <Flag className="h-3 w-3" aria-hidden="true" />
-                  Reported{comment.openReports > 1 ? ` by ${comment.openReports}` : ""}
+                  {t.social.reportedBy(comment.openReports)}
                 </p>
               ) : null}
 
               <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-muted">
                 {comment.mine && (
                   <button type="button" disabled={busy} onClick={() => void remove(comment)} className="min-h-8 underline-offset-2 hover:text-paper hover:underline">
-                    Delete
+                    {t.social.delete}
                   </button>
                 )}
                 {canModerate && !comment.mine && !comment.hidden && (
                   <button type="button" disabled={busy} onClick={() => void moderate(comment, "hide")} className="min-h-8 underline-offset-2 hover:text-paper hover:underline">
-                    Hide
+                    {t.social.hide}
                   </button>
                 )}
                 {canModerate && !comment.hidden && comment.openReports ? (
                   <button type="button" disabled={busy} onClick={() => void moderate(comment, "show")} className="min-h-8 underline-offset-2 hover:text-paper hover:underline">
-                    Keep it up
+                    {t.social.keepUp}
                   </button>
                 ) : null}
                 {canModerate && comment.hidden && comment.hidden !== "klik" && !comment.safetyHold && (
                   <button type="button" disabled={busy} onClick={() => void moderate(comment, "show")} className="min-h-8 underline-offset-2 hover:text-paper hover:underline">
-                    Show again
+                    {t.social.showAgain}
                   </button>
                 )}
                 {!canModerate && !comment.mine && !comment.hidden && !reportedIds.has(comment.id) && (
@@ -357,16 +352,16 @@ export function CommentsSheet({
                     onClick={() => setReporting({ id: comment.id, reason: null })}
                     className="min-h-8 underline-offset-2 hover:text-paper hover:underline"
                   >
-                    Report
+                    {t.social.report}
                   </button>
                 )}
-                {reportedIds.has(comment.id) && <span className="min-h-8 leading-8">Reported. Thanks.</span>}
+                {reportedIds.has(comment.id) && <span className="min-h-8 leading-8">{t.social.reported}</span>}
               </div>
 
               {reporting?.id === comment.id && (
                 <fieldset className="mt-2 space-y-1 rounded-xl border border-white/10 p-3">
-                  <legend className="px-1 text-xs text-muted">What is wrong with it?</legend>
-                  {COMMENT_REPORT_OPTIONS.map(([value, label]) => (
+                  <legend className="px-1 text-xs text-muted">{t.social.whatIsWrong}</legend>
+                  {COMMENT_REPORT_OPTIONS.map((value) => (
                     <label key={value} className="flex min-h-10 cursor-pointer items-center gap-3 rounded-lg px-1 text-sm text-paper hover:bg-white/5">
                       <input
                         type="radio"
@@ -375,7 +370,7 @@ export function CommentsSheet({
                         onChange={() => setReporting({ id: comment.id, reason: value })}
                         className="accent-[var(--color-volt)]"
                       />
-                      {label}
+                      {t.social.reasons[value]}
                     </label>
                   ))}
                   <div className="flex gap-2 pt-1">
@@ -385,14 +380,14 @@ export function CommentsSheet({
                       onClick={() => reporting.reason && void report(comment, reporting.reason)}
                       className="min-h-10 rounded-full bg-volt px-4 text-sm font-medium text-on-volt disabled:opacity-50"
                     >
-                      {busy ? "Sending…" : "Report"}
+                      {busy ? t.social.sending : t.social.report}
                     </button>
                     <button
                       type="button"
                       onClick={() => setReporting(null)}
                       className="min-h-10 rounded-full border border-white/15 px-4 text-sm text-paper"
                     >
-                      Cancel
+                      {t.common.cancel}
                     </button>
                   </div>
                 </fieldset>
@@ -417,7 +412,7 @@ export function CommentsSheet({
             }}
           >
             <label className="sr-only" htmlFor={`comment-${mediaId}`}>
-              Add a comment
+              {t.social.addComment}
             </label>
             <textarea
               id={`comment-${mediaId}`}
@@ -431,7 +426,7 @@ export function CommentsSheet({
                   void send();
                 }
               }}
-              placeholder="Add a comment"
+              placeholder={t.social.addComment}
               rows={Math.min(4, Math.max(1, draft.split("\n").length))}
               maxLength={MAX_LENGTH}
               className="min-h-11 flex-1 resize-none rounded-2xl border border-white/15 bg-transparent px-3 py-2.5 text-sm text-paper placeholder:text-muted focus:border-volt/60 focus:outline-none"
@@ -441,21 +436,21 @@ export function CommentsSheet({
               disabled={!draft.trim() || sending}
               className="min-h-11 shrink-0 rounded-full bg-volt px-4 text-sm font-medium text-on-volt disabled:opacity-50"
             >
-              {sending ? "Sending…" : "Send"}
+              {sending ? t.social.sending : t.social.send}
             </button>
           </form>
         ) : (
           <p className="text-sm text-muted">
-            Comments need a free account, so everyone knows who is talking.{" "}
+            {t.social.needAccount}{" "}
             {signInHref && (
               <a href={signInHref} className="text-paper underline underline-offset-2">
-                Sign in with your email
+                {t.social.signIn}
               </a>
             )}
           </p>
         )}
         {signedIn && remaining <= 60 && (
-          <p className="mt-1 text-right text-xs tabular-nums text-muted">{remaining} left</p>
+          <p className="mt-1 text-right text-xs tabular-nums text-muted">{t.social.charactersLeft(remaining)}</p>
         )}
         {sendError && (
           <p className="mt-1 text-xs text-red-400" role="alert">

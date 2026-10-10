@@ -25,7 +25,10 @@ export async function prepareUpload(
   try {
     await file.slice(0, 16).arrayBuffer();
   } catch {
-    return { ready: true, refused: { message: "This file could not be read from the device. Pick it again.", status: 0 } };
+    return {
+      ready: true,
+      refused: { message: "This file could not be read from the device. Pick it again.", status: 0, code: "unreadable" },
+    };
   }
 
   // Read when the photo was taken BEFORE compressing it. The compression pass
@@ -48,6 +51,8 @@ export async function prepareUpload(
       refused: {
         message: `Videos are limited to ${formatDuration(item.maxVideoSeconds)}. This one is ${formatDuration(probe.duration)}.`,
         status: 413,
+        code: "video_too_long",
+        values: { seconds: item.maxVideoSeconds, actual: Math.round(probe.duration) },
       },
     };
   }

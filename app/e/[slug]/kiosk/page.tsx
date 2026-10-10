@@ -11,7 +11,14 @@ import { eventUsage } from "@/lib/usage";
 import { readableOn } from "@/lib/color";
 import { touchKiosk } from "@/lib/kiosks";
 import { getAppUrl } from "@/lib/env";
-import { CURRENT_CONSENT } from "@/lib/consent";
+import { CURRENT_CONSENT, consentRecordId, consentText } from "@/lib/consent";
+import { GuestCopyProvider } from "@/components/guest/guest-copy";
+import { GUEST_COPY } from "@/lib/i18n/guest";
+import { chooseLocale } from "@/lib/i18n/locale";
+import { headers } from "next/headers";
+import { and, eq, ne } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { guests } from "@/lib/schema";
 import { KioskStation } from "@/components/kiosk/kiosk-station";
 import { KioskHold } from "@/components/kiosk/kiosk-hold";
 
@@ -27,19 +34,21 @@ export default async function KioskPage({ params }: { params: Promise<{ slug: st
   const event = (await findEventBySlug(slug))?.event;
   if (!event) notFound();
 
+  // TRS-3: a kiosk is shared by everyone in the room, so no one guest's
+  // choice applies: the host's language, else the tablet's own.
+  const locale = chooseLocale({ eventLanguage: event.guestLanguage, acceptLanguage: (await headers()).get("accept-language") });
+  const t = GUEST_COPY[locale];
+  const speak = (node: React.ReactNode) => (
+    <GuestCopyProvider locale={locale}>
+      <div lang={locale}>{node}</div>
+    </GuestCopyProvider>
+  );
+
   const viewer = await resolveEventViewer(event);
   const team = Boolean(viewer.ownerSession);
   if (!viewer.kioskId) {
-    return (
-      <KioskHold
-        title="This device is not a kiosk."
-        detail={
-          team
-            ? "Set one up from the event's QR code tab, then open its link on this device."
-            : "Ask the host to set it up again from the event's QR code tab."
-        }
-        recheck={false}
-      />
+    return speak(
+      <KioskHold title={t.kiosk.notKiosk} detail={team ? t.kiosk.notKioskTeam : t.kiosk.notKioskGuest} recheck={false} />,
     );
   }
   after(() => touchKiosk(viewer.kioskId!).catch(() => {}));
@@ -47,21 +56,36 @@ export default async function KioskPage({ params }: { params: Promise<{ slug: st
   const plan = eventPlan(event);
   const hold =
     eventLicenseState(event) !== "live" || !canUseKiosk(plan.key)
-      ? { title: "The kiosk is not available for this event.", detail: "The host can see why on the event page." }
+      ? { title: t.kiosk.unavailable, detail: t.kiosk.unavailableDetail }
       : !viewer.access.allowed
-        ? { title: "This gallery is closed.", detail: "Thanks for coming." }
+        ? { title: t.kiosk.closed, detail: t.kiosk.closedDetail }
         : !canUpload(event)
-          ? { title: "Photos are paused for now.", detail: "The host has closed uploads. This screen checks again every minute." }
+          ? { title: t.kiosk.paused, detail: t.kiosk.pausedDetail }
           : eventUsage(event, plan).full
-            ? { title: "The gallery is full.", detail: "The host has been told. This screen checks again every minute." }
+            ? { title: t.kiosk.full, detail: t.kiosk.fullDetail }
             : null;
-  if (hold) return <KioskHold {...hold} recheck />;
+  if (hold) return speak(<KioskHold {...hold} recheck />);
+
+  // The kiosk's guest row records the consent its start screen shows, now in
+  // this language. After the response, and only when it changed.
+  const consentId = consentRecordId(locale);
+  const kioskGuestId = viewer.guestId;
+  if (kioskGuestId) {
+    after(() =>
+      db
+        .update(guests)
+        .set({ consentVersion: consentId })
+        .where(and(eq(guests.id, kioskGuestId), ne(guests.consentVersion, consentId)))
+        .then(() => undefined)
+        .catch(() => undefined),
+    );
+  }
 
   const galleryUrl = `${getAppUrl()}/e/${event.slug}`;
   const qr = await QRCode.toDataURL(galleryUrl, { margin: 1, width: 448, color: { dark: "#050505", light: "#f3f1e9" } });
   const accent = canCustomizeGallery(plan.key) ? event.accentColor : null;
 
-  return (
+  return speak(
     <div
       style={
         accent
@@ -77,8 +101,8 @@ export default async function KioskPage({ params }: { params: Promise<{ slug: st
         shortUrl={galleryUrl.replace(/^https?:\/\//, "")}
         moderated={event.moderation}
         team={team}
-        consent={CURRENT_CONSENT.statement}
+        consent={consentText(CURRENT_CONSENT, locale).statement}
       />
-    </div>
+    </div>,
   );
 }

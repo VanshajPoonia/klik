@@ -8,6 +8,7 @@ import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, 
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { ensureContrast, galleryPalette, readableOn } from "@/lib/color";
+import { LanguageSwitch, useGuestCopy } from "@/components/guest/guest-copy";
 import { formatDuration } from "@/lib/video-poster";
 import { uploadToGallery } from "@/lib/upload-client";
 import { UploadTray } from "@/components/upload/upload-tray";
@@ -180,6 +181,8 @@ export function GuestGallery({
    */
   proofs?: { label: string | null } | null;
 }) {
+  // TRS-3: the guest's language, chosen by the page.
+  const { t, locale } = useGuestCopy();
   // The server's count. What the guest sees also takes off shots still in the
   // upload queue on this phone, which the server has not heard of yet.
   const [shotsOnServer, setShotsOnServer] = useState(disposable?.shotsLeft ?? 0);
@@ -212,7 +215,7 @@ export function GuestGallery({
   );
 
   const [notice, setNotice] = useState<string | null>(
-    linkedMissing ? "That photo is not in the gallery any more, or not yet. Here is everything else." : null,
+    linkedMissing ? t.gallery.linkedMissing : null,
   );
   const [cameraOpen, setCameraOpen] = useState(false);
   // Tracked by id, not position: new photos stream in at the head every poll,
@@ -424,20 +427,20 @@ export function GuestGallery({
       const picked = sendingProofs ? chosen.filter((upload) => !upload.file.type.startsWith("video/")) : chosen;
       const skippedVideos = chosen.length - picked.length;
       if (picked.length === 0) {
-        if (skippedVideos > 0) setNotice("Videos cannot be watermarked yet. Turn proofs off to add videos.");
+        if (skippedVideos > 0) setNotice(t.gallery.videosNotWatermarked);
         return;
       }
       const batch = picked.slice(0, MAX_FILES_PER_PICK);
       setNotice(
         picked.length > batch.length
-          ? `Added the first ${batch.length} of ${picked.length}. Pick the rest again once these are on their way.`
+          ? t.gallery.addedFirst(batch.length, picked.length)
           : skippedVideos > 0
-            ? `Left out ${skippedVideos === 1 ? "a video" : `${skippedVideos} videos`}: videos cannot be watermarked yet. Turn proofs off to add ${skippedVideos === 1 ? "it" : "them"}.`
+            ? t.gallery.leftOutVideos(skippedVideos)
             : null,
       );
-      void enqueue(batch).catch(() => setNotice("Those could not be added. Try picking them again."));
+      void enqueue(batch).catch(() => setNotice(t.gallery.couldNotAdd));
     },
-    [enqueue, sendingProofs],
+    [enqueue, sendingProofs, t],
   );
 
   const handleFiles = useCallback(
@@ -496,13 +499,13 @@ export function GuestGallery({
       const res = await fetch(`/api/e/${event.slug}/media/${mediaId}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        return body.error ?? "Could not delete it. Try again.";
+        return body.error ?? t.gallery.deleteFailed;
       }
       setItems((current) => current.filter((item) => item.id !== mediaId));
       setLightboxId(null);
       return null;
     },
-    [event.slug],
+    [event.slug, t],
   );
 
   /** TRS-1: reports one photo. If the report hid it, the next poll takes it off
@@ -515,10 +518,10 @@ export function GuestGallery({
         body: JSON.stringify({ reason, note: note || undefined }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) return body.error ?? "Could not send the report. Try again.";
+      if (!res.ok) return body.error ?? t.gallery.reportFailed;
       return null;
     },
-    [event.slug],
+    [event.slug, t],
   );
 
   /**
@@ -595,12 +598,12 @@ export function GuestGallery({
       const res = await fetch(`/api/e/${event.slug}/media/${mediaId}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        return body.error ?? "Could not remove it. Try again.";
+        return body.error ?? t.gallery.removeFailed;
       }
       setItems((current) => current.filter((item) => item.id !== mediaId));
       return null;
     },
-    [event.slug],
+    [event.slug, t],
   );
 
   /** GRW-3: opens the camera or the picker for one challenge card. */
@@ -621,14 +624,14 @@ export function GuestGallery({
     const res = await fetch(`/api/e/${event.slug}/me`, { method: "DELETE" });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setLeaveError(body.error ?? "Could not remove them. Try again.");
+      setLeaveError(body.error ?? t.gallery.removeAllFailed);
       setLeaving("confirm");
       return;
     }
     // Nothing still waiting on this phone goes up after they asked for everything to go.
     await clearUploads().catch(() => {});
     window.location.reload();
-  }, [clearUploads, event.slug]);
+  }, [clearUploads, event.slug, t]);
 
   // Tabs are for folders with something in them; a folder that empties or
   // goes away under someone browsing it drops them back to everything.
@@ -730,7 +733,7 @@ export function GuestGallery({
           <div className="relative mb-8 aspect-[16/6] overflow-hidden rounded-2xl border border-white/10">
             <Image
               src={coverUrl}
-              alt={`${event.name} gallery cover`}
+              alt={t.gallery.coverAlt(event.name)}
               fill
               unoptimized
               priority
@@ -744,9 +747,8 @@ export function GuestGallery({
           <div>
             <h1 className="font-display text-2xl text-paper">{event.name}</h1>
             <p className="mt-1 text-sm text-muted">
-              {items.length}
-              {hasMore ? "+" : ""} {items.length === 1 && !hasMore ? "item" : "items"} shared
-              {isOwner && " · viewing as organizer"}
+              {t.gallery.itemsShared(items.length, hasMore)}
+              {isOwner && t.gallery.viewingAsOrganizer}
             </p>
           </div>
           {event.uploadsEnabled && (
@@ -768,15 +770,15 @@ export function GuestGallery({
                     }}
                     title={
                       proofMode
-                        ? "Photos you add now are stored as proofs with your watermark."
-                        : "Turn on to add photos as proofs with your watermark."
+                        ? t.gallery.proofsOnTitle
+                        : t.gallery.proofsOffTitle
                     }
                     className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm transition-colors ${
                       proofMode ? "border-volt bg-volt text-on-volt" : "border-canvas-line text-paper hover:border-paper/40"
                     }`}
                   >
                     <Stamp className="h-4 w-4" aria-hidden="true" />
-                    {proofMode ? "Proofs on" : "Proofs off"}
+                    {proofMode ? t.gallery.proofsOn : t.gallery.proofsOff}
                   </button>
                 ) : (
                   <a
@@ -784,17 +786,17 @@ export function GuestGallery({
                     className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line px-4 text-sm text-muted hover:text-paper"
                   >
                     <Stamp className="h-4 w-4" aria-hidden="true" />
-                    Set up proofs
+                    {t.gallery.setUpProofs}
                   </a>
                 ))}
               {folders.length > 0 && (
                 <select
-                  aria-label="Add to folder"
+                  aria-label={t.gallery.addToFolder}
                   value={folders.some((folder) => folder.id === uploadAlbumId) ? uploadAlbumId : ""}
                   onChange={(event) => setUploadAlbumId(event.target.value)}
                   className="min-h-11 rounded-full border border-canvas-line bg-canvas px-4 text-sm text-paper"
                 >
-                  <option value="">No folder</option>
+                  <option value="">{t.gallery.noFolder}</option>
                   {flattenFolders(folders).map((folder) => (
                     <option key={folder.id} value={folder.id}>
                       {"\u00a0\u00a0\u00a0".repeat(folder.depth - 1)}
@@ -812,11 +814,11 @@ export function GuestGallery({
                 disabled={cameraOnly && shotsLeft === 0}
               >
                 <Camera className="h-4 w-4" />
-                {cameraOnly ? (shotsLeft === 0 ? "Roll finished" : `${shotsLeft} shots left`) : "Camera"}
+                {cameraOnly ? (shotsLeft === 0 ? t.gallery.rollFinished : t.gallery.shotsLeft(shotsLeft)) : t.gallery.camera}
               </Button>
               {!cameraOnly && (
                 <Button variant="ghost" onClick={() => inputRef.current?.click()}>
-                  Add media
+                  {t.gallery.addMedia}
                 </Button>
               )}
               <input
@@ -850,25 +852,20 @@ export function GuestGallery({
 
         {disposable && !isOwner && !disposable.developed && (
           <div className="mb-6 rounded-2xl border border-volt/30 bg-volt/10 px-4 py-4" role="status">
-            <p className="text-sm font-semibold text-paper">Disposable camera</p>
-            <p className="mt-1 text-sm text-muted">
-              {shotsLeft} of {disposable.shotsPerGuest} shots left. Nobody sees anything until the roll
-              develops
-              {disposable.developsAt ? (
-                <>
-                  {" on "}
-                  <span suppressHydrationWarning>
-                    {new Date(disposable.developsAt).toLocaleString(undefined, {
+            <p className="text-sm font-semibold text-paper">{t.gallery.disposableTitle}</p>
+            {/* The time is the phone's own, so it may differ from the server's render. */}
+            <p className="mt-1 text-sm text-muted" suppressHydrationWarning>
+              {t.gallery.disposableNote(
+                shotsLeft,
+                disposable.shotsPerGuest,
+                disposable.developsAt
+                  ? new Date(disposable.developsAt).toLocaleString(locale === "es" ? "es-US" : "en-US", {
                       weekday: "long",
                       hour: "numeric",
                       minute: "2-digit",
-                    })}
-                  </span>
-                </>
-              ) : (
-                ", when the host says so"
+                    })
+                  : null,
               )}
-              , not even you. Make every shot count.
             </p>
           </div>
         )}
@@ -876,7 +873,7 @@ export function GuestGallery({
         {galleryFull && (
           <p className="mb-6 rounded-xl border border-canvas-line bg-canvas-raised px-4 py-3 text-sm text-muted" role="status">
             {/* Never the plan's name: what a guest can do about it is ask. */}
-            This gallery is full. Ask the host to make room.
+            {t.gallery.galleryFull}
           </p>
         )}
 
@@ -899,12 +896,14 @@ export function GuestGallery({
           <section className="mb-6" aria-labelledby="challenges-heading">
             <div className="mb-2 flex items-baseline justify-between gap-3">
               <h2 id="challenges-heading" className="text-sm font-semibold text-paper">
-                Photo challenges
+                {t.gallery.challenges}
               </h2>
               {!isOwner && (
                 <span className="text-xs tabular-nums text-muted">
-                  {board.challenges.filter((challenge) => doneChallenges.has(challenge.id)).length} of{" "}
-                  {board.challenges.length} done
+                  {t.gallery.challengesDone(
+                    board.challenges.filter((challenge) => doneChallenges.has(challenge.id)).length,
+                    board.challenges.length,
+                  )}
                 </span>
               )}
             </div>
@@ -927,15 +926,14 @@ export function GuestGallery({
                     >
                       <span className="flex items-start gap-2">
                         {done ? (
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-volt" aria-label="Done" />
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-volt" aria-label={t.gallery.done} />
                         ) : (
                           <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
                         )}
                         <span className="text-sm leading-snug text-paper">{challenge.prompt}</span>
                       </span>
                       <span className="mt-1.5 block pl-6 text-xs text-muted">
-                        {challenge.count} {challenge.count === 1 ? "photo" : "photos"}
-                        {challenge.count > 0 ? (pressed ? ", showing them" : ", tap to see") : ""}
+                        {t.gallery.challengeCount(challenge.count, pressed)}
                       </span>
                     </button>
                     {canTakeChallenge && (
@@ -946,13 +944,13 @@ export function GuestGallery({
                           className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full bg-volt px-3 text-sm font-medium text-on-volt transition-transform active:scale-95"
                         >
                           <Camera className="h-4 w-4" aria-hidden="true" />
-                          {done ? "Take another" : "Take it"}
+                          {done ? t.gallery.takeAnother : t.gallery.takeIt}
                         </button>
                         {!cameraOnly && (
                           <button
                             type="button"
                             onClick={() => startChallenge(challenge.id, "library")}
-                            aria-label={`Choose a photo for: ${challenge.prompt}`}
+                            aria-label={t.gallery.chooseFor(challenge.prompt)}
                             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-canvas-line text-paper"
                           >
                             <ImagePlus className="h-4 w-4" aria-hidden="true" />
@@ -973,7 +971,7 @@ export function GuestGallery({
             aria-labelledby="leaderboard-heading"
           >
             <h2 id="leaderboard-heading" className="text-sm font-semibold text-paper">
-              Most photos shared
+              {t.gallery.mostShared}
             </h2>
             <ol className="mt-2 space-y-1.5">
               {board.leaderboard.map((row, index) => (
@@ -988,8 +986,8 @@ export function GuestGallery({
         )}
 
         {moments.length > 1 && (
-          <nav className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Moments">
-            {[{ id: null, name: "Any time" }, ...moments].map((moment) => {
+          <nav className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label={t.gallery.moments}>
+            {[{ id: null, name: t.gallery.anyTime }, ...moments].map((moment) => {
               const pressed = activeMomentId === moment.id;
               return (
                 <button
@@ -1010,7 +1008,7 @@ export function GuestGallery({
         )}
 
         {tabFolders.length > 0 && (
-          <nav className="mb-6 space-y-2" aria-label="Folders">
+          <nav className="mb-6 space-y-2" aria-label={t.gallery.folders}>
             {tabRows.map((row, level) => {
               const options = childrenOf(tabFolders, row.parentId);
               const parentName = row.parentId ? tabFolders.find((folder) => folder.id === row.parentId)?.name : null;
@@ -1033,12 +1031,12 @@ export function GuestGallery({
                   key={row.parentId ?? "top"}
                   className={`flex gap-2 overflow-x-auto pb-1 ${level > 0 ? "border-l-2 border-canvas-line pl-3" : ""}`}
                   role="group"
-                  aria-label={parentName ? `Inside ${parentName}` : "Folders"}
+                  aria-label={parentName ? t.gallery.inside(parentName) : t.gallery.folders}
                 >
                   {/* The first tab of a lower row is the whole of its parent. */}
                   {tab(
                     `${row.parentId ?? "top"}:all`,
-                    parentName ? `All of ${parentName}` : "Everything",
+                    parentName ? t.gallery.allOf(parentName) : t.gallery.everything,
                     row.selected === null && activeFolderId === row.parentId,
                     () => setChosenFolderId(row.parentId),
                   )}
@@ -1055,11 +1053,11 @@ export function GuestGallery({
           <div className="rounded-2xl border border-canvas-line bg-canvas-raised px-6 py-16 text-center text-sm text-muted">
             {items.length === 0
               ? disposable && !isOwner && !disposable.developed
-                ? "The roll is still in the camera. Everyone's photos appear here together when it develops."
-                : "No photos or videos yet. Be the first to add one."
+                ? t.gallery.emptyRoll
+                : t.gallery.emptyGallery
               : activeChallengeId
-                ? "Nobody has taken this one yet. Be the first."
-                : "Nothing in this folder has loaded yet. Scroll for more, or try another folder."}
+                ? t.gallery.emptyChallenge
+                : t.gallery.emptyFolder}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -1067,7 +1065,7 @@ export function GuestGallery({
               <button
                 key={item.id}
                 onClick={() => setLightboxId(item.id)}
-                aria-label={item.kind === "video" ? "Open video" : "Open photo"}
+                aria-label={item.kind === "video" ? t.gallery.openVideo : t.gallery.openPhoto}
                 className={`relative aspect-square overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
                   settledIds.has(item.id) ? "" : "klik-frame"
                 }`}
@@ -1127,7 +1125,7 @@ export function GuestGallery({
                 )}
                 {item.status === "pending" && item.mine && (
                   <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-paper">
-                    Awaiting approval
+                    {t.gallery.awaitingApproval}
                   </span>
                 )}
                 {/* Only ever reaches a guest for their own upload, since that
@@ -1136,7 +1134,7 @@ export function GuestGallery({
                     host took it out of the gallery. */}
                 {item.visibility === "private" && item.mine && (
                   <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-paper">
-                    Only you can see this
+                    {t.gallery.onlyYou}
                   </span>
                 )}
                 {/* MED-9. Only when there is something to count, so a quiet
@@ -1148,14 +1146,14 @@ export function GuestGallery({
                       <span className="flex items-center gap-1">
                         <Heart className={`h-3 w-3 ${item.reacted ? "fill-volt text-volt" : ""}`} aria-hidden="true" />
                         {item.reactionCount}
-                        <span className="sr-only">{item.reactionCount === 1 ? "heart" : "hearts"}</span>
+                        <span className="sr-only">{t.gallery.hearts(item.reactionCount ?? 0)}</span>
                       </span>
                     )}
                     {features.comments && (item.commentCount ?? 0) > 0 && (
                       <span className="flex items-center gap-1">
                         <MessageCircle className="h-3 w-3" aria-hidden="true" />
                         {item.commentCount}
-                        <span className="sr-only">{item.commentCount === 1 ? "comment" : "comments"}</span>
+                        <span className="sr-only">{t.gallery.comments(item.commentCount ?? 0)}</span>
                       </span>
                     )}
                   </span>
@@ -1165,7 +1163,7 @@ export function GuestGallery({
                   <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium tabular-nums text-paper backdrop-blur">
                     <Layers className="h-3 w-3" aria-hidden="true" />
                     {burstSizes.get(item.id)}
-                    <span className="sr-only">photos taken together</span>
+                    <span className="sr-only">{t.gallery.takenTogether}</span>
                   </span>
                 )}
               </button>
@@ -1175,7 +1173,7 @@ export function GuestGallery({
 
         {hasMore && (
           <div ref={sentinelRef} className="py-8 text-center text-sm text-muted">
-            {loadingMore ? "Loading more…" : ""}
+            {loadingMore ? t.gallery.loadingMore : ""}
           </div>
         )}
 
@@ -1185,19 +1183,19 @@ export function GuestGallery({
                 account to be here, and the upload button never asks for one. */}
             {signedIn ? (
               <>
-                This gallery is saved to your account.{" "}
+                {t.gallery.savedToAccount}{" "}
                 <a href="/me" className="underline underline-offset-2 transition-colors hover:text-paper">
-                  Your galleries
+                  {t.gallery.yourGalleries}
                 </a>
               </>
             ) : (
               <>
-                Want to find this gallery again later?{" "}
+                {t.gallery.findAgain}{" "}
                 <a
                   href={`/login?next=${encodeURIComponent(`/e/${event.slug}`)}`}
                   className="underline underline-offset-2 transition-colors hover:text-paper"
                 >
-                  Sign in with your email
+                  {t.gallery.signInWithEmail}
                 </a>
               </>
             )}
@@ -1214,7 +1212,7 @@ export function GuestGallery({
                   download
                   className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
                 >
-                  Download everything I added
+                  {t.gallery.downloadMine}
                 </a>
                 <span aria-hidden="true">·</span>
                 <button
@@ -1222,14 +1220,13 @@ export function GuestGallery({
                   onClick={() => setLeaving("confirm")}
                   className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
                 >
-                  Remove everything I added
+                  {t.gallery.removeMine}
                 </button>
               </span>
             ) : (
               <div className="mx-auto max-w-sm space-y-3 rounded-2xl border border-canvas-line bg-canvas-raised p-4 text-left">
                 <p className="text-sm text-paper">
-                  Remove every photo and video you added, and your name, from this gallery? This is
-                  permanent and cannot be undone by you or the host.
+                  {t.gallery.removeMineConfirm}
                 </p>
                 {leaveError && (
                   <p className="text-xs text-red-400" role="alert">
@@ -1243,10 +1240,10 @@ export function GuestGallery({
                     disabled={leaving === "working"}
                     onClick={() => void removeEverythingMine()}
                   >
-                    {leaving === "working" ? "Removing…" : "Remove everything"}
+                    {leaving === "working" ? t.gallery.removing : t.gallery.removeEverything}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => setLeaving("idle")}>
-                    Cancel
+                    {t.common.cancel}
                   </Button>
                 </div>
               </div>
@@ -1254,14 +1251,17 @@ export function GuestGallery({
           </div>
         )}
 
+        {/* TRS-3: the guest's own language, whatever the host or the browser chose. */}
+        <LanguageSwitch className="mt-6" />
+
         {showBranding && (
           <p className="mt-12 text-center text-xs text-muted">
-            Shared with <span className="font-medium text-paper">klik</span>
+            {t.gallery.sharedWith} <span className="font-medium text-paper">klik</span>
             {referralHref && (
               <>
                 {" · "}
                 <a href={referralHref} className="inline-flex min-h-11 items-center text-paper underline-offset-2 hover:underline">
-                  Make a gallery for your own event
+                  {t.gallery.makeYourOwn}
                 </a>
               </>
             )}

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Clock, Film, ImageIcon, Loader2, UploadCloud, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { TrayItem } from "@/lib/upload-queue/page-queue";
+import { useGuestCopy } from "@/components/guest/guest-copy";
+import { uploadRefusalText, type GuestCopy, type UploadKind } from "@/lib/i18n/guest";
 
 /**
  * OPS-3: what is waiting to upload from this device, and why. Every file a
@@ -12,29 +14,23 @@ import type { TrayItem } from "@/lib/upload-queue/page-queue";
  * or refused and why. Nothing disappears silently.
  */
 
-function noun(items: TrayItem[]): string {
+/** What a set of items is, for the words about it (TRS-3: nouns agree in Spanish). */
+function kindOf(items: TrayItem[]): UploadKind {
   const videos = items.filter((item) => item.kind === "video").length;
-  const photos = items.length - videos;
-  if (videos === 0) return photos === 1 ? "photo" : "photos";
-  if (photos === 0) return videos === 1 ? "video" : "videos";
-  return "photos and videos";
+  if (videos === 0) return "photo";
+  return videos === items.length ? "video" : "mixed";
 }
 
-function seconds(ms: number): string {
-  const total = Math.max(1, Math.ceil(ms / 1000));
-  return total < 60 ? `${total} s` : `${Math.ceil(total / 60)} min`;
-}
-
-function describe(item: TrayItem, online: boolean): string {
+function describe(t: GuestCopy, item: TrayItem, online: boolean): string {
   switch (item.status) {
     case "preparing":
-      return "Getting it ready";
+      return t.uploads.preparing;
     case "sending":
-      return item.progress === null ? "Sending" : `Sending, ${Math.round(item.progress * 100)}%`;
+      return item.progress === null ? t.uploads.sending : t.uploads.sendingPercent(Math.round(item.progress * 100));
     case "refused":
-      return item.message ?? "It could not be added";
+      return uploadRefusalText(t, item);
     default:
-      return online ? "Waiting to send" : "Waiting for a connection";
+      return online ? t.uploads.waitingToSend : t.uploads.waitingForConnection;
   }
 }
 
@@ -53,6 +49,7 @@ export function UploadTray({
   onRetryNow: () => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useGuestCopy();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const backingOff = items.some((item) => item.status === "waiting" && item.retryAt > now);
@@ -83,35 +80,31 @@ export function UploadTray({
   const kept = durable && !volatile;
   let icon = <UploadCloud className="h-4 w-4 text-volt" aria-hidden="true" />;
   let headline: string;
-  let detail: string | null = kept
-    ? "Saved on this phone, so nothing is lost if the wifi drops or you close the page."
-    : "Keep this page open until they're sent.";
+  let detail: string | null = kept ? t.uploads.keptDetail : t.uploads.keepOpen;
   if (active.length === 0) {
     icon = <AlertCircle className="h-4 w-4 text-red-300" aria-hidden="true" />;
-    headline = `${refused.length} ${noun(refused)} couldn't be added`;
+    headline = t.uploads.refusedHeadline(refused.length, kindOf(refused));
     detail = null;
   } else if (!online) {
     icon = <WifiOff className="h-4 w-4 text-muted" aria-hidden="true" />;
-    headline = "You're offline";
-    detail = kept
-      ? `${active.length} ${noun(active)} saved on this phone. They'll send when you're back online.`
-      : `${active.length} ${noun(active)} waiting. Keep this page open and they'll send when you're back online.`;
+    headline = t.uploads.offline;
+    detail = kept ? t.uploads.offlineKept(active.length, kindOf(active)) : t.uploads.offlineVolatile(active.length, kindOf(active));
   } else if (sending.length > 0) {
     icon = <Loader2 className="h-4 w-4 animate-spin text-volt" aria-hidden="true" />;
-    headline = `Sending ${active.length} ${noun(active)}`;
+    headline = t.uploads.sendingHeadline(active.length, kindOf(active));
   } else if (nextTry !== null) {
     icon = <Clock className="h-4 w-4 text-muted" aria-hidden="true" />;
-    headline = "Waiting to try again";
-    detail = `Trying again in ${seconds(nextTry - now)}. ${kept ? `Your ${noun(active)} ${active.length === 1 ? "is" : "are"} saved on this phone.` : "Keep this page open."}`;
+    headline = t.uploads.waitingToRetry;
+    detail = t.uploads.retryIn(t.uploads.wait(nextTry - now), kept, active.length, kindOf(active));
   } else if (preparing.length === active.length) {
     icon = <Loader2 className="h-4 w-4 animate-spin text-muted" aria-hidden="true" />;
-    headline = `Getting ${active.length} ${noun(active)} ready`;
+    headline = t.uploads.preparingHeadline(active.length, kindOf(active));
   } else {
-    headline = `${active.length} ${noun(active)} waiting to send`;
+    headline = t.uploads.waitingHeadline(active.length, kindOf(active));
   }
 
   return (
-    <section aria-label="Uploads" className="mb-6 rounded-2xl border border-canvas-line bg-canvas-raised p-4">
+    <section aria-label={t.uploads.region} className="mb-6 rounded-2xl border border-canvas-line bg-canvas-raised p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2.5" role="status" aria-live="polite">
           <span className="mt-0.5 shrink-0">{icon}</span>
@@ -122,14 +115,14 @@ export function UploadTray({
         </div>
         {online && backingOff && sending.length === 0 && (
           <Button variant="ghost" size="sm" onClick={onRetryNow} className="shrink-0">
-            Try now
+            {t.uploads.tryNow}
           </Button>
         )}
       </div>
 
-      <ul className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Files">
+      <ul className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1" aria-label={t.uploads.files}>
         {items.map((item) => {
-          const label = `${item.name}: ${describe(item, online)}`;
+          const label = `${item.name}: ${describe(t, item, online)}`;
           const pressed = item.id === selectedId;
           return (
             <li key={item.id} className="shrink-0">
@@ -191,7 +184,7 @@ export function UploadTray({
         <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-canvas px-3 py-2">
           <span className="min-w-0">
             <span className="block truncate text-sm text-paper">{selected.name}</span>
-            <span className="block text-xs text-muted">{describe(selected, online)}</span>
+            <span className="block text-xs text-muted">{describe(t, selected, online)}</span>
           </span>
           <Button
             variant="ghost"
@@ -202,25 +195,25 @@ export function UploadTray({
             }}
             className="shrink-0"
           >
-            Don&apos;t send
+            {t.uploads.dontSend}
           </Button>
         </div>
       )}
 
       {refused.length > 0 && (
-        <ul className="mt-3 max-h-60 space-y-2 overflow-y-auto" aria-label="Couldn't be added">
+        <ul className="mt-3 max-h-60 space-y-2 overflow-y-auto" aria-label={t.uploads.couldNotBeAdded}>
           {refused.map((item) => (
             <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2">
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-paper">{item.name}</span>
-                <span className="block text-xs text-red-300">{item.message ?? "It could not be added."}</span>
+                <span className="block text-xs text-red-300">{uploadRefusalText(t, item)}</span>
               </span>
               <span className="flex shrink-0 gap-2">
                 <Button variant="ghost" size="sm" onClick={() => onRetry(item.id)}>
-                  Try again
+                  {t.common.tryAgain}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => onRemove(item.id)}>
-                  Remove
+                  {t.uploads.remove}
                 </Button>
               </span>
             </li>

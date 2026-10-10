@@ -58,6 +58,7 @@ const row: Event = {
   momentsEnabled: true,
   leaderboardEnabled: false,
   showOnProfile: false,
+  guestLanguage: "auto",
 };
 
 /**
@@ -131,6 +132,8 @@ const WITHHELD: Record<string, string> = {
   leaderboardEnabled: "decides what the server sends, never needed raw",
   // GRW-4. The host's choice about their own profile page.
   showOnProfile: "host configuration for their public profile",
+  // TRS-3. The server picks the language and sends the words, not the setting.
+  guestLanguage: "decides what the server sends, never needed raw",
 };
 
 describe("toPublicEvent", () => {

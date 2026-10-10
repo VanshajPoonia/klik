@@ -2,7 +2,7 @@ import { cache } from "react";
 import { after } from "next/server";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { findEventBySlug } from "@/lib/slugs";
@@ -41,6 +41,9 @@ import { challengeBoard } from "@/lib/challenges";
 import { getWatermark } from "@/lib/proofs";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { GuestGallery } from "@/components/guest/guest-gallery";
+import { GuestCopyProvider } from "@/components/guest/guest-copy";
+import { GUEST_COPY } from "@/lib/i18n/guest";
+import { LOCALE_COOKIE, chooseLocale } from "@/lib/i18n/locale";
 
 // Shared by the page and its metadata so one request runs one query.
 const getEventBySlug = cache(async (slug: string) => {
@@ -96,27 +99,40 @@ export default async function GuestEventPage({
 
   const access = canViewGallery(event, { isOwner, hasUnlockCookie });
 
+  // TRS-3: the guest's own choice, then the host's, then the browser's.
+  const locale = chooseLocale({
+    cookie: cookieStore.get(LOCALE_COOKIE)?.value,
+    eventLanguage: event.guestLanguage,
+    acceptLanguage: (await headers()).get("accept-language"),
+  });
+  const copy = GUEST_COPY[locale];
+  const speak = (node: React.ReactNode) => (
+    <GuestCopyProvider locale={locale}>
+      <div lang={locale}>{node}</div>
+    </GuestCopyProvider>
+  );
+
   if (!access.allowed) {
     if (access.reason === "password_required") {
-      return <EntrySheet slug={slug} eventName={event.name} requiresPassword />;
+      return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword />);
     }
-    return (
+    return speak(
       <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
         <h1 className="font-display text-2xl text-paper">
           {access.reason === "expired"
-            ? "This event has ended."
+            ? copy.gate.endedTitle
             : access.reason === "not_open"
-              ? "This gallery is not open yet."
-              : "This gallery is private."}
+              ? copy.gate.notOpenTitle
+              : copy.gate.privateTitle}
         </h1>
         <p className="mt-3 max-w-sm text-sm text-muted">
           {access.reason === "expired"
-            ? "Uploads are closed, but the organizer can still view and download everything."
+            ? copy.gate.endedBody
             : access.reason === "not_open"
-              ? "The host is still setting it up. Check back closer to the event."
-              : "Ask the organizer for access."}
+              ? copy.gate.notOpenBody
+              : copy.gate.privateBody}
         </p>
-      </div>
+      </div>,
     );
   }
 
@@ -133,7 +149,7 @@ export default async function GuestEventPage({
   const hasConsented = Boolean(guestSession && guestSession.eventId === event.id);
 
   if (!hasConsented && !isOwner) {
-    return <EntrySheet slug={slug} eventName={event.name} requiresPassword={false} />;
+    return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword={false} />);
   }
 
   // GRW-7: an open by someone other than the event's team. Counted after the
@@ -244,7 +260,7 @@ export default async function GuestEventPage({
     ? await db.select({ code: users.referralCode }).from(users).where(eq(users.id, event.ownerId)).limit(1)
     : [];
 
-  return (
+  return speak(
     <GuestGallery
       event={publicEvent}
       proofs={proofs}
@@ -265,6 +281,6 @@ export default async function GuestEventPage({
       linked={linked}
       board={board}
       linkedMissing={Boolean(linkedId && !linked)}
-    />
+    />,
   );
 }

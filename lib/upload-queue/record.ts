@@ -69,8 +69,20 @@ export interface QueuedUpload {
   serverFailures: number;
   retryAt: number;
   /** The server said no, or a file could not be read: waits for the person. */
-  refused: { message: string; status: number } | null;
+  refused: Refusal | null;
   claim: { by: string; until: number } | null;
+}
+
+/**
+ * Why an item stopped. `message` is English, from the server or this device;
+ * `code` and `values`, when there are some, let the tray say it in the guest's
+ * own language (TRS-3).
+ */
+export interface Refusal {
+  message: string;
+  status: number;
+  code?: string;
+  values?: Record<string, number | string>;
 }
 
 export interface SentProgress {

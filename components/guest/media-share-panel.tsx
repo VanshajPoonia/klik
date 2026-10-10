@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
+import { useGuestCopy } from "@/components/guest/guest-copy";
 import { ArrowLeft, Check, Download, Link2, Send, Smartphone, Share2 } from "lucide-react";
 import { saveBlob } from "@/lib/enhance-view";
 import {
@@ -68,6 +69,14 @@ export function MediaSharePanel({
   onClose: () => void;
 }) {
   const noun = item.kind;
+  // TRS-3: the guest's language, and a thrown error said in it.
+  const { t } = useGuestCopy();
+  const errorText = (error: unknown) => {
+    const code = (error as { code?: string } | null)?.code;
+    if (code === "video_preparing") return t.share.videoPreparing;
+    if (code === "load_failed") return t.share.loadFailed;
+    return t.share.failed;
+  };
   const [fileSharing] = useState(() => canShareFiles());
   const [prepared, setPrepared] = useState<Prepared | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
@@ -112,7 +121,7 @@ export function MediaSharePanel({
   useEffect(() => {
     if (canTakeFile && item.kind === "photo") {
       prepare().catch((error) => {
-        if ((error as Error).name !== "AbortError") setMessage((error as Error).message);
+        if ((error as Error).name !== "AbortError") setMessage(errorText(error));
       });
     }
     return () => controller.current?.abort();
@@ -127,15 +136,15 @@ export function MediaSharePanel({
   async function share(file: File) {
     const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
     if (!nav.canShare?.({ files: [file] })) {
-      setMessage(`This browser cannot send a ${noun} this size. Save it instead.`);
+      setMessage(t.share.tooBig(noun));
       return;
     }
     try {
       await nav.share({ files: [file] });
     } catch (error) {
       const name = (error as Error).name;
-      if (name === "NotAllowedError") setMessage("Tap Send again.");
-      else if (name !== "AbortError") setMessage("That did not send. Try again, or save it instead.");
+      if (name === "NotAllowedError") setMessage(t.share.tapAgain);
+      else if (name !== "AbortError") setMessage(t.share.notSent);
     }
   }
 
@@ -146,7 +155,7 @@ export function MediaSharePanel({
       await task();
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
-        setMessage(error instanceof Error ? error.message : "That did not work. Try again.");
+        setMessage(errorText(error));
       }
     } finally {
       setBusy(null);
@@ -170,24 +179,24 @@ export function MediaSharePanel({
       <div
         ref={panelRef}
         role="dialog"
-        aria-label="Story image"
+        aria-label={t.share.storyDialog}
         className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[calc(100%-1.5rem)] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
       >
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setStory(null)}
-            aria-label="Back"
+            aria-label={t.share.back}
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
           >
             <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           </button>
-          <p className="text-sm font-medium text-paper">Your story, with the gallery&apos;s QR code</p>
+          <p className="text-sm font-medium text-paper">{t.share.storyHeading}</p>
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element -- a local object URL */}
         <img
           src={story.url}
-          alt={`Story image of this photo from ${eventName}, with a QR code to the gallery`}
+          alt={t.share.storyAlt(eventName)}
           className="mx-auto max-h-[45vh] w-auto rounded-xl"
         />
         <div className="flex flex-wrap gap-2">
@@ -198,7 +207,7 @@ export function MediaSharePanel({
               className="inline-flex min-h-11 items-center gap-2 rounded-full bg-volt px-5 text-sm font-medium text-on-volt transition-transform active:scale-95"
             >
               <Share2 className="h-4 w-4" aria-hidden="true" />
-              Share story
+              {t.share.shareStory}
             </button>
           )}
           <button
@@ -207,7 +216,7 @@ export function MediaSharePanel({
             className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-5 text-sm text-paper transition-transform active:scale-95"
           >
             <Download className="h-4 w-4" aria-hidden="true" />
-            Save
+            {t.share.save}
           </button>
         </div>
         {message && (
@@ -227,11 +236,11 @@ export function MediaSharePanel({
     <div
       ref={panelRef}
       role="dialog"
-      aria-label={`Share this ${noun}`}
+      aria-label={t.share.title(noun)}
       className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[calc(100%-1.5rem)] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
     >
       <p ref={headingRef} tabIndex={-1} className="text-sm font-medium text-paper outline-none">
-        Share this {noun}
+        {t.share.title(noun)}
       </p>
 
       {(showSend || showStory) && (
@@ -257,13 +266,13 @@ export function MediaSharePanel({
                 <span className="block font-medium">
                   {progress !== null
                     ? item.kind === "video"
-                      ? `Getting it ready… ${Math.round(progress * 100)}%`
-                      : "Getting it ready…"
+                      ? t.share.preparingPercent(Math.round(progress * 100))
+                      : t.share.preparing
                     : item.kind === "video" && !sendReady
-                      ? "Get video ready to send"
-                      : `Send ${noun}`}
+                      ? t.share.prepareVideo
+                      : t.share.send(noun)}
                 </span>
-                <span className="block text-xs text-muted">WhatsApp, Messages, anywhere</span>
+                <span className="block text-xs text-muted">{t.share.sendWhere}</span>
               </span>
             </button>
           )}
@@ -288,8 +297,8 @@ export function MediaSharePanel({
             >
               <Smartphone className="h-5 w-5 text-volt" aria-hidden="true" />
               <span>
-                <span className="block font-medium">{busy === "story" ? "Drawing…" : "Story with QR"}</span>
-                <span className="block text-xs text-muted">Brings people to the gallery</span>
+                <span className="block font-medium">{busy === "story" ? t.share.drawing : t.share.story}</span>
+                <span className="block text-xs text-muted">{t.share.storyWhy}</span>
               </span>
             </button>
           )}
@@ -301,8 +310,8 @@ export function MediaSharePanel({
           <button type="button" onClick={onShareLink} className={ROW}>
             <Share2 className="h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
             <span>
-              <span className="block">Make a share link</span>
-              <span className="block text-xs text-muted">Works without joining the gallery</span>
+              <span className="block">{t.share.shareLink}</span>
+              <span className="block text-xs text-muted">{t.share.shareLinkWhy}</span>
             </span>
           </button>
         )}
@@ -314,8 +323,8 @@ export function MediaSharePanel({
               <Link2 className="h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
             )}
             <span>
-              <span className="block">{copied ? "Link copied" : "Copy link"}</span>
-              <span className="block text-xs text-muted">Opens it for anyone who can open the gallery</span>
+              <span className="block">{copied ? t.share.copied : t.share.copy}</span>
+              <span className="block text-xs text-muted">{t.share.copyWhy}</span>
             </span>
           </button>
         )}
@@ -323,7 +332,7 @@ export function MediaSharePanel({
           <input
             readOnly
             value={manualLink}
-            aria-label="Link to this photo"
+            aria-label={t.share.linkLabel}
             onFocus={(focus) => focus.currentTarget.select()}
             className="mx-1 mb-2 w-[calc(100%-0.5rem)] rounded-xl border border-white/15 bg-transparent px-3 py-2 text-xs text-paper"
           />
@@ -341,9 +350,9 @@ export function MediaSharePanel({
           >
             <Download className="h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
             <span>
-              <span className="block">Save full size</span>
+              <span className="block">{t.share.saveFull}</span>
               <span className="block text-xs text-muted">
-                {item.kind === "photo" ? "The best copy the gallery keeps" : "The video as it was uploaded"}
+                {item.kind === "photo" ? t.share.saveFullPhoto : t.share.saveFullVideo}
               </span>
             </span>
           </a>
@@ -362,15 +371,15 @@ export function MediaSharePanel({
           >
             <Download className="h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
             <span>
-              <span className="block">{busy === "smaller" ? "Making it…" : "Save a smaller copy"}</span>
-              <span className="block text-xs text-muted">1600 pixels, for messages and the web</span>
+              <span className="block">{busy === "smaller" ? t.share.making : t.share.saveSmaller}</span>
+              <span className="block text-xs text-muted">{t.share.saveSmallerWhy}</span>
             </span>
           </button>
         )}
       </div>
 
       {!canTakeFile && (
-        <p className="text-xs leading-relaxed text-muted">The host has turned off saving photos from this gallery.</p>
+        <p className="text-xs leading-relaxed text-muted">{t.share.savingOff}</p>
       )}
       {message && (
         <p className="text-xs text-muted" role="status">
@@ -382,7 +391,7 @@ export function MediaSharePanel({
         onClick={onClose}
         className="min-h-11 w-full rounded-full border border-white/15 px-4 text-sm text-paper"
       >
-        Done
+        {t.share.done}
       </button>
     </div>
   );

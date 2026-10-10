@@ -310,11 +310,50 @@ export function levelAngle(
 /** Within this of level, the line turns to the accent colour. */
 export const LEVEL_TOLERANCE_DEGREES = 1;
 
+export type CameraFailureCode =
+  | "unsupported_in_app"
+  | "unsupported"
+  | "blocked_in_app"
+  | "blocked"
+  | "not_found"
+  | "busy"
+  | "failed"
+  | "no_video";
+export type CameraHelpCode =
+  | "open_in_browser"
+  | "ios_settings"
+  | "android_settings"
+  | "desktop_settings"
+  | "close_other_app"
+  | "try_again_or_native"
+  | "switch_to_photo";
+
 export interface CameraFailure {
+  /** TRS-3: what happened and how to fix it, as codes the screen words in the guest's language. */
+  code: CameraFailureCode;
+  helpCode: CameraHelpCode | null;
+  /** The same in English. */
   message: string;
   /** How to fix it on this kind of device, when there is a way. */
   help: string | null;
 }
+
+const HELP: Record<CameraHelpCode, string> = {
+  open_in_browser: "Open the page in Safari or Chrome from the menu, or use your phone's camera below.",
+  ios_settings: "In Safari, tap aA in the address bar, then Website Settings, and set Camera to Allow. Then tap Try again.",
+  android_settings: "Tap the icon at the left of the address bar, then Permissions, and allow Camera. Then tap Try again.",
+  desktop_settings: "Click the camera icon in the address bar and allow it, then try again.",
+  close_other_app: "Close the other app or video call, then tap Try again.",
+  try_again_or_native: "Tap Try again, or use your phone's camera below.",
+  switch_to_photo: "Photos still work: close this and switch to Photo.",
+};
+
+function failure(code: CameraFailureCode, message: string, helpCode: CameraHelpCode | null): CameraFailure {
+  return { code, helpCode, message, help: helpCode ? HELP[helpCode] : null };
+}
+
+/** The browser cannot record video at all; photos still work. */
+export const NO_VIDEO_FAILURE: CameraFailure = failure("no_video", "This browser can't record video.", "switch_to_photo");
 
 /**
  * CAM-1: what to tell someone whose camera did not open, and how they get it
@@ -331,36 +370,22 @@ export function cameraFailure(error: unknown, userAgent: string): CameraFailure 
 
   if (name === "unsupported") {
     return inApp
-      ? {
-          message: "This app's built-in browser can't open the camera.",
-          help: "Open the page in Safari or Chrome from the menu, or use your phone's camera below.",
-        }
-      : { message: "This browser can't open the camera here.", help: null };
+      ? failure("unsupported_in_app", "This app's built-in browser can't open the camera.", "open_in_browser")
+      : failure("unsupported", "This browser can't open the camera here.", null);
   }
   if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError") {
-    if (inApp) {
-      return {
-        message: "This app's built-in browser blocked the camera.",
-        help: "Open the page in Safari or Chrome from the menu, or use your phone's camera below.",
-      };
-    }
-    return {
-      message: "Camera access is blocked for this page.",
-      help: ios
-        ? "In Safari, tap aA in the address bar, then Website Settings, and set Camera to Allow. Then tap Try again."
-        : android
-          ? "Tap the icon at the left of the address bar, then Permissions, and allow Camera. Then tap Try again."
-          : "Click the camera icon in the address bar and allow it, then try again.",
-    };
+    if (inApp) return failure("blocked_in_app", "This app's built-in browser blocked the camera.", "open_in_browser");
+    return failure(
+      "blocked",
+      "Camera access is blocked for this page.",
+      ios ? "ios_settings" : android ? "android_settings" : "desktop_settings",
+    );
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError" || name === "OverconstrainedError") {
-    return { message: "No camera was found on this device.", help: null };
+    return failure("not_found", "No camera was found on this device.", null);
   }
   if (name === "NotReadableError" || name === "TrackStartError" || name === "AbortError") {
-    return {
-      message: "Another app is using the camera.",
-      help: "Close the other app or video call, then tap Try again.",
-    };
+    return failure("busy", "Another app is using the camera.", "close_other_app");
   }
-  return { message: "The camera didn't start.", help: "Tap Try again, or use your phone's camera below." };
+  return failure("failed", "The camera didn't start.", "try_again_or_native");
 }

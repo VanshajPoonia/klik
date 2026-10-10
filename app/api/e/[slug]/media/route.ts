@@ -191,7 +191,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const plan = eventPlan(event);
   if (!canUpload(event)) {
-    return NextResponse.json({ error: "Uploads are closed for this event" }, { status: 403 });
+    return NextResponse.json({ error: "Uploads are closed for this event", code: "uploads_closed" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);
@@ -204,7 +204,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
   const input = parsed.data;
   if (!isAllowedMime(input.mimeType)) {
-    return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
+    return NextResponse.json({ error: "Unsupported file type", code: "unsupported_type" }, { status: 400 });
   }
   const expectedPathname = blobPathnameFor(
     event.id,
@@ -217,10 +217,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   const viewer = await resolveEventViewer(event);
   if (!viewer.access.allowed) {
-    return NextResponse.json({ error: "Gallery access is required to upload" }, { status: 403 });
+    return NextResponse.json({ error: "Gallery access is required to upload", code: "access_required" }, { status: 403 });
   }
   if (!viewer.ownerSession && !viewer.guestId) {
-    return NextResponse.json({ error: "Not authorized" }, { status: 401 });
+    return NextResponse.json({ error: "Not authorized", code: "not_authorized" }, { status: 401 });
   }
 
   // Deliberately does NOT filter deleted_at. A soft-deleted row still owns its
@@ -330,7 +330,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       .where(and(eq(albums.id, input.albumId), eq(albums.eventId, event.id), isNull(albums.deletedAt)))
       .limit(1);
     if (!album) {
-      return NextResponse.json({ error: "That folder is not in this event any more" }, { status: 404 });
+      return NextResponse.json({ error: "That folder is not in this event any more", code: "folder_gone" }, { status: 404 });
     }
   }
 
@@ -360,7 +360,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       reportError("upload.orphan_cleanup_failed", error, { reason: "too_large" });
     });
     return NextResponse.json(
-      { error: `File is too large for the ${plan.name} plan`, maxBytes },
+      { error: `File is too large for the ${plan.name} plan`, maxBytes, code: "too_large", values: { maxMb: Math.round(maxBytes / (1024 * 1024)) } },
       { status: 413 },
     );
   }
@@ -369,7 +369,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (watermark && kind === "video") {
     await deleteBlobs([input.pathname]).catch(() => {});
     return NextResponse.json(
-      { error: "Videos cannot be watermarked yet. Add videos with proofs turned off." },
+      { error: "Videos cannot be watermarked yet. Add videos with proofs turned off.", code: "proof_video" },
       { status: 422 },
     );
   }
@@ -402,7 +402,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!signature || signature.family !== (kind === "video" ? "video" : "image")) {
     await deleteBlobs([input.pathname]).catch(() => {});
     return NextResponse.json(
-      { error: "Only photos and videos can be uploaded to a gallery." },
+      { error: "Only photos and videos can be uploaded to a gallery.", code: "not_media" },
       { status: 415 },
     );
   }
@@ -420,6 +420,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           plan.maxVideoSeconds >= 120 ? "minutes" : "minute"
         } on ${plan.name}.`,
         maxVideoSeconds: plan.maxVideoSeconds,
+        code: "video_too_long",
+        values: { seconds: plan.maxVideoSeconds },
       },
       { status: 413 },
     );
@@ -473,7 +475,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         reportError("upload.heic_convert_failed", error);
         await deleteBlobs([input.pathname]).catch(() => {});
         return NextResponse.json(
-          { error: "That photo could not be processed. Try saving it as a JPEG first." },
+          { error: "That photo could not be processed. Try saving it as a JPEG first.", code: "photo_unprocessable" },
           { status: 422 },
         );
       }
@@ -491,7 +493,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!sanitized) {
       await deleteBlobs([input.pathname]).catch(() => {});
       return NextResponse.json(
-        { error: "That photo could not be processed. Try saving it as a JPEG first." },
+        { error: "That photo could not be processed. Try saving it as a JPEG first.", code: "photo_unprocessable" },
         { status: 422 },
       );
     }
@@ -511,7 +513,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       // pointer to bytes we decided not to keep.
       reportError("upload.store_failed", error);
       await deleteBlobs([input.pathname]).catch(() => {});
-      return NextResponse.json({ error: "Upload could not be completed" }, { status: 500 });
+      return NextResponse.json({ error: "Upload could not be completed", code: "upload_failed" }, { status: 500 });
     }
 
     sizeBytes = sanitized.data.byteLength;
@@ -531,7 +533,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const spent = kind === "photo" && (await spendShot(viewer.guestId, event.shotsPerGuest));
     if (!spent) {
       await deleteBlobs([input.pathname]).catch(() => {});
-      return NextResponse.json({ error: "Your roll is finished. Every shot has been taken." }, { status: 403 });
+      return NextResponse.json({ error: "Your roll is finished. Every shot has been taken.", code: "roll_finished" }, { status: 403 });
     }
   }
 

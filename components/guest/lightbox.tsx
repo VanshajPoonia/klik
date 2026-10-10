@@ -23,6 +23,7 @@ import { CommentButton, CommentsSheet, HeartButton } from "@/components/guest/me
 import { MediaSharePanel } from "@/components/guest/media-share-panel";
 import { fetchMediaBlob } from "@/lib/media-share";
 import { ProofNote } from "@/components/guest/proof-note";
+import { useGuestCopy } from "@/components/guest/guest-copy";
 
 // CAM-2. A few hundred kilobytes that only someone editing should download,
 // and it reaches for `window` the moment it loads.
@@ -102,17 +103,9 @@ type ReportReason =
   | "other";
 
 /** Mirrors REPORT_REASON_LABELS in lib/reports.ts, which is server-only. The
- *  most serious first, because that is the one that must not be missed. */
-const REPORT_OPTIONS: Array<[ReportReason, string]> = [
-  ["child_safety", "Involves a child in a sexual or abusive way"],
-  ["nudity", "Nudity or sexual content"],
-  ["violence", "Violence or something disturbing"],
-  ["harassment", "Bullying, harassment or hate"],
-  ["privacy", "It's me, and I don't want it here"],
-  ["copyright", "It's my work and was shared without permission"],
-  ["spam", "Spam or nothing to do with this event"],
-  ["other", "Something else"],
-];
+ *  most serious first, because that is the one that must not be missed. The
+ *  words are in lib/i18n/guest.ts (TRS-3). */
+const REPORT_OPTIONS: ReportReason[] = ["child_safety", "nudity", "violence", "harassment", "privacy", "copyright", "spam", "other"];
 
 /** Fullscreen viewer for the gallery. Deliberately dependency-free: the whole
  * surface is a photo, a counter, and two arrows. */
@@ -158,6 +151,8 @@ export function Lightbox({
   share?: LightboxShare;
   edit?: LightboxEdit;
 }) {
+  // TRS-3: the guest's language; the dashboard, outside any provider, gets English.
+  const { t } = useGuestCopy();
   const touchStartX = useRef<number | null>(null);
   const lastTap = useRef(0);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -297,7 +292,7 @@ export function Lightbox({
       const blob = await fetchMediaBlob(item);
       setEditing({ item, url: URL.createObjectURL(blob) });
     } catch {
-      setEditNote({ originalId: item.id, message: "The photo could not be opened for editing. Try again.", canRemove: false });
+      setEditNote({ originalId: item.id, message: t.viewer.editOpenFailed, canRemove: false });
     } finally {
       setEditLoading(null);
     }
@@ -321,7 +316,7 @@ export function Lightbox({
       ref={viewerRef}
       role="dialog"
       aria-modal="true"
-      aria-label="Media viewer"
+      aria-label={t.viewer.label}
       className="fixed inset-0 z-[110] flex flex-col bg-black/95"
       onTouchStart={(e) => {
         touchStartX.current = e.touches[0].clientX;
@@ -342,7 +337,7 @@ export function Lightbox({
             <button
               type="button"
               onClick={() => setSlideshowPlaying((playing) => !playing)}
-              aria-label={slideshowPlaying ? "Pause slideshow" : "Start slideshow"}
+              aria-label={slideshowPlaying ? t.viewer.pauseSlideshow : t.viewer.startSlideshow}
               aria-pressed={slideshowPlaying}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
             >
@@ -357,9 +352,9 @@ export function Lightbox({
             <button
               type="button"
               onClick={() => onEnhancedChange(!enhanced)}
-              aria-label={enhanced ? "Show the original photo" : "Enhance photos"}
+              aria-label={enhanced ? t.viewer.showOriginal : t.viewer.enhance}
               aria-pressed={enhanced}
-              title={enhanced ? "Enhanced. Tap to see the original" : "Enhance"}
+              title={enhanced ? t.viewer.enhancedTitle : t.viewer.enhanceTitle}
               className={`flex h-11 w-11 items-center justify-center rounded-full transition-transform active:scale-90 ${
                 enhanced ? "bg-volt text-on-volt" : "bg-white/10 text-paper"
               }`}
@@ -378,7 +373,7 @@ export function Lightbox({
                 setReportState("idle");
                 setReportError(null);
               }}
-              aria-label={`Report this ${item.kind}`}
+              aria-label={t.viewer.report(item.kind)}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
             >
               <Flag className="h-5 w-5" aria-hidden="true" />
@@ -392,7 +387,7 @@ export function Lightbox({
                 setDeleteError(null);
                 setConfirmingDelete(item.id);
               }}
-              aria-label={`Delete your ${item.kind}`}
+              aria-label={t.viewer.deleteYours(item.kind)}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
             >
               <Trash2 className="h-5 w-5" aria-hidden="true" />
@@ -403,8 +398,8 @@ export function Lightbox({
               type="button"
               onClick={() => void openEditor()}
               disabled={editLoading !== null}
-              aria-label={`Edit this photo`}
-              title="Edit a copy"
+              aria-label={t.viewer.edit}
+              title={t.viewer.editTitle}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90 disabled:opacity-50"
             >
               {editLoading === item.id ? (
@@ -429,7 +424,7 @@ export function Lightbox({
                 setSharingFor(sharingOpen ? null : item.id);
               }}
               aria-expanded={share ? sharingOpen : undefined}
-              aria-label={`Share this ${item.kind}`}
+              aria-label={t.viewer.share(item.kind)}
               className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
             >
               <Share2 className="h-5 w-5" aria-hidden="true" />
@@ -444,7 +439,7 @@ export function Lightbox({
             // top bar to what fits beside the counter.
             <a
               href={`${downloadBaseUrl}/${item.id}/download`}
-              aria-label={`Download ${item.kind}`}
+              aria-label={t.viewer.download(item.kind)}
               onClick={(event) => {
                 const blob = enhancedBlob.current;
                 if (!blob || !slug) return;
@@ -459,7 +454,7 @@ export function Lightbox({
           <button
             ref={closeRef}
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t.common.close}
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
           >
             <X className="h-5 w-5" aria-hidden="true" />
@@ -473,7 +468,7 @@ export function Lightbox({
             key={item.id}
             src={item.blobUrl}
             poster={item.posterSrc ?? item.posterUrl ?? undefined}
-            aria-label={`Video ${index + 1} of ${items.length}`}
+            aria-label={t.viewer.position("video", index + 1, items.length)}
             className="h-full w-full object-contain"
             controls
             autoPlay
@@ -503,7 +498,7 @@ export function Lightbox({
                 setExpiredIds((current) => new Set(current).add(item.id));
               }
             }}
-            alt={`Photo ${index + 1} of ${items.length}`}
+            alt={t.viewer.position("photo", index + 1, items.length)}
             fill
             unoptimized
             sizes="100vw"
@@ -567,19 +562,19 @@ export function Lightbox({
         {onReport && reportingId === item.id && (
           <div
             role="dialog"
-            aria-label="Report this"
+            aria-label={t.viewer.reportDialog}
             className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[80%] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
           >
             {reportState === "sent" ? (
               <>
-                <p className="text-sm text-paper">Thanks. The host and the Klik team will look at it.</p>
+                <p className="text-sm text-paper">{t.viewer.reportThanks}</p>
                 {reportReason === "copyright" && (
                   <p className="text-xs leading-relaxed text-muted">
-                    To have your work taken down under the DMCA, send a notice as described in our{" "}
+                    {t.viewer.dmcaBefore}{" "}
                     <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline">
-                      Terms
+                      {t.viewer.terms}
                     </a>
-                    . A report alone is not a legal notice.
+                    {t.viewer.dmcaAfter}
                   </p>
                 )}
                 <button
@@ -587,14 +582,14 @@ export function Lightbox({
                   onClick={() => setReportingId(null)}
                   className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
                 >
-                  Close
+                  {t.common.close}
                 </button>
               </>
             ) : (
               <>
-                <p className="text-sm font-medium text-paper">What is wrong with it?</p>
+                <p className="text-sm font-medium text-paper">{t.viewer.whatIsWrong}</p>
                 <div className="space-y-1.5">
-                  {REPORT_OPTIONS.map(([value, label]) => (
+                  {REPORT_OPTIONS.map((value) => (
                     <label key={value} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-2 text-sm text-paper hover:bg-white/5">
                       <input
                         type="radio"
@@ -604,13 +599,13 @@ export function Lightbox({
                         onChange={() => setReportReason(value)}
                         className="accent-[var(--color-volt)]"
                       />
-                      {label}
+                      {t.viewer.reportReasons[value]}
                     </label>
                   ))}
                 </div>
                 <textarea
-                  aria-label="Anything else we should know (optional)"
-                  placeholder="Anything else we should know (optional)"
+                  aria-label={t.viewer.reportNote}
+                  placeholder={t.viewer.reportNote}
                   value={reportNote}
                   onChange={(change) => setReportNote(change.target.value)}
                   maxLength={500}
@@ -639,14 +634,14 @@ export function Lightbox({
                     }}
                     className="min-h-11 rounded-full bg-volt px-4 text-sm font-medium text-on-volt disabled:opacity-50"
                   >
-                    {reportState === "sending" ? "Sending…" : "Report"}
+                    {reportState === "sending" ? t.viewer.sendingReport : t.viewer.sendReport}
                   </button>
                   <button
                     type="button"
                     onClick={() => setReportingId(null)}
                     className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
                   >
-                    Cancel
+                    {t.common.cancel}
                   </button>
                 </div>
               </>
@@ -657,12 +652,11 @@ export function Lightbox({
         {onDeleteOwn && confirmingDelete === item.id && (
           <div
             role="alertdialog"
-            aria-label="Delete your upload"
+            aria-label={t.viewer.deleteDialog}
             className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
           >
             <p className="text-sm text-paper">
-              Delete this {item.kind}? It is removed for everyone, permanently, including from the
-              host&apos;s copy.
+              {t.viewer.deleteConfirm(item.kind)}
             </p>
             {deleteError && (
               <p className="text-xs text-red-400" role="alert">
@@ -682,14 +676,14 @@ export function Lightbox({
                 }}
                 className="min-h-11 rounded-full border border-red-500/30 bg-red-500/10 px-4 text-sm font-medium text-red-300 disabled:opacity-50"
               >
-                {deleting ? "Deleting…" : "Delete"}
+                {deleting ? t.viewer.deleting : t.viewer.delete}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmingDelete(null)}
                 className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
               >
-                Keep it
+                {t.viewer.keep}
               </button>
             </div>
           </div>
@@ -710,12 +704,12 @@ export function Lightbox({
                     setEditNote(
                       error
                         ? { ...editNote, message: error }
-                        : { originalId: editNote.originalId, message: "The original is gone. Your edit stays.", canRemove: false },
+                        : { originalId: editNote.originalId, message: t.viewer.originalGone, canRemove: false },
                     );
                   }}
                   className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
                 >
-                  Remove the original
+                  {t.viewer.removeOriginal}
                 </button>
               )}
               <button
@@ -723,7 +717,7 @@ export function Lightbox({
                 onClick={() => setEditNote(null)}
                 className="min-h-11 rounded-full bg-volt px-4 text-sm font-medium text-on-volt"
               >
-                OK
+                {t.viewer.ok}
               </button>
             </div>
           </div>
@@ -732,7 +726,7 @@ export function Lightbox({
         {index > 0 && (
           <button
             onClick={() => go(-1)}
-            aria-label="Previous"
+            aria-label={t.viewer.previous}
             className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-paper backdrop-blur transition-transform active:scale-90"
           >
             <ChevronLeft className="h-6 w-6" aria-hidden="true" />
@@ -741,7 +735,7 @@ export function Lightbox({
         {index < items.length - 1 && (
           <button
             onClick={() => go(1)}
-            aria-label="Next"
+            aria-label={t.viewer.next}
             className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-paper backdrop-blur transition-transform active:scale-90"
           >
             <ChevronRight className="h-6 w-6" aria-hidden="true" />
@@ -760,8 +754,8 @@ export function Lightbox({
             setEditNote({
               originalId: original.id,
               message: edit.removeOriginal
-                ? "Saved as a new photo. Your original is still in the gallery too."
-                : "Saved as a new photo beside the original, which is unchanged.",
+                ? t.viewer.savedCopyMine
+                : t.viewer.savedCopy,
               canRemove: Boolean(edit.removeOriginal),
             });
           }}

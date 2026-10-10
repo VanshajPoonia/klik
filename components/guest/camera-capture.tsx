@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
+import { useGuestCopy } from "@/components/guest/guest-copy";
 import {
   Camera,
   Check,
@@ -29,6 +30,7 @@ import {
   applyTorch,
   applyZoom,
   cameraFailure,
+  NO_VIDEO_FAILURE,
   cameraSupported,
   capturePhoto,
   createFilteredStream,
@@ -159,6 +161,8 @@ export function CameraCapture({
   disposable?: { shotsLeft: number };
 }) {
   const allowVideo = allowVideoProp && !disposable;
+  // TRS-3: the guest's language.
+  const { t } = useGuestCopy();
   const cameraRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -416,7 +420,7 @@ export function CameraCapture({
     } catch {
       filteredRef.current?.stop();
       filteredRef.current = null;
-      setError({ message: "This browser can't record video.", help: "Photos still work: close this and switch to Photo." });
+      setError(NO_VIDEO_FAILURE);
       return;
     }
     chunksRef.current = [];
@@ -715,7 +719,7 @@ export function CameraCapture({
   useDialogFocus(cameraRef);
 
   return (
-    <div ref={cameraRef} role="dialog" aria-modal="true" aria-label="Camera" className="fixed inset-0 z-[120] flex flex-col bg-black text-paper">
+    <div ref={cameraRef} role="dialog" aria-modal="true" aria-label={t.camera.label} className="fixed inset-0 z-[120] flex flex-col bg-black text-paper">
       {/* Viewfinder */}
       <div
         className="relative flex-1 overflow-hidden"
@@ -807,7 +811,7 @@ export function CameraCapture({
             className="pointer-events-none absolute left-1/2 top-[4.5rem] z-10 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium tabular-nums backdrop-blur"
             aria-live="polite"
           >
-            {burstCount !== null ? `Burst ${burstCount}` : `${shots.length} taken`}
+            {burstCount !== null ? t.camera.burst(burstCount) : t.camera.taken(shots.length)}
           </div>
         )}
 
@@ -823,12 +827,12 @@ export function CameraCapture({
             never trapped behind a camera that is slow to open. */}
         {!error && (
           <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 py-4">
-            <IconButton label="Close camera" onClick={cleanupAndClose}>
+            <IconButton label={t.camera.close} onClick={cleanupAndClose}>
               <X className="h-5 w-5" />
             </IconButton>
             <div className="flex items-center gap-2">
               <IconButton
-                label={`Flash ${flash}`}
+                label={t.camera.flash(flash)}
                 onClick={toggleFlash}
                 active={flash !== "off"}
               >
@@ -843,11 +847,11 @@ export function CameraCapture({
                   </span>
                 )}
               </IconButton>
-              <IconButton label="Grid and level" onClick={toggleGrid} active={grid}>
+              <IconButton label={t.camera.grid} onClick={toggleGrid} active={grid}>
                 <Grid3x3 className="h-5 w-5" />
               </IconButton>
               <IconButton
-                label={`Timer ${timer}s`}
+                label={t.camera.timer(timer)}
                 onClick={() =>
                   setTimer(
                     (t) => TIMER_STEPS[(TIMER_STEPS.indexOf(t) + 1) % TIMER_STEPS.length],
@@ -878,15 +882,15 @@ export function CameraCapture({
               <Camera className="h-7 w-7 text-muted" />
             </div>
             <div className="max-w-sm space-y-2">
-              <p className="text-base font-medium text-paper">{error.message}</p>
-              {error.help && <p className="text-sm leading-relaxed text-muted">{error.help}</p>}
+              <p className="text-base font-medium text-paper">{t.camera.failures[error.code]}</p>
+              {error.helpCode && <p className="text-sm leading-relaxed text-muted">{t.camera.help[error.helpCode]}</p>}
             </div>
             <div className="flex w-full max-w-xs flex-col gap-2.5">
               <button
                 onClick={() => void start()}
                 className="min-h-11 rounded-full bg-volt px-5 text-sm font-medium text-on-volt transition-transform active:scale-[0.96]"
               >
-                Try again
+                {t.common.tryAgain}
               </button>
               {/* CAM-1: the way round. The phone's own camera app, which needs
                   no permission from this page, and the photo library. */}
@@ -895,7 +899,7 @@ export function CameraCapture({
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-canvas-line px-5 text-sm font-medium text-paper transition-transform active:scale-[0.96]"
               >
                 <Camera className="h-4 w-4" aria-hidden="true" />
-                Use your phone&apos;s camera
+                {t.camera.useNativeCamera}
               </button>
               {!disposable && (
                 <button
@@ -903,11 +907,11 @@ export function CameraCapture({
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-canvas-line px-5 text-sm font-medium text-paper transition-transform active:scale-[0.96]"
                 >
                   <Images className="h-4 w-4" aria-hidden="true" />
-                  Choose from your library
+                  {t.camera.chooseFromLibrary}
                 </button>
               )}
               <button onClick={cleanupAndClose} className="min-h-11 text-sm text-muted">
-                Close
+                {t.common.close}
               </button>
             </div>
             <input
@@ -941,7 +945,7 @@ export function CameraCapture({
         {!error && !starting && zoomPresets.length > 1 && (
           <div
             role="group"
-            aria-label="Zoom"
+            aria-label={t.camera.zoom}
             className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/40 p-1 backdrop-blur"
           >
             {zoomPresets.map((f) => {
@@ -950,7 +954,7 @@ export function CameraCapture({
                 <button
                   key={f}
                   type="button"
-                  aria-label={`Zoom ${f} times`}
+                  aria-label={t.camera.zoomTo(f)}
                   aria-pressed={active}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -968,7 +972,7 @@ export function CameraCapture({
         )}
 
         {starting && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black" role="status" aria-label="Starting the camera">
+          <div className="absolute inset-0 flex items-center justify-center bg-black" role="status" aria-label={t.camera.starting}>
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-volt" aria-hidden="true" />
           </div>
         )}
@@ -981,7 +985,7 @@ export function CameraCapture({
           {looksApplyHere && (
             <div
               role="group"
-              aria-label="Looks"
+              aria-label={t.camera.looks}
               className="-mx-6 mb-4 flex gap-2 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {LOOKS.map((l) => (
@@ -989,12 +993,12 @@ export function CameraCapture({
                   key={l.id}
                   type="button"
                   aria-pressed={look === l.id}
-                  onClick={() => selectLook(l.id, l.label)}
+                  onClick={() => selectLook(l.id, t.camera.lookNames[l.id])}
                   className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
                     look === l.id ? "bg-volt text-on-volt" : "bg-white/10 text-paper"
                   }`}
                 >
-                  {l.label}
+                  {t.camera.lookNames[l.id]}
                 </button>
               ))}
             </div>
@@ -1002,14 +1006,14 @@ export function CameraCapture({
 
           {/* Mode switch */}
           {allowVideo && (
-            <div role="group" aria-label="Camera mode" className="mb-4 flex items-center justify-center gap-6 text-sm font-medium">
+            <div role="group" aria-label={t.camera.mode} className="mb-4 flex items-center justify-center gap-6 text-sm font-medium">
               <button
                 type="button"
                 aria-pressed={mode === "photo"}
                 onClick={() => !recording && setMode("photo")}
                 className={mode === "photo" ? "text-volt" : "text-white/50"}
               >
-                Photo
+                {t.camera.photo}
               </button>
               <button
                 type="button"
@@ -1017,7 +1021,7 @@ export function CameraCapture({
                 onClick={() => !recording && setMode("video")}
                 className={mode === "video" ? "text-volt" : "text-white/50"}
               >
-                Video
+                {t.camera.video}
               </button>
             </div>
           )}
@@ -1030,18 +1034,18 @@ export function CameraCapture({
               <div
                 className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border border-canvas-line bg-canvas-raised"
                 aria-live="polite"
-                aria-label={`${Math.max(0, disposable.shotsLeft - shots.length)} shots left`}
+                aria-label={t.camera.shotsLeft(Math.max(0, disposable.shotsLeft - shots.length))}
               >
                 <span className="text-lg font-bold tabular-nums leading-none text-paper">
                   {Math.max(0, disposable.shotsLeft - shots.length)}
                 </span>
-                <span className="mt-0.5 text-[10px] uppercase tracking-wide text-muted">left</span>
+                <span className="mt-0.5 text-[10px] uppercase tracking-wide text-muted">{t.camera.left}</span>
               </div>
             ) : (
             <button
               onClick={() => shots.length > 0 && setPreview(shots[shots.length - 1])}
               className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised"
-              aria-label="Review captures"
+              aria-label={t.camera.review}
             >
               {shots.length > 0 ? (
                 <>
@@ -1084,7 +1088,7 @@ export function CameraCapture({
               onContextMenu={(event) => event.preventDefault()}
               disabled={(busy && burstCount === null) || countdown !== null || starting || rollSpent}
               aria-label={
-                rollSpent ? "Roll finished" : mode === "photo" ? "Take photo" : recording ? "Stop recording" : "Record"
+                rollSpent ? t.camera.rollFinished : mode === "photo" ? t.camera.takePhoto : recording ? t.camera.stopRecording : t.camera.record
               }
               className="group relative flex h-20 w-20 touch-none select-none items-center justify-center rounded-full disabled:opacity-60"
             >
@@ -1104,7 +1108,7 @@ export function CameraCapture({
             <button
               onClick={switchCamera}
               disabled={recording}
-              aria-label="Switch camera"
+              aria-label={t.camera.switchCamera}
               className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/10 transition-transform active:scale-90 disabled:opacity-40"
             >
               <SwitchCamera className="h-6 w-6" aria-hidden="true" />
@@ -1124,7 +1128,7 @@ export function CameraCapture({
             }`}
           >
             <Check className="h-4 w-4" />
-            Add {shots.length} {shots.length === 1 ? "item" : "items"}
+            {t.camera.add(shots.length)}
           </button>
         </div>
       )}
@@ -1133,14 +1137,14 @@ export function CameraCapture({
       {preview && (
         <div className="absolute inset-0 z-10 flex flex-col bg-black">
           <div className="flex items-center justify-between px-4 py-4">
-            <IconButton label="Back" onClick={() => setPreview(null)}>
+            <IconButton label={t.camera.back} onClick={() => setPreview(null)}>
               <RotateCcw className="h-5 w-5" />
             </IconButton>
             <span className="text-sm text-muted">
-              {shots.findIndex((s) => s.id === preview.id) + 1} of {shots.length}
+              {t.camera.position(shots.findIndex((s) => s.id === preview.id) + 1, shots.length)}
             </span>
             <IconButton
-              label="Delete"
+              label={t.camera.delete}
               onClick={() => removeShot(preview.id)}
             >
               <Trash2 className="h-5 w-5" />

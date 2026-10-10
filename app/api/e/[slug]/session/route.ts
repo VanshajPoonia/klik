@@ -9,7 +9,8 @@ import { guests } from "@/lib/schema";
 import { isExpired } from "@/lib/access";
 import { auth } from "@/lib/auth";
 import { existingGuestFor } from "@/lib/guest-accounts";
-import { CURRENT_CONSENT } from "@/lib/consent";
+import { consentRecordId } from "@/lib/consent";
+import { LOCALES } from "@/lib/i18n/locale";
 import { eventLicenseState } from "@/lib/license";
 import { clientIp, consume } from "@/lib/ratelimit";
 import {
@@ -23,6 +24,8 @@ const bodySchema = z.object({
   name: z.string().trim().max(80).optional(),
   consent: z.literal(true),
   password: z.string().max(200).optional(),
+  // TRS-3: the language the consent was shown in, recorded with it.
+  locale: z.enum(LOCALES).optional(),
 });
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
@@ -34,26 +37,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   // A draft has no guests yet: it has not gone live, and its QR code does not
   // exist. Same answer the gallery page gives, so the two cannot disagree.
   if (eventLicenseState(event) === "draft") {
-    return NextResponse.json({ error: "This gallery is not open yet" }, { status: 403 });
+    return NextResponse.json({ error: "This gallery is not open yet", code: "not_open" }, { status: 403 });
   }
   if (isExpired(event)) {
-    return NextResponse.json({ error: "This event has ended" }, { status: 410 });
+    return NextResponse.json({ error: "This event has ended", code: "ended" }, { status: 410 });
   }
   if (event.visibility === "private") {
-    return NextResponse.json({ error: "This gallery is private" }, { status: 403 });
+    return NextResponse.json({ error: "This gallery is private", code: "private" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Consent is required" }, { status: 400 });
+    return NextResponse.json({ error: "Consent is required", code: "consent_required" }, { status: 400 });
   }
 
   const response = NextResponse.json({ ok: true });
 
   if (event.visibility === "password") {
     if (!parsed.data.password || !event.passwordHash) {
-      return NextResponse.json({ error: "Password required" }, { status: 401 });
+      return NextResponse.json({ error: "Password required", code: "password_required" }, { status: 401 });
     }
     // F-2: a gallery password is short, shared at a party, and was guessable
     // as fast as anyone cared to try. Per IP and per event, so a whole venue
@@ -69,12 +72,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         eventLimit.allowed ? 0 : eventLimit.retryAfter,
       );
       return NextResponse.json(
-        { error: "Too many attempts. Try again a little later." },
+        { error: "Too many attempts. Try again a little later.", code: "too_many_tries" },
         { status: 429, headers: { "Retry-After": String(retryAfter) } },
       );
     }
     const valid = await bcrypt.compare(parsed.data.password, event.passwordHash);
-    if (!valid) return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
+    if (!valid) return NextResponse.json({ error: "Incorrect password", code: "wrong_password" }, { status: 401 });
 
     const unlockToken = await signEventUnlock(event.id, event.accessVersion);
     response.cookies.set(eventUnlockCookieName(event.id), unlockToken, {
@@ -98,7 +101,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         .update(guests)
         .set({
           consentedAt: new Date(),
-          consentVersion: CURRENT_CONSENT.id,
+          consentVersion: consentRecordId(parsed.data.locale ?? "en"),
           ...(parsed.data.name ? { displayName: parsed.data.name } : {}),
         })
         .where(eq(guests.id, returning.id))
@@ -110,7 +113,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           eventId: event.id,
           displayName: parsed.data.name || null,
           consentedAt: new Date(),
-          consentVersion: CURRENT_CONSENT.id,
+          consentVersion: consentRecordId(parsed.data.locale ?? "en"),
           userId,
         })
         .returning();

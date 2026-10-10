@@ -6,6 +6,8 @@ import { AlertCircle, Camera, Expand, Loader2, RotateCcw, SwitchCamera, WifiOff,
 import { cameraSupported, capturePhoto, openStream, wallClock, type FacingMode } from "@/lib/camera";
 import { DEFAULT_LOOK, lookById } from "@/lib/image-enhance";
 import { useUploadQueue } from "@/components/upload/use-upload-queue";
+import { useGuestCopy } from "@/components/guest/guest-copy";
+import type { GuestCopy } from "@/lib/i18n/guest";
 
 type Step = "attract" | "camera" | "review" | "done";
 
@@ -30,14 +32,12 @@ interface Shot {
   height: number;
 }
 
-function cameraMessage(error: unknown): string {
+function cameraMessage(t: GuestCopy, error: unknown): string {
   const name = (error as { name?: string })?.name;
-  if (name === "NotAllowedError" || name === "SecurityError") {
-    return "The camera is blocked for this site. Allow it in the browser's settings for this site, then tap Try again.";
-  }
-  if (name === "NotFoundError" || name === "OverconstrainedError") return "This device has no camera Klik can use.";
-  if (name === "NotReadableError") return "Another app is using the camera. Close it, then tap Try again.";
-  return "The camera did not start. Tap Try again.";
+  if (name === "NotAllowedError" || name === "SecurityError") return t.kiosk.cameraBlocked;
+  if (name === "NotFoundError" || name === "OverconstrainedError") return t.kiosk.noCamera;
+  if (name === "NotReadableError") return t.kiosk.cameraBusy;
+  return t.kiosk.cameraFailed;
 }
 
 /**
@@ -75,6 +75,8 @@ export function KioskStation({
   /** The consent statement every uploader is shown, word for word. */
   consent: string;
 }) {
+  // TRS-3: the tablet's language, chosen by the page.
+  const { t } = useGuestCopy();
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -122,7 +124,7 @@ export function KioskStation({
     if (step !== "camera") return;
     let cancelled = false;
     if (!cameraSupported()) {
-      queueMicrotask(() => !cancelled && setCameraError("This browser cannot use the camera."));
+      queueMicrotask(() => !cancelled && setCameraError(t.kiosk.cameraUnsupported));
       return;
     }
     openStream(facing)
@@ -139,14 +141,14 @@ export function KioskStation({
         }
       })
       .catch((failure) => {
-        if (!cancelled) setCameraError(cameraMessage(failure));
+        if (!cancelled) setCameraError(cameraMessage(t, failure));
       });
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     };
-  }, [attempt, facing, step]);
+  }, [attempt, facing, step, t]);
 
   // Start over after a while with nobody touching it.
   useEffect(() => {
@@ -193,13 +195,13 @@ export function KioskStation({
     const capturedAt = wallClock();
     const captured = await capturePhoto(video, { mirror: false, digitalZoom: 1, look: lookById(DEFAULT_LOOK) });
     if (!captured) {
-      setCameraError("The camera did not give a picture. Tap Try again.");
+      setCameraError(t.kiosk.noPicture);
       return;
     }
     const file = new File([captured.blob], `kiosk-${Date.now()}.jpg`, { type: "image/jpeg" });
     setShot({ file, capturedAt, url: URL.createObjectURL(captured.blob), width: captured.width, height: captured.height });
     setStep("review");
-  }, []);
+  }, [t]);
 
   // Three, two, one.
   useEffect(() => {
@@ -242,13 +244,13 @@ export function KioskStation({
   const sentItem = sentId ? uploads.items.find((item) => item.id === sentId) : undefined;
   const doneMessage = !sentItem
     ? moderated
-      ? "Done. The host will add it shortly."
-      : "Done. It's in the gallery."
+      ? t.kiosk.doneModerated
+      : t.kiosk.doneInGallery
     : sentItem.status === "refused"
-      ? "Saved on this tablet, but the gallery would not take it yet."
+      ? t.kiosk.savedRefused
       : uploads.online
-        ? "Done. It's on its way to the gallery."
-        : "Saved. It goes to the gallery as soon as the wifi is back.";
+        ? t.kiosk.doneOnItsWay
+        : t.kiosk.savedOffline;
 
   // For whoever looks after the tablet: what is still to send, and anything refused.
   const waiting = uploads.items.filter((item) => item.status !== "refused");
@@ -269,7 +271,7 @@ export function KioskStation({
           <span className="max-w-3xl font-display text-5xl leading-tight text-paper sm:text-7xl">{eventName}</span>
           <span className="inline-flex min-h-20 items-center gap-3 whitespace-nowrap rounded-full bg-volt px-8 text-xl font-semibold text-on-volt transition-transform active:scale-95 sm:gap-4 sm:px-12 sm:text-2xl">
             <Camera className="h-7 w-7 sm:h-8 sm:w-8" aria-hidden="true" />
-            Tap to take a photo
+            {t.kiosk.tapToStart}
           </span>
           <span className="max-w-xl text-base text-muted">It goes straight into the gallery for everyone here.</span>
         </button>
@@ -281,7 +283,7 @@ export function KioskStation({
             {refused.length > 0 ? (
               <button type="button" onClick={() => setQueueOpen((open) => !open)} className="flex items-center gap-2 text-left text-paper" aria-expanded={queueOpen}>
                 <AlertCircle className="h-4 w-4 shrink-0 text-red-300" aria-hidden="true" />
-                {refused.length} {refused.length === 1 ? "photo" : "photos"} could not be added
+                {t.kiosk.refused(refused.length)}
               </button>
             ) : (
               <p className="flex items-center gap-2 text-muted">
@@ -291,8 +293,8 @@ export function KioskStation({
                   <WifiOff className="h-4 w-4 shrink-0" aria-hidden="true" />
                 )}
                 {uploads.online
-                  ? `Sending ${waiting.length} ${waiting.length === 1 ? "photo" : "photos"}`
-                  : `${waiting.length} ${waiting.length === 1 ? "photo" : "photos"} saved here, waiting for the wifi`}
+                  ? t.kiosk.sending(waiting.length)
+                  : t.kiosk.waitingForWifi(waiting.length)}
               </p>
             )}
             {queueOpen && refused.length > 0 && (
@@ -304,7 +306,7 @@ export function KioskStation({
                     onClick={() => refused.forEach((item) => void uploads.retry(item.id))}
                     className="min-h-11 rounded-full bg-volt px-4 text-xs font-semibold text-on-volt"
                   >
-                    Try again
+                    {t.common.tryAgain}
                   </button>
                   {team && (
                     <button
@@ -315,7 +317,7 @@ export function KioskStation({
                       }}
                       className="min-h-11 rounded-full border border-canvas-line px-4 text-xs text-muted"
                     >
-                      {refused.length === 1 ? "Discard it" : "Discard them"}
+                      {t.kiosk.discard(refused.length)}
                     </button>
                   )}
                 </div>
@@ -328,15 +330,14 @@ export function KioskStation({
       {step === "attract" && (
         <footer className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col-reverse items-start gap-4 p-6 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
           <p className="max-w-xl text-xs leading-relaxed text-muted">
-            By taking a photo you agree: &ldquo;{consent}&rdquo; To have one taken down, ask the host. Terms and
-            Privacy Policy at {shortUrl.split("/")[0]}.
+            {t.kiosk.consentBefore} &ldquo;{consent}&rdquo; {t.kiosk.consentAfter(shortUrl.split("/")[0])}
           </p>
           <div className="pointer-events-auto flex shrink-0 items-center gap-2">
             {canFullscreen && !fullscreen && (
               <button
                 type="button"
                 onClick={() => void document.documentElement.requestFullscreen?.().catch(() => {})}
-                aria-label="Full screen"
+                aria-label={t.kiosk.fullScreen}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-canvas-line text-muted"
               >
                 <Expand className="h-4 w-4" aria-hidden="true" />
@@ -348,7 +349,7 @@ export function KioskStation({
                 onClick={() => void leave()}
                 className="min-h-11 whitespace-nowrap rounded-full border border-canvas-line px-4 text-xs text-muted"
               >
-                Leave kiosk mode
+                {t.kiosk.leave}
               </button>
             )}
           </div>
@@ -362,7 +363,7 @@ export function KioskStation({
             playsInline
             muted
             autoPlay
-            aria-label="Camera preview"
+            aria-label={t.kiosk.preview}
             className={`absolute inset-0 h-full w-full object-cover ${facing === "user" ? "-scale-x-100" : ""}`}
           />
           {flash && <div className="absolute inset-0 bg-paper" aria-hidden="true" />}
@@ -385,10 +386,10 @@ export function KioskStation({
                   }}
                   className="min-h-14 rounded-full bg-volt px-8 text-lg font-semibold text-on-volt"
                 >
-                  Try again
+                  {t.common.tryAgain}
                 </button>
                 <button type="button" onClick={startOver} className="min-h-14 rounded-full border border-canvas-line px-8 text-lg text-paper">
-                  Start over
+                  {t.kiosk.startOver}
                 </button>
               </div>
             </div>
@@ -398,7 +399,7 @@ export function KioskStation({
               <button
                 type="button"
                 onClick={startOver}
-                aria-label="Cancel"
+                aria-label={t.common.cancel}
                 className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10 text-paper"
               >
                 <X className="h-7 w-7" aria-hidden="true" />
@@ -406,7 +407,7 @@ export function KioskStation({
               <button
                 type="button"
                 onClick={() => setCountdown(COUNTDOWN_FROM)}
-                aria-label="Take the photo, in three seconds"
+                aria-label={t.kiosk.takeIn3}
                 className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-paper bg-volt transition-transform active:scale-90"
               >
                 <Camera className="h-9 w-9 text-on-volt" aria-hidden="true" />
@@ -414,7 +415,7 @@ export function KioskStation({
               <button
                 type="button"
                 onClick={() => setFacing((current) => (current === "user" ? "environment" : "user"))}
-                aria-label="Switch camera"
+                aria-label={t.kiosk.switchCamera}
                 className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10 text-paper"
               >
                 <SwitchCamera className="h-7 w-7" aria-hidden="true" />
@@ -435,14 +436,14 @@ export function KioskStation({
               className="inline-flex min-h-16 items-center gap-3 rounded-full border border-canvas-line px-8 text-xl text-paper"
             >
               <RotateCcw className="h-6 w-6" aria-hidden="true" />
-              Retake
+              {t.kiosk.retake}
             </button>
             <button
               type="button"
               onClick={() => void send()}
               className="min-h-16 rounded-full bg-volt px-10 text-xl font-semibold text-on-volt transition-transform active:scale-95"
             >
-              Add to the gallery
+              {t.kiosk.addToGallery}
             </button>
           </div>
         </div>
@@ -453,7 +454,7 @@ export function KioskStation({
           type="button"
           onClick={startOver}
           className="flex flex-1 flex-col items-center justify-center gap-8 px-8 text-center"
-          aria-label="Start again for the next guest"
+          aria-label={t.kiosk.nextGuest}
         >
           <span className="max-w-3xl font-display text-5xl text-paper" role="status">
             {doneMessage}

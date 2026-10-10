@@ -40,6 +40,9 @@ export interface TrayItem {
   progress: number | null;
   /** Why it was refused, in the server's words. */
   message: string | null;
+  /** TRS-3: the same, as a code the tray can say in the guest's language. */
+  code: string | null;
+  values: Record<string, number | string> | null;
   status401: boolean;
   /** Kept only in this page: closing it before this sends loses it. */
   volatile: boolean;
@@ -469,6 +472,8 @@ class UploadQueue {
           status,
           progress,
           message: item.refused?.message ?? null,
+          code: item.refused?.code ?? null,
+          values: item.refused?.values ?? null,
           status401: item.refused?.status === 401,
           volatile: this.store?.isVolatile(item.id) ?? false,
           preview: this.previewFor(item),

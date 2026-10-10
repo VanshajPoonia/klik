@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { recordAudit } from "@/lib/audit";
 import { z } from "zod";
+import { GUEST_LANGUAGES } from "@/lib/i18n/locale";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
@@ -52,6 +53,8 @@ const patchSchema = z.object({
   momentsEnabled: z.boolean().optional(),
   // GRW-4. Listed on the owner's public profile, so only the owner sets it.
   showOnProfile: z.boolean().optional(),
+  // TRS-3. The language guests see, unless they choose their own.
+  guestLanguage: z.enum(GUEST_LANGUAGES).optional(),
   expiresAt: z.coerce.date().nullable().optional(),
   // CAM-4. Developing early is `developsAt: <now>`; there is no separate verb,
   // because "develop now" and "develop at this time" are the same setting.

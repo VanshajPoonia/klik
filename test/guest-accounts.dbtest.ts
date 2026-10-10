@@ -220,3 +220,47 @@ describe("getPendingSignups", () => {
     expect(ids).not.toContain(guestAccount);
   });
 });
+
+describe("TRS-3 consent in the guest's language", () => {
+  it("records the Spanish agreement for a guest who joined in Spanish, and the English one otherwise", async () => {
+    signedInAs(null);
+    const eventId = await gallery();
+    const slug = await slugOf(eventId);
+    const joinIn = async (locale?: string) => {
+      const response = await join(
+        new Request("http://localhost/x", {
+          method: "POST",
+          body: JSON.stringify({ name: `Guest ${locale ?? "en"}`, consent: true, ...(locale ? { locale } : {}) }),
+          headers: { "Content-Type": "application/json" },
+        }),
+        { params: Promise.resolve({ slug }) },
+      );
+      const token = new RegExp(`${guestCookieName(eventId)}=([^;]+)`).exec(response.headers.get("set-cookie") ?? "")?.[1];
+      const guest = token ? await verifyGuestSession(token) : null;
+      return (await testDb.select({ consentVersion: guests.consentVersion }).from(guests).where(eq(guests.id, guest!.guestId)))[0]
+        .consentVersion;
+    };
+    expect(await joinIn("es")).toMatch(/^\d{4}-\d{2}-\d{2}:es$/);
+    expect(await joinIn()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("answers a wrong password with a code the page can translate", async () => {
+    signedInAs(null);
+    const eventId = await makeEvent(await makeUser(), {
+      planKey: "premium",
+      licensedAt: new Date(),
+      visibility: "password",
+      passwordHash: "$2b$10$abcdefghijklmnopqrstuuDdzW1cOAszt/W4KTwN0PWVm1RpLm6g6",
+    });
+    const response = await join(
+      new Request("http://localhost/x", {
+        method: "POST",
+        body: JSON.stringify({ consent: true, password: "not it" }),
+        headers: { "Content-Type": "application/json" },
+      }),
+      { params: Promise.resolve({ slug: await slugOf(eventId) }) },
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ code: "wrong_password" });
+  });
+});
