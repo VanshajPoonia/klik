@@ -539,14 +539,28 @@ offer off per event in **Settings**.
 - [ ] Checked the Resend plan against the size of the events you expect
 - [ ] Received a recap on a test event and pressed its unsubscribe link
 
+### 12. Make a highlight reel (works today, no key)
+
+On a Premium event with a dozen or so photos, open the **Highlights** tab and press **Make
+the reel**, once without music and once with a song file from your computer. It takes
+seconds in Chrome or Safari on a laptop. Watch it: the title card, the photos, the cut on
+the beat, the end card with the QR code. Try **Add to the gallery**, and download one and
+post it to a story from your phone to see how it looks there. Only use music you have the
+right to post.
+
+- [ ] Made a reel with and without music, and watched both
+
 ---
 
-## Keys Claude will ask for, in the order the work needs them
+## Switching on what is built
 
-Nothing here is needed today. Each row says what it unblocks, so you can do it
-early if you would rather not be asked mid-task.
+Everything below is **built, tested and deployed, and switched off** until its key is
+in Vercel (2026-10-11). Nothing needs Claude: add the variable to **Vercel, Settings,
+Environment Variables, Production**, redeploy, and run the check. Keys go in Vercel
+only, never in a chat or a file in the repo. Each provider appears in the Privacy
+Policy's list as "In use" from that deploy on, by itself.
 
-| Needed for | What to create | What to give Claude |
+| Feature | What to create | What to set, then redeploy |
 |---|---|---|
 | **OPS-1** video transcoding (built, waiting) | Cloudflare dashboard, **Stream**, subscribe (from $5 a month). Then **My Profile, API Tokens, Create Token**, custom token, permission **Account, Stream, Edit**, scoped to this account only | `CLOUDFLARE_STREAM_API_TOKEN` in Vercel Production, then redeploy. Klik creates its own signing key and the webhook the first time a video goes up, so there is nothing else to copy |
 | **F-9** Sentry (built, waiting) | sentry.io, a project of type **Browser JavaScript** named `klik` (Klik sends plain envelopes, so no SDK setup is needed). In the project's **Settings, Security & Privacy**, turn on **Prevent Storing of IP Addresses** and leave **Data Scrubber** on | `NEXT_PUBLIC_SENTRY_DSN` (Project settings, Client Keys) in Vercel Production, then redeploy. No auth token, org or project name |
@@ -555,6 +569,43 @@ early if you would rather not be asked mid-task.
 | **VEN-3** custom domains for venues (built, waiting) | Vercel, **Account Settings, Tokens**, scoped to the team that owns the `klik` project; the team id is under the team's **Settings, General**. Then in Cloudflare, **R2, `klik-media-us`, Settings, CORS policy**: add each venue's `https://` domain to `AllowedOrigins`, or set it to `["*"]` once (safe, because every upload URL is signed), or uploads on a venue's domain fail | `VERCEL_API_TOKEN` and `VERCEL_TEAM_ID` in Vercel Production, then redeploy. `VERCEL_PROJECT_ID` is set by Vercel itself |
 | **GRW-6** print orders (built, waiting) | prodigi.com, sign up, **Settings, Integrations**: the **sandbox** key first. Prints also need Stripe's live secret key (BILLING.md step 4). Ask an accountant whether Klik must collect sales tax on prints before going live | `PRODIGI_API_KEY` (sandbox) and `STRIPE_SECRET_KEY` in Vercel Production, then redeploy. On `/admin`, **Check the catalogue**, then place a test order with a Stripe test card. Only then the live Prodigi key and `PRODIGI_ENV=live` |
 | **ACC** sign in with Google, optional | Google Cloud Console OAuth client. Redirect URI `https://klik.kreativvantage.com/api/auth/callback/google` | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` |
+
+**How to check each one works**, since none could be tried against the real service
+before its key existed:
+
+- **Sentry:** signed in as the superadmin, open `/admin`, open the browser's console
+  (right click, **Inspect**, **Console**) and run
+  `fetch("/api/admin/test-error", { method: "POST" }).then((r) => r.json())`. It answers
+  with whether Sentry and email alerts are set, and within a minute Sentry shows an issue
+  tagged `ops.test_error` (and `ALERT_EMAIL` gets an email). Resolve it in Sentry.
+- **Search and screening:** upload three photos to a test event (a cake, people dancing,
+  anything). Within a minute each has a description: the gallery tab shows a search box
+  and, once four photos share a scene, scene chips. Search "cake". Then check
+  `/admin` shows nothing new under Reports for ordinary photos.
+- **Sharpen and enlarge:** open a photo from the dashboard, press the wand, confirm. Within
+  a minute or two the **Enhancements** panel on the gallery tab shows the copy; try **Show
+  it instead** and look at it full size.
+- **Stream:** upload a short video to a test event. A few minutes later, open it on a laptop
+  in Chrome and watch the network panel: it should load `video.m3u8` from
+  `customer-….cloudflarestream.com`, not the whole file.
+- **Custom domains:** set the R2 CORS rule first. On a Venue account's dashboard, **Your own
+  address**, add a subdomain you control, add the records it shows at your DNS provider,
+  press **Check again** until it says **Live**, then open it on your phone, join, and
+  upload a photo.
+- **Prints:** the first full run in Stripe's **test** mode: put a test secret key
+  (`sk_test_…` from the sandbox in BILLING.md) in `STRIPE_SECRET_KEY` and the Prodigi
+  **sandbox** key in `PRODIGI_API_KEY`. Plans are sold through Payment Links, which need no
+  key, so nothing else is affected. Order a 4×6 from a test gallery with card
+  `4242 4242 4242 4242`, then on `/admin` **Check the catalogue**, **What will Prodigi
+  charge?** and **Send to the printer**. When that works, switch both to live keys and set
+  `PRODIGI_ENV=live` together.
+
+- [ ] Sentry DSN set and an event seen in Sentry
+- [ ] Workers AI token set and a search that found something
+- [ ] Replicate token set and one photo enhanced
+- [ ] Stream token set and one video playing as a stream
+- [ ] Vercel token and team id set, R2 CORS changed, and one venue domain live
+- [ ] Prodigi sandbox order end to end in test mode, then live keys
 
 ---
 

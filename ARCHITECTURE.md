@@ -294,7 +294,7 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 **The entitlement ledger, 2026-10-08.** See constraint 3 and `BILLING.md`. Grants are made on `/admin` with a reason; payments never grant anything themselves.
 
-Any AI that needs a model until its key is set (AI-2, AI-4 and AI-6 are built and wait for `CLOUDFLARE_AI_API_TOKEN`). Error tracking beyond structured logging and email alerts until Sentry's DSN is set (F-9 is built). Video transcoding until Stream's token is set (OPS-1 is built).
+**Nothing on the roadmap is left unbuilt as of 2026-10-11** except what was cut (AI-3), photo books (GRW-6's second half), and what needs a person rather than code (LAUNCH.md). Six features are built and switched off until their key is set in Vercel, and each says so where it is described below: search, scenes, smart folders and screening (`CLOUDFLARE_AI_API_TOKEN`), sharpen and enlarge (`REPLICATE_API_TOKEN`), video through Stream (`CLOUDFLARE_STREAM_API_TOKEN`), venues' own domains (`VERCEL_API_TOKEN`), prints (`PRODIGI_API_KEY` with `STRIPE_SECRET_KEY`) and Sentry (`NEXT_PUBLIC_SENTRY_DSN`). Without a key each one queues nothing, calls nothing and shows nothing.
 
 **Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
 

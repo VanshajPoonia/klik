@@ -138,7 +138,7 @@ Combined with the complete absence of rate limiting (SEC-3), a script with a pub
 
 **FIXED 2026-09-30.** `lib/ratelimit.ts` added: Postgres counters, incremented inside a single `INSERT ... ON CONFLICT` so two concurrent requests cannot both read a stale count and both pass, which is precisely the case a rate limiter exists to stop. Wired into the credential login at 10 per IP and 5 per username per 15 minutes, checked **before** the database lookup and the cost-12 bcrypt compare, since that hash is expensive enough to be a CPU exhaustion vector on its own. A throttled attempt is indistinguishable from a wrong password, so probing cannot enumerate usernames. Counters are swept by the purge cron.
 
-**Still outstanding:** the remaining call sites from F-2 (guest session creation, gallery password attempts, username availability, OTP, share links). Those land with their own phases.
+**Since done:** the remaining call sites (guest session creation, gallery password attempts, username availability, sign-in codes, share links) are all limited as of F-2, 2026-10-10.
 
 ### SEC-4. Event deletion is instant, irreversible, and unlogged
 **Size:** S. **Severity: medium-high.**
@@ -157,7 +157,7 @@ Two things this surfaced that were not obvious:
 
 **Restore now exists.** `GET /api/events/[id]/trash` lists what is in the bin with previews and purge dates, `POST` to the same route restores media and albums, and `POST /api/events/[id]/restore` brings back a deleted event. Restoring an event leaves uploads disabled, since re-opening a gallery to guests should be a deliberate act rather than a side effect of undoing a delete. Trashed media previews for event managers only; guests get the same 404 they would for a row that was genuinely gone.
 
-**UI DONE 2026-10-08.** A Trash tab on each event (managers only) shows deleted photos and folders with their purge dates and restores a selection; the main dashboard lists recently deleted events with Restore; deleting an event takes typing its name; and the photo delete dialog no longer claims "this cannot be undone", which was false and made people afraid to tidy their galleries. **Still outstanding:** the audit entry (ADM-4).
+**UI DONE 2026-10-08.** A Trash tab on each event (managers only) shows deleted photos and folders with their purge dates and restores a selection; the main dashboard lists recently deleted events with Restore; deleting an event takes typing its name; and the photo delete dialog no longer claims "this cannot be undone", which was false and made people afraid to tidy their galleries. **Since done:** deleting and restoring an event are in the audit log (ADM-4, 2026-10-08).
 
 ### SEC-5. The purge cron will time out and leave galleries half-deleted
 **Size:** S. **Severity: medium.**
