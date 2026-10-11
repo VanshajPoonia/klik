@@ -107,6 +107,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
               openReports: reportCounts.get(item.id) ?? 0,
               // Only while it is held: once the host approves it, it is theirs.
               screening: item.status === "pending" ? (screened.get(item.id) ?? null) : null,
+              // OPS-1: the viewer plays the Stream copy when there is one.
+              stream: item.kind === "video" && Boolean(item.streamUid) && item.streamState === "ready",
               // The key itself stays on the server.
               proofOriginalPathname: null,
               proof: isLockedProof(item) ? (clean ? ("mine" as const) : ("locked" as const)) : null,

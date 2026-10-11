@@ -6,7 +6,8 @@ import { media } from "../schema";
 import { deleteBlobs, r2 } from "../storage";
 import { uploadStream } from "../multipart-upload";
 import { applyPatches, planVideoScrub, type Patch, type ReadRange } from "../video-metadata";
-import { enqueueVideoScrub, type JobPayload } from "../jobs";
+import { enqueueTranscode, enqueueVideoScrub, type JobPayload } from "../jobs";
+import { isStreamConfigured } from "../stream";
 import { log, reportError } from "../observability";
 import type { JobContext, JobOutcome } from "../job-runner";
 
@@ -61,6 +62,10 @@ async function setState(id: string, state: "clean" | "failed", capturedAt: strin
       ...(capturedAt ? { capturedAt: sql`COALESCE(${media.capturedAt}, ${capturedAt}::timestamp)` } : {}),
     })
     .where(eq(media.id, id));
+  // OPS-1: Stream gets the video once its location is out of it, or once
+  // that is known to be impossible (Stream's copy carries no metadata either
+  // way, and lets such a video play for everyone).
+  if (isStreamConfigured()) await enqueueTranscode(id);
 }
 
 export async function scrubVideo(

@@ -25,6 +25,7 @@ import { MediaSharePanel } from "@/components/guest/media-share-panel";
 import { fetchMediaBlob } from "@/lib/media-share";
 import { ProofNote } from "@/components/guest/proof-note";
 import { useGuestCopy } from "@/components/guest/guest-copy";
+import { StreamVideo } from "@/components/media/stream-video";
 
 // CAM-2. A few hundred kilobytes that only someone editing should download,
 // and it reaches for `window` the moment it loads.
@@ -51,6 +52,8 @@ export interface LightboxItem {
   visibility?: "gallery" | "private" | "link";
   /** MED-10: a watermarked proof. The dashboard says whose; guests get a boolean. */
   proof?: boolean | "mine" | "locked" | null;
+  /** OPS-1: the video has a Stream copy to play from. */
+  stream?: boolean;
 }
 
 /** CAM-2: editing a photo, which saves an edited copy and leaves the original. */
@@ -496,15 +499,14 @@ export function Lightbox({
 
       <div className="relative flex-1 overflow-hidden">
         {item.kind === "video" ? (
-          <video
+          <StreamVideo
             key={item.id}
             src={item.blobUrl}
+            stream={Boolean(item.stream)}
             poster={item.posterSrc ?? item.posterUrl ?? undefined}
-            aria-label={t.viewer.position("video", index + 1, items.length)}
+            label={t.viewer.position("video", index + 1, items.length)}
             className="h-full w-full object-contain"
-            controls
             autoPlay
-            playsInline
           />
         ) : (
           <Image

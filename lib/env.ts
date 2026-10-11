@@ -142,6 +142,11 @@ const schema = z.object({
   CLOUDFLARE_AI_API_TOKEN: optionalString(z.string().min(20)),
   CLOUDFLARE_ACCOUNT_ID: optionalString(z.string().regex(/^[0-9a-f]{32}$/, "CLOUDFLARE_ACCOUNT_ID is 32 hex characters")),
 
+  // OPS-1: Cloudflare Stream, for video playback (Account, Stream, Edit).
+  // Klik makes its own signing key and webhook the first time, sealed in the
+  // database. Without it every video plays from R2 as before.
+  CLOUDFLARE_STREAM_API_TOKEN: optionalString(z.string().min(20)),
+
   // AI-5: Replicate, for "sharpen and enlarge". Without it the button never
   // shows. The version pin and webhook secret are optional overrides: by
   // default Klik asks Replicate for both.

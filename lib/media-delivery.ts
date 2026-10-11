@@ -35,6 +35,8 @@ export function toPublicMedia(
     challengeId?: string | null;
     proofOriginalPathname?: string | null;
     proofReleasedAt?: Date | null;
+    streamUid?: string | null;
+    streamState?: string | null;
   },
   slug: string,
 ) {
@@ -67,6 +69,8 @@ export function toPublicMedia(
     // MED-10. A watermarked proof, so the viewer can say whose and how to get
     // the clean one. Never the photographer's identity: that is fetched.
     proof: Boolean(item.proofOriginalPathname && !item.proofReleasedAt),
+    // OPS-1. The player asks the content route with ?hls=1 for a manifest.
+    stream: item.kind === "video" && Boolean(item.streamUid) && item.streamState === "ready",
   };
 }
 

@@ -9,6 +9,7 @@ import { resolveEventViewer } from "@/lib/event-viewer";
 import { r2 } from "@/lib/storage";
 import { canViewMedia, videoHeldBack } from "@/lib/media-access";
 import { cleanOriginalFor } from "@/lib/proof-access";
+import { playsFromStream, signedManifestUrl } from "@/lib/stream";
 
 export async function GET(
   request: Request,
@@ -77,6 +78,19 @@ export async function GET(
       status: 307,
       headers: { "Cache-Control": "private, no-store" },
     });
+  }
+
+  // OPS-1: the Stream copy, behind a token signed here, after every check
+  // above. Its renditions carry no metadata, so a video whose location could
+  // not be removed (MED-8) plays this way for everyone; one still being
+  // cleaned has no copy yet.
+  if (searchParams.get("hls") === "1") {
+    const manifest =
+      item.kind === "video" && playsFromStream(item) && item.metadataState !== "pending"
+        ? await signedManifestUrl(item.streamUid!)
+        : null;
+    if (!manifest) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.redirect(manifest, { status: 307, headers: { "Cache-Control": "private, no-store" } });
   }
 
   // MED-8: a video still being cleaned of its location, or that could not be,

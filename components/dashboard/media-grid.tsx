@@ -25,6 +25,8 @@ export type DashboardMedia = Media & Partial<SignedMediaUrls> & {
   openReports?: number;
   /** AI-6: why Klik's screening is holding it, while it waits for the host. */
   screening?: string | null;
+  /** OPS-1: a Stream copy is ready to play. */
+  stream?: boolean;
   /** MED-10: a watermarked proof, and whether it is the viewer's own to release. */
   proof?: "mine" | "locked" | null;
 };

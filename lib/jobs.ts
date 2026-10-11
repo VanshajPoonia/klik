@@ -69,6 +69,12 @@ export const JOB_PAYLOADS = {
   "media.describe": z.object({ mediaId: z.string().min(1).max(64) }),
   /** AI-2: queue a description for media that has none. Nothing without a key. */
   "media.backfill_vision": z.object({}),
+  /** OPS-1: send one video to Stream, then look again until it plays. Nothing without a key. */
+  "media.transcode": z.object({ mediaId: z.string().min(1).max(64) }),
+  /** OPS-1: queue a transcode for videos that have no Stream copy. Nothing without a key. */
+  "media.backfill_transcodes": z.object({}),
+  /** OPS-1: delete the Stream copies of videos that are gone. */
+  "stream.reap": z.object({}),
   /** AI-5: start one "sharpen and enlarge", then look again until it ends. */
   "ai.enhance": z.object({ enhancementId: z.string().min(1).max(64) }),
   /** GRW-1: send one event's due recaps, then wait for the next one due. */
@@ -98,6 +104,11 @@ export function enqueueThumbnail(mediaId: string) {
 /** Queues the measurement of one photo, at most once while one is pending. */
 export function enqueueAnalysis(mediaId: string) {
   return enqueue("media.analyze", { mediaId }, { dedupeKey: `analyze:${mediaId}`, maxAttempts: 3 });
+}
+
+/** OPS-1: queues one video for Stream, at most once while one is pending. */
+export function enqueueTranscode(mediaId: string) {
+  return enqueue("media.transcode", { mediaId }, { dedupeKey: `transcode:${mediaId}`, maxAttempts: 5 });
 }
 
 /** AI-2, AI-6: queues the description of one photo, at most once while one is pending. */
@@ -256,6 +267,10 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     // AI-2: photos from before the key arrived, and any whose job was lost.
     // Returns at once without a key.
     { kind: "media.backfill_vision", payload: {} },
+    // OPS-1: videos from before the key arrived, and Stream copies whose
+    // video is gone. Both return at once without a key.
+    { kind: "media.backfill_transcodes", payload: {} },
+    { kind: "stream.reap", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

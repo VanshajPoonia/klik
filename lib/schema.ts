@@ -577,6 +577,10 @@ export const media = pgTable(
     analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
     // AI-8: the host pinned it into the highlights or kept it out.
     highlight: text("highlight").$type<"pinned" | "excluded">(),
+    // OPS-1: the video's Cloudflare Stream copy, for playback. Deleting the
+    // row queues the copy's deletion (drizzle/0050_stream.sql).
+    streamUid: text("stream_uid"),
+    streamState: text("stream_state").$type<"pending" | "ready" | "failed">(),
   },
   (table) => [
     index("media_event_status_created_idx").on(table.eventId, table.status, table.createdAt),
@@ -973,6 +977,20 @@ export const mediaReports = pgTable("media_reports", {
 });
 
 export type MediaReport = typeof mediaReports.$inferSelect;
+
+/** OPS-1: Stream copies whose video is gone, waiting for `stream.reap`. Filled by a trigger. */
+export const streamDeletions = pgTable("stream_deletions", {
+  uid: text("uid").primaryKey(),
+  queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
+  attempts: integer("attempts").notNull().default(0),
+});
+
+/** Secrets Klik made for itself at a provider, sealed (lib/sealed.ts). */
+export const providerSecrets = pgTable("provider_secrets", {
+  name: text("name").primaryKey(),
+  sealed: text("sealed").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** AI-5: one "sharpen and enlarge" a host asked for. drizzle/0049_enhancements.sql. */
 export const aiEnhancements = pgTable(
