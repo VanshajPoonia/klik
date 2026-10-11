@@ -52,6 +52,8 @@ const TABLES = [
   "media_reports",
   // AI-2, before `media` and `events`.
   "media_vision",
+  // AI-5, before `media`, `events` and `users`.
+  "ai_enhancements",
   // MED-9, before `media`, `guests` and `users`.
   "comment_reports",
   "media_comments",

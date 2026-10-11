@@ -69,6 +69,8 @@ export const JOB_PAYLOADS = {
   "media.describe": z.object({ mediaId: z.string().min(1).max(64) }),
   /** AI-2: queue a description for media that has none. Nothing without a key. */
   "media.backfill_vision": z.object({}),
+  /** AI-5: start one "sharpen and enlarge", then look again until it ends. */
+  "ai.enhance": z.object({ enhancementId: z.string().min(1).max(64) }),
   /** GRW-1: send one event's due recaps, then wait for the next one due. */
   "recap.send": z.object({ eventId: z.string().min(1).max(64) }),
   /** GRW-1: any event with a recap past due and no job to send it. */

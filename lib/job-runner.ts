@@ -67,6 +67,7 @@ const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   "media.backfill_analysis": async () => (await import("./job-handlers/analyze")).backfillAnalysis,
   "media.describe": async () => (await import("./job-handlers/vision")).describeMedia,
   "media.backfill_vision": async () => (await import("./job-handlers/vision")).backfillVision,
+  "ai.enhance": async () => (await import("./enhancements")).runEnhancement,
   "recap.send": async () => (await import("./job-handlers/recap")).sendRecaps,
   "recap.backfill": async () => (await import("./job-handlers/recap")).backfillRecaps,
   "events.purge_deleted": async () => async (payload) => {

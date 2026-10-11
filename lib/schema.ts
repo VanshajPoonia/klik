@@ -974,6 +974,32 @@ export const mediaReports = pgTable("media_reports", {
 
 export type MediaReport = typeof mediaReports.$inferSelect;
 
+/** AI-5: one "sharpen and enlarge" a host asked for. drizzle/0049_enhancements.sql. */
+export const aiEnhancements = pgTable(
+  "ai_enhancements",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    mediaId: text("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    resultMediaId: text("result_media_id").references(() => media.id, { onDelete: "set null" }),
+    operation: text("operation").$type<"upscale">().notNull(),
+    status: text("status").$type<"queued" | "running" | "succeeded" | "failed">().notNull().default("queued"),
+    predictionId: text("prediction_id"),
+    error: text("error"),
+    requestedByUserId: text("requested_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    choice: text("choice").$type<"instead" | "both" | "discarded">(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => [index("ai_enhancements_event_idx").on(table.eventId, table.createdAt)],
+);
+
+export type AiEnhancement = typeof aiEnhancements.$inferSelect;
+
 /**
  * AI-2, AI-4, AI-6: what the vision model made of one photo, or of a video's
  * poster still. Its own table so the 4 KB embedding is never read with the

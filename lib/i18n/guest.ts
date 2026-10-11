@@ -210,6 +210,12 @@ const en = {
     deleteYours: (kind: "photo" | "video") => `Delete your ${kind}`,
     edit: "Edit this photo",
     editTitle: "Edit a copy",
+    // AI-5's cloud tier, for the event's team.
+    sharpen: "Sharpen and enlarge",
+    sharpenBody: (left: number) =>
+      `Klik's AI redraws this photo sharper and four times larger, up to print size. The original stays as it is: the result arrives as a hidden copy for you to show or throw away. ${left} left for this event.`,
+    sharpenStarted: "Working on it. The copy appears under Enhancements on the gallery tab in a minute or so.",
+    sharpenNoneLeft: "This event has used all its enhancements.",
     share: (kind: "photo" | "video") => `Share this ${kind}`,
     download: (kind: "photo" | "video") => `Download ${kind}`,
     position: (kind: "photo" | "video", n: number, total: number) => `${kind === "video" ? "Video" : "Photo"} ${n} of ${total}`,
@@ -624,6 +630,11 @@ const es: GuestCopy = {
     deleteYours: (kind: "photo" | "video") => (kind === "video" ? "Borrar tu video" : "Borrar tu foto"),
     edit: "Editar esta foto",
     editTitle: "Editar una copia",
+    sharpen: "Afinar y ampliar",
+    sharpenBody: (left: number) =>
+      `La IA de Klik vuelve a dibujar esta foto más nítida y cuatro veces más grande, hasta tamaño de impresión. La original se queda como está: el resultado llega como una copia oculta para que la muestres o la descartes. Quedan ${left} para este evento.`,
+    sharpenStarted: "Trabajando en ello. La copia aparece en Mejoras, en la pestaña de la galería, en un minuto más o menos.",
+    sharpenNoneLeft: "Este evento ya usó todas sus mejoras.",
     share: (kind: "photo" | "video") => (kind === "video" ? "Compartir este video" : "Compartir esta foto"),
     download: (kind: "photo" | "video") => (kind === "video" ? "Descargar el video" : "Descargar la foto"),
     position: (kind: "photo" | "video", n: number, total: number) => `${kind === "video" ? "Video" : "Foto"} ${n} de ${total}`,

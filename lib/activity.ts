@@ -20,6 +20,7 @@ const TEAM_VISIBLE = [
   "event.restored",
   "media.deleted",
   "media.bulk",
+  "media.enhanced",
   "team.changed",
   "event.transfer_offered",
   "event.transfer_withdrawn",
@@ -70,6 +71,9 @@ export function describeActivity(
       return "restored the event";
     case "media.deleted":
       return "deleted a photo or video";
+    case "media.enhanced":
+      // AI-5.
+      return "asked Klik to sharpen and enlarge a photo";
     case "media.bulk": {
       const match = /^(\w+)(?: to (\w+))? on (\d+) items\.$/.exec(detail);
       if (!match) return "changed several photos and videos";

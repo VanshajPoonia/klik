@@ -46,6 +46,11 @@ export type PlanDefinition = {
   photoHeadline: number;
   /** PAY-6: folders an event may have. Zero means the feature is off. */
   maxAlbums: number;
+  /**
+   * AI-5: "sharpen and enlarge" runs an event may use. Each costs Klik a few
+   * tenths of a cent at Replicate, so the cap is about abuse, not margin.
+   */
+  aiEnhancementsPerEvent: number;
   features: readonly string[];
   featured?: boolean;
 };
@@ -69,6 +74,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxStorageBytesPerEvent: 25 * GB,
     photoHeadline: 1000,
     maxAlbums: 0,
+    aiEnhancementsPerEvent: 25,
     features: [
       "Unlimited guests",
       "Photos and videos",
@@ -103,6 +109,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxStorageBytesPerEvent: 100 * GB,
     photoHeadline: 5000,
     maxAlbums: 50,
+    aiEnhancementsPerEvent: 100,
     features: [
       "Everything in Klik Event",
       "12-month upload window",
@@ -137,6 +144,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxStorageBytesPerEvent: 100 * GB,
     photoHeadline: 5000,
     maxAlbums: 0,
+    aiEnhancementsPerEvent: 100,
     features: [
       "Up to 5 active events per month",
       "Central venue dashboard",
@@ -157,7 +165,6 @@ export function canUseSlideshow(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }
 
-/** VEN-2: a tablet at the venue that only takes photos. Same tiers as the live display. */
 /**
  * MED-10: watermarked proofs, for a photographer on the event's team. On the
  * plans that have a team at all.
@@ -166,6 +173,7 @@ export function canUseProofs(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }
 
+/** VEN-2: a tablet at the venue that only takes photos. Same tiers as the live display. */
 export function canUseKiosk(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }

@@ -42,6 +42,7 @@ import { PrintStudioCard } from "@/components/dashboard/print-studio-card";
 import { TidyPanel } from "@/components/dashboard/tidy-panel";
 import { GallerySearchBar, useGallerySearch, type SearchCopy, type SearchSelection } from "@/components/media/gallery-search";
 import { SmartFolderActions } from "@/components/dashboard/smart-folder-actions";
+import { EnhancementsPanel, useEnhancements } from "@/components/dashboard/enhancements-panel";
 import type { GallerySearchPayload } from "@/lib/search";
 import { HighlightsPanel } from "@/components/dashboard/highlights-panel";
 import { nanoid } from "nanoid";
@@ -107,6 +108,7 @@ export function EventDashboard({
   profile = null,
   search: initialSearch = null,
   visionEnabled = false,
+  canEnhance = false,
 }: {
   event: OrganizerEvent;
   initialMedia: DashboardMedia[];
@@ -153,6 +155,8 @@ export function EventDashboard({
   search?: GallerySearchPayload | null;
   /** AI-2: Workers AI has a key, so search and the scenes setting mean something. */
   visionEnabled?: boolean;
+  /** AI-5: Replicate has a key and this person moderates media. */
+  canEnhance?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
   const router = useRouter();
@@ -202,6 +206,8 @@ export function EventDashboard({
     toItems: searchIds,
   });
   const searching = gallerySearch.selection !== null;
+  // AI-5. Asked for only where it can be used.
+  const enhancements = useEnhancements(event.id, canEnhance);
 
   const pending = mediaItems.filter((item) => item.status === "pending");
   const approved = mediaItems.filter((item) => item.status === "approved");
@@ -722,6 +728,7 @@ export function EventDashboard({
               onVisibility={(ids, visibility) => runBulk({ action: "visibility", visibility }, ids)}
               onOpen={setLightboxId}
             />
+            {canEnhance && <EnhancementsPanel enhancements={enhancements} items={mediaItems} onOpen={setLightboxId} />}
             {pending.length > 0 && (
               <section>
                 <h2 className="mb-4 text-xs font-medium tracking-wide text-muted uppercase">
@@ -1143,6 +1150,19 @@ export function EventDashboard({
             accent: canCustomizeGallery ? event.accentColor : "#edee00",
             canTakeFile: () => true,
           }}
+          // AI-5: the copy arrives hidden, in the Enhancements panel.
+          sharpen={
+            canEnhance
+              ? {
+                  canSharpen: (item) => {
+                    const row = mediaItems.find((candidate) => candidate.id === item.id);
+                    return Boolean(row && row.proof !== "locked" && !row.legalHoldAt && !row.deletedAt);
+                  },
+                  left: enhancements.left,
+                  start: (item) => enhancements.start(item.id),
+                }
+              : undefined
+          }
           // CAM-2: the team edits any photo; the copy keeps the original's
           // folder, time and visibility, and the original stays as it was.
           edit={{

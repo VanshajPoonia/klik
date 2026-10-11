@@ -12,6 +12,7 @@ import { openReportCounts } from "@/lib/reports";
 import { screeningFlags } from "@/lib/screening";
 import { gallerySearch } from "@/lib/search";
 import { isVisionConfigured } from "@/lib/ai/workers-ai";
+import { isEnhanceAvailable } from "@/lib/enhancements";
 import { COMMENT_REPORT_LABELS, reportedComments, type CommentReportReason } from "@/lib/comments";
 import { galleryMoments } from "@/lib/folders";
 import { eventUsage } from "@/lib/usage";
@@ -171,6 +172,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         moments={moments.map((moment) => ({ id: moment.id, name: moment.name }))}
         search={search}
         visionEnabled={isVisionConfigured()}
+        canEnhance={isEnhanceAvailable() && can(actor.role, "media.moderate")}
         reportedComments={commentReports.map((row) => ({
           commentId: row.commentId,
           mediaId: row.mediaId,

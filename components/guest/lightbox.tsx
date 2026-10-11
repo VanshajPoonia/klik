@@ -16,6 +16,7 @@ import {
   Share2,
   Sparkles,
   Trash2,
+  WandSparkles,
   X,
 } from "lucide-react";
 import { downloadFilename, enhancePhoto, saveBlob } from "@/lib/enhance-view";
@@ -61,6 +62,15 @@ export interface LightboxEdit {
    *  an error message, or null when it worked. */
   removeOriginal?: (originalId: string) => Promise<string | null>;
   accent?: string;
+}
+
+/** AI-5: the team's "sharpen and enlarge", which Klik runs in the background. */
+export interface LightboxSharpen {
+  canSharpen: (item: LightboxItem) => boolean;
+  /** What is left of the event's allowance. */
+  left: number;
+  /** Starts it. Resolves to an error message, or null when it started. */
+  start: (item: LightboxItem) => Promise<string | null>;
 }
 
 /** CAM-3: what the share sheet needs to know about the event and the viewer. */
@@ -126,6 +136,7 @@ export function Lightbox({
   social,
   share,
   edit,
+  sharpen,
 }: {
   items: LightboxItem[];
   index: number;
@@ -150,6 +161,7 @@ export function Lightbox({
   /** CAM-3: the Share button opens a sheet of ways to send it on. */
   share?: LightboxShare;
   edit?: LightboxEdit;
+  sharpen?: LightboxSharpen;
 }) {
   // TRS-3: the guest's language; the dashboard, outside any provider, gets English.
   const { t } = useGuestCopy();
@@ -187,6 +199,10 @@ export function Lightbox({
   const [editing, setEditing] = useState<{ item: LightboxItem; url: string } | null>(null);
   const [editLoading, setEditLoading] = useState<string | null>(null);
   const [editNote, setEditNote] = useState<{ originalId: string; message: string; canRemove: boolean } | null>(null);
+  // AI-5: the confirm panel for "sharpen and enlarge", and what came of it.
+  const [sharpenFor, setSharpenFor] = useState<string | null>(null);
+  const [sharpenBusy, setSharpenBusy] = useState(false);
+  const [sharpenMessage, setSharpenMessage] = useState<string | null>(null);
   const sharingOpen = Boolean(item && sharingFor === item.id);
   const photoUrl = item
     ? item.src && !expiredIds.has(item.id)
@@ -280,6 +296,7 @@ export function Lightbox({
   if (!item) return null;
 
   const canEdit = Boolean(edit && item.kind === "photo" && edit.canEdit(item));
+  const canSharpen = Boolean(sharpen && item.kind === "photo" && sharpen.canSharpen(item));
   /** Fetches the photo's bytes, then opens the editor on them. */
   const openEditor = async () => {
     if (!edit || editLoading) return;
@@ -407,6 +424,21 @@ export function Lightbox({
               ) : (
                 <Pencil className="h-5 w-5" aria-hidden="true" />
               )}
+            </button>
+          )}
+          {canSharpen && (
+            <button
+              type="button"
+              onClick={() => {
+                setSharpenMessage(null);
+                setSharpenFor(sharpenFor === item.id ? null : item.id);
+              }}
+              aria-expanded={sharpenFor === item.id}
+              aria-label={t.viewer.sharpen}
+              title={t.viewer.sharpen}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+            >
+              <WandSparkles className="h-5 w-5" aria-hidden="true" />
             </button>
           )}
           {(share || onShare) && (
@@ -684,6 +716,43 @@ export function Lightbox({
                 className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
               >
                 {t.viewer.keep}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {sharpen && sharpenFor === item.id && (
+          <div
+            role="dialog"
+            aria-label={t.viewer.sharpen}
+            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+          >
+            <p className="text-sm text-paper" role="status">
+              {sharpenMessage ?? (sharpen.left > 0 ? t.viewer.sharpenBody(sharpen.left) : t.viewer.sharpenNoneLeft)}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {!sharpenMessage && sharpen.left > 0 && (
+                <button
+                  type="button"
+                  disabled={sharpenBusy}
+                  onClick={async () => {
+                    setSharpenBusy(true);
+                    const error = await sharpen.start(item);
+                    setSharpenBusy(false);
+                    setSharpenMessage(error ?? t.viewer.sharpenStarted);
+                  }}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-volt px-4 text-sm font-medium text-on-volt disabled:opacity-50"
+                >
+                  <WandSparkles className="h-4 w-4" aria-hidden="true" />
+                  {t.viewer.sharpen}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSharpenFor(null)}
+                className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
+              >
+                {sharpenMessage ? t.viewer.ok : t.common.cancel}
               </button>
             </div>
           </div>

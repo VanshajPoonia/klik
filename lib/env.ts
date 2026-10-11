@@ -142,6 +142,13 @@ const schema = z.object({
   CLOUDFLARE_AI_API_TOKEN: optionalString(z.string().min(20)),
   CLOUDFLARE_ACCOUNT_ID: optionalString(z.string().regex(/^[0-9a-f]{32}$/, "CLOUDFLARE_ACCOUNT_ID is 32 hex characters")),
 
+  // AI-5: Replicate, for "sharpen and enlarge". Without it the button never
+  // shows. The version pin and webhook secret are optional overrides: by
+  // default Klik asks Replicate for both.
+  REPLICATE_API_TOKEN: optionalString(z.string().regex(/^r8_/, "REPLICATE_API_TOKEN starts r8_")),
+  REPLICATE_UPSCALE_VERSION: optionalString(z.string().regex(/^[0-9a-f]{64}$/, "REPLICATE_UPSCALE_VERSION is a 64-character version id")),
+  REPLICATE_WEBHOOK_SECRET: optionalString(z.string().regex(/^whsec_/, "REPLICATE_WEBHOOK_SECRET starts whsec_")),
+
   // A URL the purge cron pings after a successful run, for a heartbeat monitor
   // (UptimeRobot, Better Stack, Healthchecks.io). Optional: without it the cron
   // behaves exactly as before. Its absence is the normal state locally, which

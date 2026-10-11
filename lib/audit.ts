@@ -28,6 +28,7 @@ export type AuditAction =
   | "event.went_live"
   | "media.deleted"
   | "media.bulk"
+  | "media.enhanced"
   | "team.changed"
   | "event.transfer_offered"
   | "event.transfer_withdrawn"
