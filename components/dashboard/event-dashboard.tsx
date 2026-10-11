@@ -45,6 +45,8 @@ import { SmartFolderActions } from "@/components/dashboard/smart-folder-actions"
 import { EnhancementsPanel, useEnhancements } from "@/components/dashboard/enhancements-panel";
 import type { GallerySearchPayload } from "@/lib/search";
 import { HighlightsPanel } from "@/components/dashboard/highlights-panel";
+import { ReelMaker } from "@/components/dashboard/reel-maker";
+import { highlightsFor } from "@/lib/highlights";
 import { nanoid } from "nanoid";
 import { SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 import { uploadToGallery } from "@/lib/upload-client";
@@ -110,6 +112,7 @@ export function EventDashboard({
   visionEnabled = false,
   canEnhance = false,
   printsAvailable = false,
+  reel = null,
 }: {
   event: OrganizerEvent;
   initialMedia: DashboardMedia[];
@@ -160,6 +163,8 @@ export function EventDashboard({
   canEnhance?: boolean;
   /** GRW-6: Stripe and Prodigi both have keys. */
   printsAvailable?: boolean;
+  /** GRW-2: the plan has the highlight reel, and what its cards say. */
+  reel?: { accent: string; branding: boolean; maxVideoSeconds: number } | null;
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
   const router = useRouter();
@@ -953,6 +958,26 @@ export function EventDashboard({
               >
                 {mediaError}
               </div>
+            )}
+            {reel && (
+              <ReelMaker
+                eventId={event.id}
+                slug={event.slug}
+                eventName={event.name}
+                eventDate={
+                  event.eventDate
+                    ? new Date(event.eventDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })
+                    : null
+                }
+                accent={reel.accent}
+                branding={reel.branding}
+                galleryUrl={guestUrl}
+                photos={highlightsFor(mediaItems)
+                  .picks.map((id) => mediaItems.find((item) => item.id === id))
+                  .filter((item): item is DashboardMedia => Boolean(item && item.kind === "photo"))
+                  .map((item) => ({ id: item.id, blobUrl: item.blobUrl }))}
+                maxVideoSeconds={reel.maxVideoSeconds}
+              />
             )}
             <HighlightsPanel
               items={mediaItems}

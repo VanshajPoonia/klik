@@ -165,6 +165,11 @@ export function canUseSlideshow(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }
 
+/** GRW-2: the highlight reel, "a genuinely good reason to pay the extra $50". */
+export function canMakeReel(planKey: PlanKey): boolean {
+  return planKey === "premium" || planKey === "venue";
+}
+
 /**
  * MED-10: watermarked proofs, for a photographer on the event's team. On the
  * plans that have a team at all.

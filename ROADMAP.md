@@ -931,6 +931,8 @@ The morning after an event, every guest who left an email gets the highlights (A
 - Include a soft "host your own" call to action, below the photos, not above them.
 
 ### GRW-2. Highlight reel
+**DONE 2026-10-11, no key needed** (`lib/reel.ts`, `components/dashboard/reel-maker.tsx`, `lib/reel.test.ts`). On Premium and Venue, the Highlights tab has **Highlight reel**: up to twelve of AI-8's picks, in the order they were taken, become a vertical 1080 by 1920 MP4 of up to 30 seconds. A title card with the event's name and date, each photo with a slow push in or out and a short crossfade, and an end card with the gallery's QR code and address (and "Made with Klik" where branding shows). It is made **in the host's browser**, with WebCodecs and mediabunny (MPL-2.0, loaded only when someone presses the button), so there is no server render, no provider and no cost. With music the host chooses from their own device, Klik finds the tempo and puts every cut on the beat, fading the music out at the end; without, shots are evenly spaced. **Download** gives the file for a story; **Add to the gallery** uploads it as an ordinary video, so it is shared (MED-2), downloaded and streamed (OPS-1) like any other. Checked end to end in headless Chrome: an H.264 1080 by 1920 file, with a stereo AAC track when music is added and the beat found. Browsers without WebCodecs (Firefox on some systems, older iPhones) are told to use Chrome, Edge or Safari on a computer. Section C, "The reel is made on the host's device, with the host's music".
+
 **Size:** L. **Depends on:** GRW-1, NEW-8.
 A 30-second video assembled from the highlights with a beat-matched cut and a title card carrying the event name. Rendered server-side with ffmpeg in a job, stored in R2, shareable with its own link (MED-2) and downloadable as a 9:16 story export.
 - Music is the trap here: shipping with recognisable tracks is a licensing problem, so use a small library of cleared or CC0 beds and let organizers upload their own at their own risk.
@@ -1310,6 +1312,9 @@ AI-2 was written for a CLIP-style image embedding, and Workers AI has none: its 
 ### Screening runs after a photo lands. ANSWERED
 Holding every upload until a model answered would make each guest wait on a third party, and a Workers AI outage would stop every gallery at once. So a photo shows as it does today and screening pulls it, usually within a minute; the live display's own 60-second delay covers the screen in the room. A host who wants nothing seen unchecked already has moderation. Screening never files a child-safety report or asks about ages: that hold is a person's decision under 18 U.S.C. 2258A, made from a guest's report.
 
+### The reel is made on the host's device, with the host's music. ANSWERED
+GRW-2 was written for ffmpeg in a server job, which on Hobby means a 300-second, one-vCPU function rendering 900 frames of 1080 by 1920, and a cleared music library to buy or curate. Instead the host's own browser renders it with WebCodecs, which every current Chrome, Edge and Safari has: no server, no provider, no per-reel cost, and a reel in seconds on a laptop. Music is the host's own file and never leaves their device except inside the finished video; Klik provides none and says plainly that streaming-service songs usually cannot be posted, which is the roadmap's "let organizers upload their own at their own risk" without a library to license. A stock library can be added later as a list of files the same picker offers. The reel joins the gallery as an ordinary video when the host chooses, rather than as a new kind of object, so sharing, downloads, streaming and erasure already cover it.
+
 ### Prints are reviewed by a person. ANSWERED
 GRW-6 is the first thing Klik sells that is not a plan, so it follows the plan rule: a payment is recorded, then a person acts. Here the person also stops what automation would print blindly: a stolen card spending on someone else's photos, a photo that broke the rules, an order that would print soft. Payment is Stripe's hosted checkout, confirmed by asking Stripe from the return page, the review queue and a daily reconcile, so the unused webhook stays unused. Prices sit well above Prodigi's cost (4×6 $2.99, 5×7 $5.99, 8×10 $12.99, $5.99 shipping) so a single small print does not lose money after Stripe's fee; they are one constant each. US shipping only, matching the market. Sales tax is off and switchable, because whether Klik must collect it on prints depends on registrations only an accountant can say.
 
@@ -1335,7 +1340,7 @@ Production (Neon) is Postgres 17.11 with pgvector 0.8 available; the test cluste
 
 Nothing is blocking. The open items below are judgement calls that can wait until the relevant phase starts.
 
-- **GRW-2 music licensing.** Needs a cleared or CC0 audio library before a highlight reel ships publicly.
+- Nothing. GRW-2's music question was answered on 2026-10-11 (section C): the host brings their own.
 
 ---
 

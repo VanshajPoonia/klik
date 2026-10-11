@@ -29,6 +29,8 @@ import {
   canUseKiosk,
   canUseVenueHub,
   canUsePrintStudio,
+  canMakeReel,
+  removesKlikBranding,
 } from "@/lib/plans";
 import { withProtectedMediaUrl } from "@/lib/media-delivery";
 import { signMediaUrls } from "@/lib/media-urls";
@@ -177,6 +179,15 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         visionEnabled={isVisionConfigured()}
         canEnhance={isEnhanceAvailable() && can(actor.role, "media.moderate")}
         printsAvailable={isPrintsAvailable()}
+        reel={
+          canMakeReel(plan.key)
+            ? {
+                accent: canCustomizeGallery(plan.key) ? event.accentColor : "#edee00",
+                branding: !removesKlikBranding(plan.key),
+                maxVideoSeconds: plan.maxVideoSeconds,
+              }
+            : null
+        }
         reportedComments={commentReports.map((row) => ({
           commentId: row.commentId,
           mediaId: row.mediaId,
