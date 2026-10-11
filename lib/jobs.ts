@@ -65,6 +65,10 @@ export const JOB_PAYLOADS = {
   "media.analyze": z.object({ mediaId: z.string().min(1).max(64) }),
   /** AI-7: queue a measurement for photos that have none. */
   "media.backfill_analysis": z.object({}),
+  /** AI-2, AI-6: describe one photo (caption, labels, safety). Nothing without a key. */
+  "media.describe": z.object({ mediaId: z.string().min(1).max(64) }),
+  /** AI-2: queue a description for media that has none. Nothing without a key. */
+  "media.backfill_vision": z.object({}),
   /** GRW-1: send one event's due recaps, then wait for the next one due. */
   "recap.send": z.object({ eventId: z.string().min(1).max(64) }),
   /** GRW-1: any event with a recap past due and no job to send it. */
@@ -92,6 +96,11 @@ export function enqueueThumbnail(mediaId: string) {
 /** Queues the measurement of one photo, at most once while one is pending. */
 export function enqueueAnalysis(mediaId: string) {
   return enqueue("media.analyze", { mediaId }, { dedupeKey: `analyze:${mediaId}`, maxAttempts: 3 });
+}
+
+/** AI-2, AI-6: queues the description of one photo, at most once while one is pending. */
+export function enqueueDescription(mediaId: string) {
+  return enqueue("media.describe", { mediaId }, { dedupeKey: `describe:${mediaId}`, maxAttempts: 4 });
 }
 
 /**
@@ -242,6 +251,9 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     { kind: "media.backfill_analysis", payload: {} },
     // GRW-1: a recap past due whose job was lost.
     { kind: "recap.backfill", payload: {} },
+    // AI-2: photos from before the key arrived, and any whose job was lost.
+    // Returns at once without a key.
+    { kind: "media.backfill_vision", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

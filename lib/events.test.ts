@@ -56,6 +56,7 @@ const row: Event = {
   reactionsEnabled: true,
   commentsEnabled: true,
   momentsEnabled: true,
+  scenesEnabled: true,
   leaderboardEnabled: false,
   showOnProfile: false,
   guestLanguage: "auto",
@@ -133,6 +134,8 @@ const WITHHELD: Record<string, string> = {
   // AI-1. The server sends no moments when it is off, so the flag says nothing
   // a guest can use.
   momentsEnabled: "decides what the server sends, never needed raw",
+  // AI-2. The server sends no scenes or search when it is off.
+  scenesEnabled: "decides what the server sends, never needed raw",
   // GRW-3. The server sends no leaderboard when it is off, for the same reason.
   leaderboardEnabled: "decides what the server sends, never needed raw",
   // GRW-4. The host's choice about their own profile page.

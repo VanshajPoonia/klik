@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   primaryKey,
   jsonb,
+  vector,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { PlanKey } from "./plans";
@@ -345,6 +346,8 @@ export const events = pgTable(
     commentsEnabled: boolean("comments_enabled").notNull().default(false),
     // AI-1: whether guests see the gallery grouped into moments.
     momentsEnabled: boolean("moments_enabled").notNull().default(true),
+    // AI-2: whether guests get search and scenes. The team always has them.
+    scenesEnabled: boolean("scenes_enabled").notNull().default(true),
     // GRW-3: a ranked list of who has shared most, by display name. Off until
     // the host turns it on. See lib/challenges.ts.
     leaderboardEnabled: boolean("leaderboard_enabled").notNull().default(false),
@@ -970,6 +973,32 @@ export const mediaReports = pgTable("media_reports", {
 });
 
 export type MediaReport = typeof mediaReports.$inferSelect;
+
+/**
+ * AI-2, AI-4, AI-6: what the vision model made of one photo, or of a video's
+ * poster still. Its own table so the 4 KB embedding is never read with the
+ * gallery's media rows. CHECKs in drizzle/0048_vision.sql; see lib/vision.ts.
+ */
+export const mediaVision = pgTable(
+  "media_vision",
+  {
+    mediaId: text("media_id")
+      .primaryKey()
+      .references(() => media.id, { onDelete: "cascade" }),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    state: text("state").$type<"done" | "failed">().notNull(),
+    model: text("model").notNull(),
+    caption: text("caption"),
+    labels: text("labels").array().notNull().default(sql`'{}'::text[]`),
+    embedding: vector("embedding", { dimensions: 1024 }),
+    safety: text("safety").$type<"clear" | "flagged" | "unclear">(),
+    safetyReasons: text("safety_reasons").array().notNull().default(sql`'{}'::text[]`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("media_vision_event_idx").on(table.eventId)],
+);
 
 /**
  * MED-9: one heart per person per item. `reactor` is `g:<guest id>` or

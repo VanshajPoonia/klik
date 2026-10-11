@@ -27,6 +27,8 @@ import { encodeMediaCursor } from "@/lib/media-cursor";
 import { mergeGalleryChanges } from "@/lib/gallery-sync";
 import { childrenOf, flattenFolders, folderPath, inFolder } from "@/lib/folder-tree";
 import type { ChallengeBoard } from "@/lib/challenges";
+import type { GallerySearchPayload } from "@/lib/search";
+import { GallerySearchBar, useGallerySearch } from "@/components/media/gallery-search";
 
 /** MED-4: a folder as the gallery holds it. See `galleryFolderPayload`. */
 interface GalleryFolder {
@@ -127,6 +129,9 @@ function FallbackImage({
   );
 }
 
+/** AI-2: the search route answers with gallery items in the grid's own shape. */
+const searchItems = (json: unknown) => (json as { media?: MediaItem[] }).media ?? [];
+
 export function GuestGallery({
   event,
   isOwner,
@@ -148,6 +153,7 @@ export function GuestGallery({
   board: initialBoard = null,
   proofs = null,
   keepPhotoDetails = false,
+  search: initialSearch = null,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -183,6 +189,8 @@ export function GuestGallery({
   proofs?: { label: string | null } | null;
   /** MED-8: the team's JPEGs go up as shot, for the host's "keep camera details". */
   keepPhotoDetails?: boolean;
+  /** AI-2, AI-4: whether the gallery can be searched, its scenes and smart folders. */
+  search?: GallerySearchPayload | null;
 }) {
   // TRS-3: the guest's language, chosen by the page.
   const { t, locale } = useGuestCopy();
@@ -244,6 +252,13 @@ export function GuestGallery({
   const [chosenFolderId, setChosenFolderId] = useState<string | null>(null);
   const [moments, setMoments] = useState<GalleryMoment[]>(initialMoments);
   const [chosenMomentId, setChosenMomentId] = useState<string | null>(null);
+  // AI-2, AI-4. While a search or scene is open, it is the grid.
+  const gallerySearch = useGallerySearch<MediaItem>({
+    endpoint: `/api/e/${event.slug}/search`,
+    initial: initialSearch,
+    toItems: searchItems,
+  });
+  const { applyChanges: applySearchChanges, setPayload: setSearchPayload } = gallerySearch;
   const [uploadAlbumId, setUploadAlbumId] = useState<string>("");
   // GRW-3. Kept fresh by the sync, which sends it with any change to photos.
   const [board, setBoard] = useState<ChallengeBoard>(initialBoard ?? { challenges: [], done: [], leaderboard: null });
@@ -267,6 +282,7 @@ export function GuestGallery({
 
   const applyChanges = useCallback((upserts: MediaItem[], removed: string[]) => {
     setItems((current) => mergeGalleryChanges(current, upserts, removed, hasMoreRef.current));
+    applySearchChanges(upserts, removed);
     // MED-4: a photo everyone can see, landing in a folder whose tab is hidden
     // for being empty, fills it and every folder above it.
     const landed = upserts
@@ -280,7 +296,7 @@ export function GuestGallery({
           : current;
       });
     }
-  }, []);
+  }, [applySearchChanges]);
 
   /** Starts over from the first page, for when a delta would not be honest:
    *  the host changed a setting, or too much changed at once. */
@@ -334,7 +350,9 @@ export function GuestGallery({
           folders?: GalleryFolder[];
           moments?: GalleryMoment[];
           board?: ChallengeBoard;
+          search?: GallerySearchPayload;
         } = await res.json();
+        if (data.search) setSearchPayload(data.search);
         if (data.folders) setFolders(data.folders);
         if (data.board) setBoard(data.board);
         if (data.moments) setMoments(data.moments);
@@ -377,7 +395,7 @@ export function GuestGallery({
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [applyChanges, event.slug, reloadFirstPage, syncedAt]);
+  }, [applyChanges, event.slug, reloadFirstPage, setSearchPayload, syncedAt]);
 
   /**
    * OPS-3: every pick goes into the upload queue, which keeps the files on this
@@ -657,9 +675,11 @@ export function GuestGallery({
   // GRW-3: a challenge card, pressed, shows the photos taken for it.
   const activeChallengeId =
     chosenChallengeId && board.challenges.some((challenge) => challenge.id === chosenChallengeId) ? chosenChallengeId : null;
-  const visibleItems = activeChallengeId
+  const filteredItems = activeChallengeId
     ? inMomentItems.filter((item) => item.challengeId === activeChallengeId)
     : inMomentItems;
+  const searching = gallerySearch.selection !== null;
+  const visibleItems = gallerySearch.results ?? (searching ? [] : filteredItems);
   const doneChallenges = new Set([...board.done, ...doneHere]);
   const canTakeChallenge = event.uploadsEnabled && !(cameraOnly && shotsLeft === 0);
 
@@ -995,7 +1015,9 @@ export function GuestGallery({
           </section>
         )}
 
-        {moments.length > 1 && (
+        <GallerySearchBar search={gallerySearch} copy={t.gallery} locale={locale} />
+
+        {!searching && moments.length > 1 && (
           <nav className="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label={t.gallery.moments}>
             {[{ id: null, name: t.gallery.anyTime }, ...moments].map((moment) => {
               const pressed = activeMomentId === moment.id;
@@ -1017,7 +1039,7 @@ export function GuestGallery({
           </nav>
         )}
 
-        {tabFolders.length > 0 && (
+        {!searching && tabFolders.length > 0 && (
           <nav className="mb-6 space-y-2" aria-label={t.gallery.folders}>
             {tabRows.map((row, level) => {
               const options = childrenOf(tabFolders, row.parentId);
@@ -1059,7 +1081,8 @@ export function GuestGallery({
           </nav>
         )}
 
-        {visibleItems.length === 0 ? (
+        {/* While searching, the line under the search box says what it found. */}
+        {visibleItems.length === 0 && searching ? null : visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-canvas-line bg-canvas-raised px-6 py-16 text-center text-sm text-muted">
             {items.length === 0
               ? disposable && !isOwner && !disposable.developed

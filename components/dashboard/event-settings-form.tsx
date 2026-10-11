@@ -93,8 +93,11 @@ export function EventSettingsForm({
   approvedMedia = [],
   clients = [],
   addressing = null,
+  offerScenes = false,
 }: {
   event: OrganizerEvent;
+  /** AI-2: search is switched on for Klik, so the guests' half of it is the host's call. */
+  offerScenes?: boolean;
   /** QR-1: present when the plan allows a custom address. */
   addressing?: { origin: string; formerSlugs: string[] } | null;
   canManageClients?: boolean;
@@ -117,6 +120,7 @@ export function EventSettingsForm({
   const [reactionsEnabled, setReactionsEnabled] = useState(event.reactionsEnabled);
   const [commentsEnabled, setCommentsEnabled] = useState(event.commentsEnabled);
   const [momentsEnabled, setMomentsEnabled] = useState(event.momentsEnabled);
+  const [scenesEnabled, setScenesEnabled] = useState(event.scenesEnabled);
   const [recapEnabled, setRecapEnabled] = useState(event.recapEnabled);
   const [showOnProfile, setShowOnProfile] = useState(event.showOnProfile);
   const [guestLanguage, setGuestLanguage] = useState(event.guestLanguage);
@@ -186,6 +190,7 @@ export function EventSettingsForm({
           reactionsEnabled,
           commentsEnabled,
           momentsEnabled,
+          scenesEnabled,
           recapEnabled,
           guestLanguage,
           keepPhotoDetails: canKeepPhotoDetails ? keepPhotoDetails : undefined,
@@ -481,6 +486,15 @@ export function EventSettingsForm({
         >
           Show guests the gallery in moments
         </Checkbox>
+        {offerScenes && (
+          <Checkbox
+            checked={scenesEnabled}
+            onChange={(change) => setScenesEnabled(change.target.checked)}
+            hint="Klik describes each photo so it can be found by what is in it, like “the cake” or “dancing outside”, and groups them into scenes. Guests only ever find photos they could already scroll to. You always have search here."
+          >
+            Let guests search the gallery and browse it by scene
+          </Checkbox>
+        )}
         <Checkbox
           checked={recapEnabled}
           onChange={(change) => setRecapEnabled(change.target.checked)}

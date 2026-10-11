@@ -35,6 +35,7 @@ import { auth } from "@/lib/auth";
 import { claimGuestCookies } from "@/lib/guest-accounts";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
+import { gallerySearch } from "@/lib/search";
 import { linkedMediaId } from "@/lib/media-share";
 import { activeKiosk } from "@/lib/kiosks";
 import { challengeBoard } from "@/lib/challenges";
@@ -190,7 +191,7 @@ export default async function GuestEventPage({
     event,
     viewerReactor,
   );
-  const [folders, moments, coverRows, linkedRows, board] = await Promise.all([
+  const [folders, moments, coverRows, linkedRows, board, search] = await Promise.all([
     // MED-4. A roll that has not developed shows guests nothing, folders
     // included: a tab per folder would say what is coming.
     canUseAlbums(plan.key) && (isOwner || !rollUndeveloped(event))
@@ -212,6 +213,10 @@ export default async function GuestEventPage({
       : Promise.resolve([]),
     // GRW-3. Counted as everyone sees them; the ticks are this guest's own.
     challengeBoard(event, { guestId: isOwner ? null : (guestSession?.guestId ?? null) }),
+    // AI-2, AI-4. Nothing to search before a roll develops.
+    isOwner || !rollUndeveloped(event)
+      ? gallerySearch(event, { isManager: isOwner, guestId: guestSession?.guestId ?? null })
+      : Promise.resolve(null),
   ]);
   const linked =
     initialMedia.find((item) => item.id === linkedId) ??
@@ -289,6 +294,7 @@ export default async function GuestEventPage({
       canModerateComments={Boolean(actor && can(actor.role, "media.moderate"))}
       linked={linked}
       board={board}
+      search={search}
       linkedMissing={Boolean(linkedId && !linked)}
     />,
   );

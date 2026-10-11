@@ -15,6 +15,8 @@ export interface ReportRow {
   eventSuspended: boolean;
   /** ADM-5: when the organizer was asked to look, already formatted. */
   organizerNotified: string | null;
+  /** AI-6: Klik's own screening flagged it, as one of the reports. */
+  screened: boolean;
   eventName: string;
   eventSlug: string;
   held: boolean;
@@ -115,6 +117,7 @@ function ReportItem({ row }: { row: ReportRow }) {
         </div>
         <div className="flex flex-wrap gap-1.5">
           {row.held && <Badge tone="danger">legal hold</Badge>}
+          {row.screened && <Badge tone="warning">Klik&apos;s screening</Badge>}
           {row.eventSuspended && <Badge tone="warning">gallery paused</Badge>}
           {row.organizerNotified && <Badge tone="neutral">organizer asked {row.organizerNotified}</Badge>}
         </div>

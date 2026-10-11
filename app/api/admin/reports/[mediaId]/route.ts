@@ -62,21 +62,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ med
       if (item.legalHoldAt) {
         return NextResponse.json({ error: "Release the hold first if the report was false." }, { status: 409 });
       }
-      await resolveReports(mediaId, { byUserId: by, resolution: `Kept by Klik. ${note}` });
+      await resolveReports(mediaId, { byUserId: by, resolution: `Kept by Klik. ${note}`, includeScreening: true });
       break;
     case "remove":
       await db.update(media).set({ deletedAt: new Date() }).where(eq(media.id, mediaId));
-      await resolveReports(mediaId, { byUserId: by, resolution: `Removed by Klik. ${note}` });
+      await resolveReports(mediaId, { byUserId: by, resolution: `Removed by Klik. ${note}`, includeScreening: true });
       break;
     case "release_hold":
       await releaseLegalHold(mediaId);
       await db.update(media).set({ status: "approved" }).where(eq(media.id, mediaId));
-      await resolveReports(mediaId, { byUserId: by, resolution: `Hold released, report was false. ${note}` });
+      await resolveReports(mediaId, { byUserId: by, resolution: `Hold released, report was false. ${note}`, includeScreening: true });
       break;
     case "reported_to_ncmec":
       // Hidden from everyone and kept, under the hold. Never deleted here.
       await db.update(media).set({ status: "rejected" }).where(eq(media.id, mediaId));
-      await resolveReports(mediaId, { byUserId: by, resolution: `Reported to NCMEC. ${note}` });
+      await resolveReports(mediaId, { byUserId: by, resolution: `Reported to NCMEC. ${note}`, includeScreening: true });
       break;
   }
 

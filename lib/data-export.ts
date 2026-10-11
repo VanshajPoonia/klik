@@ -11,6 +11,7 @@ import {
   media,
   mediaComments,
   mediaReactions,
+  mediaVision,
   referrals,
   userPasskeys,
   users,
@@ -205,7 +206,7 @@ export async function guestExport(guestId: string, appUrl: string) {
     .limit(1);
   if (!guest) return null;
 
-  const [uploads, comments, hearts] = await Promise.all([
+  const [uploads, comments, hearts, described] = await Promise.all([
     // The trash too: it is still held, so it is still theirs to have.
     db.select().from(media).where(eq(media.guestId, guestId)).orderBy(asc(media.createdAt)),
     // Comments need an account (C-5), so they are the linked account's, here.
@@ -221,7 +222,14 @@ export async function guestExport(guestId: string, appUrl: string) {
       .from(mediaReactions)
       .where(eq(mediaReactions.guestId, guestId))
       .orderBy(desc(mediaReactions.createdAt)),
+    // AI-2: what Klik's model wrote about their photos is about them too.
+    db
+      .select({ mediaId: mediaVision.mediaId, caption: mediaVision.caption, labels: mediaVision.labels })
+      .from(mediaVision)
+      .innerJoin(media, eq(media.id, mediaVision.mediaId))
+      .where(and(eq(media.guestId, guestId), eq(mediaVision.state, "done"))),
   ]);
+  const descriptions = new Map(described.map((row) => [row.mediaId, row]));
 
   const items: ZipItem[] = uploads.map((row) => ({ id: row.id, kind: row.kind, mimeType: row.mimeType, blobPathname: row.blobPathname }));
   const data = {
@@ -253,6 +261,14 @@ export async function guestExport(guestId: string, appUrl: string) {
       status: row.status,
       whoCanSeeIt: row.visibility,
       inTheHostsTrash: Boolean(row.deletedAt),
+      ...(descriptions.has(row.id)
+        ? {
+            describedForSearchAs: {
+              caption: descriptions.get(row.id)!.caption,
+              scenes: descriptions.get(row.id)!.labels,
+            },
+          }
+        : {}),
     })),
     commentsYouWrote: comments.map((comment) => ({ text: comment.body, onPhoto: comment.mediaId, at: iso(comment.createdAt), hidden: Boolean(comment.hiddenAt) })),
     photosYouHearted: hearts.map((heart) => ({ photo: heart.mediaId, at: iso(heart.createdAt) })),

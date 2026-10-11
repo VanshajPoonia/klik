@@ -339,7 +339,15 @@ export async function galleryMoments(
     })
     .from(albums)
     .leftJoin(media, eq(media.momentId, albums.id))
-    .where(and(eq(albums.eventId, event.id), eq(albums.kind, "smart"), isNull(albums.deletedAt)))
+    // Moments only: AI-4's smart folders are `smart` albums too (lib/search.ts).
+    .where(
+      and(
+        eq(albums.eventId, event.id),
+        eq(albums.kind, "smart"),
+        isNull(albums.deletedAt),
+        sql`${albums.query}->>'type' = 'moment'`,
+      ),
+    )
     .groupBy(albums.id, albums.name, albums.position)
     .orderBy(albums.position);
   const filled = rows.filter((row) => row.count > 0);

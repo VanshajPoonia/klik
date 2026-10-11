@@ -9,6 +9,9 @@ import { getAppUrl } from "@/lib/env";
 import { eventLicenseState, eventPlan } from "@/lib/license";
 import { getAccountEntitlements } from "@/lib/entitlements";
 import { openReportCounts } from "@/lib/reports";
+import { screeningFlags } from "@/lib/screening";
+import { gallerySearch } from "@/lib/search";
+import { isVisionConfigured } from "@/lib/ai/workers-ai";
 import { COMMENT_REPORT_LABELS, reportedComments, type CommentReportReason } from "@/lib/comments";
 import { galleryMoments } from "@/lib/folders";
 import { eventUsage } from "@/lib/usage";
@@ -61,7 +64,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const isOwner = actor.role === "owner";
   const canManageTeam = canUseCoHosts(plan.key) && can(actor.role, "cohosts.manage");
   const canModerateComments = can(actor.role, "media.moderate");
-  const [reportCounts, formerSlugs, invites, activity, offeredBy, commentReports, moments] = await Promise.all([
+  const [reportCounts, formerSlugs, invites, activity, offeredBy, commentReports, moments, screened, search] = await Promise.all([
     openReportCounts(event.id),
     listFormerSlugs(event.id),
     canManageTeam ? openInvites(event.id) : Promise.resolve([]),
@@ -78,6 +81,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     canModerateComments ? reportedComments(event.id) : Promise.resolve([]),
     // AI-1. The team sees them whether or not guests do.
     galleryMoments(event, { isManager: true }),
+    // AI-6: why screening held a photo, shown on its tile.
+    screeningFlags(event.id),
+    // AI-2, AI-4.
+    gallerySearch(event, { isManager: true, guestId: null }),
   ]);
   const [mediaRows, albumRows, coHostRows, clientRows, held] = await Promise.all([
     db
@@ -97,6 +104,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
               ...withProtectedMediaUrl(item, event.slug),
               ...(await signMediaUrls(clean ? { ...item, blobPathname: clean } : item)),
               openReports: reportCounts.get(item.id) ?? 0,
+              // Only while it is held: once the host approves it, it is theirs.
+              screening: item.status === "pending" ? (screened.get(item.id) ?? null) : null,
               // The key itself stays on the server.
               proofOriginalPathname: null,
               proof: isLockedProof(item) ? (clean ? ("mine" as const) : ("locked" as const)) : null,
@@ -160,6 +169,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         canUsePrintStudio={canUsePrintStudio(plan.key)}
         canManageQr={can(actor.role, "event.qr")}
         moments={moments.map((moment) => ({ id: moment.id, name: moment.name }))}
+        search={search}
+        visionEnabled={isVisionConfigured()}
         reportedComments={commentReports.map((row) => ({
           commentId: row.commentId,
           mediaId: row.mediaId,

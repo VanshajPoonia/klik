@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "./db";
 import { events, media, mediaReports, users, type ReportReason } from "./schema";
@@ -8,6 +8,7 @@ import { consume } from "./ratelimit";
 import { getAppUrl } from "./env";
 import { log, reportError } from "./observability";
 import { escapeHtml } from "./emails/theme";
+import { SCREENING_REPORTER } from "./screening";
 
 /**
  * TRS-1: reporting a photo, and what a report does.
@@ -185,12 +186,17 @@ async function notify({
   }
 }
 
-/** Open report counts per photo, for the organizer's grid. */
+/**
+ * Open report counts per photo, for the organizer's grid. Guests' reports
+ * only: AI-6's screening shows on the tile as its own badge (lib/screening.ts).
+ */
 export async function openReportCounts(eventId: string): Promise<Map<string, number>> {
   const rows = await db
     .select({ mediaId: mediaReports.mediaId, open: count() })
     .from(mediaReports)
-    .where(and(eq(mediaReports.eventId, eventId), isNull(mediaReports.resolvedAt)))
+    .where(
+      and(eq(mediaReports.eventId, eventId), isNull(mediaReports.resolvedAt), ne(mediaReports.reporterKey, SCREENING_REPORTER)),
+    )
     .groupBy(mediaReports.mediaId);
   return new Map(rows.map((row) => [row.mediaId, row.open]));
 }
@@ -198,20 +204,27 @@ export async function openReportCounts(eventId: string): Promise<Map<string, num
 /**
  * Closes every open report on one photo with a resolution. The organizer can
  * do this for anything not under a legal hold; a hold is Klik's to resolve.
+ * So is AI-6's screening report, unless `includeScreening` (Klik's own queue).
  */
 export async function resolveReports(
   mediaId: string,
-  { byUserId, resolution }: { byUserId: string; resolution: string },
+  { byUserId, resolution, includeScreening = false }: { byUserId: string; resolution: string; includeScreening?: boolean },
 ): Promise<number> {
   const rows = await db
     .update(mediaReports)
     .set({ resolvedAt: sql`now()`, resolvedByUserId: byUserId, resolution: resolution.slice(0, 300) })
-    .where(and(eq(mediaReports.mediaId, mediaId), isNull(mediaReports.resolvedAt)))
+    .where(
+      and(
+        eq(mediaReports.mediaId, mediaId),
+        isNull(mediaReports.resolvedAt),
+        includeScreening ? undefined : ne(mediaReports.reporterKey, SCREENING_REPORTER),
+      ),
+    )
     .returning({ id: mediaReports.id });
   return rows.length;
 }
 
-/** The same, for a whole selection in one statement (MED-5). */
+/** The same, for a whole selection in one statement (MED-5). The organizer's, so never screening's. */
 export async function resolveReportsFor(
   mediaIds: string[],
   { byUserId, resolution }: { byUserId: string; resolution: string },
@@ -220,7 +233,9 @@ export async function resolveReportsFor(
   const rows = await db
     .update(mediaReports)
     .set({ resolvedAt: sql`now()`, resolvedByUserId: byUserId, resolution: resolution.slice(0, 300) })
-    .where(and(inArray(mediaReports.mediaId, mediaIds), isNull(mediaReports.resolvedAt)))
+    .where(
+      and(inArray(mediaReports.mediaId, mediaIds), isNull(mediaReports.resolvedAt), ne(mediaReports.reporterKey, SCREENING_REPORTER)),
+    )
     .returning({ id: mediaReports.id });
   return rows.length;
 }
@@ -279,11 +294,15 @@ export async function listOpenReports() {
       eventSuspended: boolean;
       /** ADM-5: when Klik asked the organizer to look, if it has. */
       organizerNotifiedAt: Date | null;
+      /** AI-6: Klik's screening is one of the reporters. */
+      screened: boolean;
     }
   >();
   for (const row of rows) {
     const existing = byMedia.get(row.report.mediaId);
+    const screened = row.report.reporterKey === SCREENING_REPORTER;
     if (existing) {
+      existing.screened ||= screened;
       existing.count += 1;
       if (!existing.reasons.includes(row.report.reason)) existing.reasons.push(row.report.reason);
       if (row.report.note) existing.notes.push(row.report.note);
@@ -302,6 +321,7 @@ export async function listOpenReports() {
         latest: row.report.createdAt,
         eventSuspended: Boolean(row.eventSuspended),
         organizerNotifiedAt: row.report.organizerNotifiedAt,
+        screened,
       });
     }
   }

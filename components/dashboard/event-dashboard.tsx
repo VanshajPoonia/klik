@@ -40,12 +40,37 @@ import { KioskPanel } from "@/components/dashboard/kiosk-panel";
 import { ChallengesPanel } from "@/components/dashboard/challenges-panel";
 import { PrintStudioCard } from "@/components/dashboard/print-studio-card";
 import { TidyPanel } from "@/components/dashboard/tidy-panel";
+import { GallerySearchBar, useGallerySearch, type SearchCopy, type SearchSelection } from "@/components/media/gallery-search";
+import { SmartFolderActions } from "@/components/dashboard/smart-folder-actions";
+import type { GallerySearchPayload } from "@/lib/search";
 import { HighlightsPanel } from "@/components/dashboard/highlights-panel";
 import { nanoid } from "nanoid";
 import { SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 import { uploadToGallery } from "@/lib/upload-client";
 
 type Tab = "gallery" | "highlights" | "insights" | "links" | "settings" | "qr" | "trash";
+
+/** AI-2, AI-4: the dashboard is in English, like the rest of it. */
+const SEARCH_COPY: SearchCopy = {
+  search: "Search photos, like “the cake” or “dancing outside”",
+  searchLabel: "Search this event's photos",
+  searchGo: "Search",
+  clearSearch: "Clear",
+  scenes: "Scenes and smart folders",
+  smartFolder: "Smart folder",
+  searchResults: (n) => `${n} ${n === 1 ? "photo" : "photos"} in the gallery`,
+  searchFor: (query) => `for “${query}”`,
+  searchNothing: "Nothing in the gallery matches that yet.",
+  searchFailed: "Search did not work this time. Try again.",
+  searchBusy: "That is a lot of searching. Wait a moment and try again.",
+  searching: "Searching…",
+};
+
+const searchIds = (json: unknown) => ((json as { ids?: string[] }).ids ?? []).map((id) => ({ id }));
+
+function selectionKey(selection: SearchSelection): string {
+  return selection.kind === "text" ? `q:${selection.q}` : selection.kind === "scene" ? `s:${selection.label}` : `f:${selection.id}`;
+}
 
 export function EventDashboard({
   event,
@@ -80,6 +105,8 @@ export function EventDashboard({
   transferOffer = null,
   clients = [],
   profile = null,
+  search: initialSearch = null,
+  visionEnabled = false,
 }: {
   event: OrganizerEvent;
   initialMedia: DashboardMedia[];
@@ -122,6 +149,10 @@ export function EventDashboard({
   clients?: VenueClient[];
   /** GRW-4: the owner's public profile, for listing this event on it. Owner only. */
   profile?: { isPublic: boolean; username: string } | null;
+  /** AI-2, AI-4: search, scenes and smart folders. */
+  search?: GallerySearchPayload | null;
+  /** AI-2: Workers AI has a key, so search and the scenes setting mean something. */
+  visionEnabled?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
   const router = useRouter();
@@ -164,6 +195,13 @@ export function EventDashboard({
   );
   const [chosenView, setChosenView] = useState<FolderView>("all");
   const [moments, setMoments] = useState<DashboardMoment[]>(initialMoments);
+  // AI-2, AI-4. While a search, scene or smart folder is open, it is the grid.
+  const gallerySearch = useGallerySearch<{ id: string }>({
+    endpoint: `/api/events/${event.id}/search`,
+    initial: initialSearch,
+    toItems: searchIds,
+  });
+  const searching = gallerySearch.selection !== null;
 
   const pending = mediaItems.filter((item) => item.status === "pending");
   const approved = mediaItems.filter((item) => item.status === "approved");
@@ -180,8 +218,13 @@ export function EventDashboard({
   const currentFolder = folderView !== "all" && folderView !== "unfiled" && !viewMoment ? folderView : null;
   // Inside a folder, what is filed there itself; what is in folders beneath it
   // is a click away on their cards.
-  const shownApproved =
-    folderView === "all"
+  const byId = new Map(approved.map((item) => [item.id, item]));
+  const searchMatches = (gallerySearch.results ?? [])
+    .map((result) => byId.get(result.id))
+    .filter((item): item is DashboardMedia => Boolean(item));
+  const shownApproved = searching
+    ? searchMatches
+    : folderView === "all"
       ? approved
       : folderView === "unfiled"
         ? inFolder(approved, folders, null)
@@ -719,7 +762,7 @@ export function EventDashboard({
                       >
                         {shownApproved.length > 0 && shownApproved.every((item) => selectedIds.has(item.id))
                           ? "Deselect all"
-                          : folderView === "all"
+                          : folderView === "all" && !searching
                             ? "Select all"
                             : "Select all here"}
                       </button>
@@ -746,7 +789,31 @@ export function EventDashboard({
                   </div>
                 )}
               </div>
-              {showFolders && (
+              <GallerySearchBar
+                search={gallerySearch}
+                copy={SEARCH_COPY}
+                className="mb-5"
+                actions={
+                  canManageAlbums && gallerySearch.selection ? (
+                    <SmartFolderActions
+                      key={selectionKey(gallerySearch.selection)}
+                      eventId={event.id}
+                      selection={gallerySearch.selection}
+                      onSaved={() => void gallerySearch.refresh()}
+                      onRenamed={(name) => {
+                        const open = gallerySearch.selection;
+                        if (open?.kind === "folder") void gallerySearch.run({ ...open, name });
+                        void gallerySearch.refresh();
+                      }}
+                      onDeleted={() => {
+                        gallerySearch.clear();
+                        void gallerySearch.refresh();
+                      }}
+                    />
+                  ) : null
+                }
+              />
+              {!searching && showFolders && (
                 <div className="mb-5">
                   <FolderBrowser
                     eventId={event.id}
@@ -767,7 +834,7 @@ export function EventDashboard({
                   />
                 </div>
               )}
-              {approved.length === 0 ? (
+              {searching && shownApproved.length === 0 ? null : approved.length === 0 ? (
                 <Card className="text-center text-sm text-muted">
                   No approved photos or videos yet. Share the QR code to get started.
                 </Card>
@@ -836,6 +903,7 @@ export function EventDashboard({
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.75fr)]">
             <EventSettingsForm
               event={event}
+              offerScenes={visionEnabled}
               canManageClients={canManageClients}
               canCustomizeGallery={canCustomizeGallery}
               canCustomizeQr={canCustomizeQr}

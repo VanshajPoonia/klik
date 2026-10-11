@@ -297,6 +297,7 @@ export default async function AdminPage() {
             eventId: row.eventId,
             eventSuspended: row.eventSuspended,
             organizerNotified: row.organizerNotifiedAt ? shortDate(row.organizerNotifiedAt) : null,
+            screened: row.screened,
             eventName: row.eventName,
             eventSlug: row.eventSlug,
             held: row.held,

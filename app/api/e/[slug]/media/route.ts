@@ -25,7 +25,16 @@ import {
 import { acceptDerivedObject } from "@/lib/derived-objects";
 import { MAX_POSTER_BYTES, MAX_THUMB_BYTES } from "@/lib/thumbnail-size";
 import { renderThumbnail } from "@/lib/thumbnail";
-import { enqueue, enqueueAnalysis, enqueueMomentsRefresh, enqueueThumbnail, enqueueVideoScrub, kickJobRunner } from "@/lib/jobs";
+import {
+  enqueue,
+  enqueueAnalysis,
+  enqueueDescription,
+  enqueueMomentsRefresh,
+  enqueueThumbnail,
+  enqueueVideoScrub,
+  kickJobRunner,
+} from "@/lib/jobs";
+import { isVisionConfigured } from "@/lib/ai/workers-ai";
 import { claimUsageWarning } from "@/lib/notices";
 import { spendShot } from "@/lib/disposable";
 import { liveChallengeId } from "@/lib/challenges";
@@ -689,6 +698,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   // AI-7, AI-8: measured once, after the response, for tidying and highlights.
   if (row.kind === "photo") {
     await enqueueAnalysis(row.id).catch((error) => reportError("upload.analysis_enqueue_failed", error));
+  }
+
+  // AI-2, AI-6: described for search and scenes, and screened. Only with a
+  // key; the daily backfill catches up whatever lands before one.
+  if (isVisionConfigured() && (row.kind === "photo" || row.posterPathname)) {
+    await enqueueDescription(row.id).catch((error) => reportError("upload.describe_enqueue_failed", error));
   }
 
   // AI-1: every photo can move the event's moments. Collapsed while a refresh

@@ -135,6 +135,13 @@ const schema = z.object({
     z.string().regex(/^https:\/\/[^@\s]+@[^/\s]+\/\d+$/, "NEXT_PUBLIC_SENTRY_DSN must look like https://<key>@<host>/<project>"),
   ),
 
+  // AI-2, AI-4, AI-6: Cloudflare Workers AI, for describing photos (search,
+  // scenes, smart folders) and screening them. A token with Workers AI Read.
+  // Without it nothing is described, searched or screened, and the screens
+  // that need it do not appear. The account is R2's unless set separately.
+  CLOUDFLARE_AI_API_TOKEN: optionalString(z.string().min(20)),
+  CLOUDFLARE_ACCOUNT_ID: optionalString(z.string().regex(/^[0-9a-f]{32}$/, "CLOUDFLARE_ACCOUNT_ID is 32 hex characters")),
+
   // A URL the purge cron pings after a successful run, for a heartbeat monitor
   // (UptimeRobot, Better Stack, Healthchecks.io). Optional: without it the cron
   // behaves exactly as before. Its absence is the normal state locally, which

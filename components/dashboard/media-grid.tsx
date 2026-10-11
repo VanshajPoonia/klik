@@ -23,6 +23,8 @@ import type { SignedMediaUrls } from "@/lib/media-urls";
 export type DashboardMedia = Media & Partial<SignedMediaUrls> & {
   /** Open reports from guests (TRS-1). Absent or 0 when there are none. */
   openReports?: number;
+  /** AI-6: why Klik's screening is holding it, while it waits for the host. */
+  screening?: string | null;
   /** MED-10: a watermarked proof, and whether it is the viewer's own to release. */
   proof?: "mine" | "locked" | null;
 };
@@ -177,6 +179,16 @@ export function MediaGrid({
                 <span className="absolute inset-x-2 bottom-2 flex items-center gap-1 rounded-full bg-red-500/85 px-2 py-1 text-[10px] font-medium text-paper">
                   <Flag className="h-3 w-3" aria-hidden="true" />
                   Reported{item.openReports > 1 ? ` by ${item.openReports}` : ""}
+                </span>
+              ) : !selectionMode && item.screening ? (
+                // AI-6. Why, in words, on hover and to a screen reader.
+                <span
+                  className="absolute inset-x-2 bottom-2 flex items-center gap-1 rounded-full bg-red-500/85 px-2 py-1 text-[10px] font-medium text-paper"
+                  title={`Held by Klik's screening: ${item.screening}. Approve it if it is fine.`}
+                >
+                  <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+                  <span className="truncate">Held by screening</span>
+                  <span className="sr-only">: {item.screening}</span>
                 </span>
               ) : null}
               {badge && !selectionMode && (

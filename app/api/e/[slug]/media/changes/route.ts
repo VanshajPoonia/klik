@@ -8,6 +8,7 @@ import { canViewMedia, rollUndeveloped } from "@/lib/media-access";
 import { toGalleryMedia } from "@/lib/gallery-media";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
+import { gallerySearch } from "@/lib/search";
 import { challengeBoard } from "@/lib/challenges";
 import { eventPlan } from "@/lib/license";
 import { canUseAlbums } from "@/lib/plans";
@@ -59,16 +60,21 @@ async function folderUpdate(event: Event, isManager: boolean) {
 
 /**
  * Everything a phone starting over needs beside the media: the switches
- * (MED-9), the folders (MED-4), the moments (AI-1) and the challenges (GRW-3).
+ * (MED-9), the folders (MED-4), the moments (AI-1), the challenges (GRW-3),
+ * and search with its scenes and smart folders (AI-2, AI-4).
  * Each of those changes by stamping the event, which is what sends a resync.
  */
 async function resyncPayload(event: Event, at: string, isManager: boolean, guestId: string | null) {
-  const [folders, moments, board] = await Promise.all([
+  const [folders, moments, board, search] = await Promise.all([
     folderUpdate(event, isManager),
     !isManager && rollUndeveloped(event) ? Promise.resolve([]) : galleryMoments(event, { isManager }),
     challengeBoard(event, { guestId }),
+    // AI-2, AI-4: a smart folder added or a host turning scenes off.
+    !isManager && rollUndeveloped(event)
+      ? Promise.resolve({ searchable: false, scenes: [], folders: [] })
+      : gallerySearch(event, { isManager, guestId }),
   ]);
-  return { at, resync: true, features: galleryFeatures(event), folders, moments, board };
+  return { at, resync: true, features: galleryFeatures(event), folders, moments, board, search };
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {

@@ -29,6 +29,8 @@ psql -h 127.0.0.1 -p "$PORT" -U postgres -tc \
   || psql -h 127.0.0.1 -p "$PORT" -U postgres -q -c "CREATE DATABASE klik_test"
 
 export TEST_DATABASE_URL="postgres://postgres@127.0.0.1:$PORT/klik_test"
+# Before the push, which creates media_vision's vector column.
+psql "$TEST_DATABASE_URL" -q -c "CREATE EXTENSION IF NOT EXISTS vector" >/dev/null
 npx drizzle-kit push --config=drizzle.test.config.ts --force >/dev/null
 
 # What push cannot express: CHECK constraints, partial indexes and triggers.
