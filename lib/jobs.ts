@@ -75,6 +75,8 @@ export const JOB_PAYLOADS = {
   "media.backfill_transcodes": z.object({}),
   /** OPS-1: delete the Stream copies of videos that are gone. */
   "stream.reap": z.object({}),
+  /** GRW-6: unpaid checkouts, lost callbacks, and addresses past their keep. */
+  "prints.reconcile": z.object({}),
   /** VEN-3: take removed custom domains off the Vercel project. */
   "domains.reap": z.object({}),
   /** VEN-3: look again at custom domains that are not live yet. */
@@ -278,6 +280,8 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     // VEN-3: removed domains off the project, and pending ones looked at again.
     { kind: "domains.reap", payload: {} },
     { kind: "domains.recheck", payload: {} },
+    // GRW-6.
+    { kind: "prints.reconcile", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

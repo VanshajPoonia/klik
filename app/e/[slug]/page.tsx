@@ -36,6 +36,7 @@ import { claimGuestCookies } from "@/lib/guest-accounts";
 import { reactorFor, withViewerReactions } from "@/lib/reactions";
 import { galleryFolderPayload, galleryMoments } from "@/lib/folders";
 import { gallerySearch } from "@/lib/search";
+import { isPrintsAvailable } from "@/lib/prints";
 import { linkedMediaId } from "@/lib/media-share";
 import { activeKiosk } from "@/lib/kiosks";
 import { challengeBoard } from "@/lib/challenges";
@@ -295,6 +296,7 @@ export default async function GuestEventPage({
       linked={linked}
       board={board}
       search={search}
+      prints={isPrintsAvailable() && event.printsEnabled}
       linkedMissing={Boolean(linkedId && !linked)}
     />,
   );

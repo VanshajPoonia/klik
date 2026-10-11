@@ -154,6 +154,14 @@ const schema = z.object({
   VERCEL_API_TOKEN: optionalString(z.string().min(20)),
   VERCEL_TEAM_ID: optionalString(z.string().regex(/^team_/, "VERCEL_TEAM_ID starts team_")),
 
+  // GRW-6: Prodigi prints and ships print orders a person at Klik approves.
+  // PRODIGI_ENV=live sends them to the real printer; anything else is the
+  // sandbox. Prints also need STRIPE_SECRET_KEY, since guests pay for them.
+  PRODIGI_API_KEY: optionalString(z.string().min(10)),
+  PRODIGI_ENV: optionalString(z.string().regex(/^(sandbox|live)$/, "PRODIGI_ENV is sandbox or live")),
+  // Stripe Tax on print orders, once Klik is registered to collect it.
+  STRIPE_PRINTS_AUTOMATIC_TAX: optionalString(z.string().regex(/^[01]$/, "STRIPE_PRINTS_AUTOMATIC_TAX is 0 or 1")),
+
   // AI-5: Replicate, for "sharpen and enlarge". Without it the button never
   // shows. The version pin and webhook secret are optional overrides: by
   // default Klik asks Replicate for both.

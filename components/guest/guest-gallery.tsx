@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { nanoid } from "nanoid";
-import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, Play, Stamp } from "lucide-react";
+import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, Play, Printer, Stamp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { ensureContrast, galleryPalette, readableOn } from "@/lib/color";
@@ -29,6 +29,7 @@ import { childrenOf, flattenFolders, folderPath, inFolder } from "@/lib/folder-t
 import type { ChallengeBoard } from "@/lib/challenges";
 import type { GallerySearchPayload } from "@/lib/search";
 import { GallerySearchBar, useGallerySearch } from "@/components/media/gallery-search";
+import { PrintCartSheet, usePrintCart } from "@/components/guest/print-cart";
 
 /** MED-4: a folder as the gallery holds it. See `galleryFolderPayload`. */
 interface GalleryFolder {
@@ -154,6 +155,7 @@ export function GuestGallery({
   proofs = null,
   keepPhotoDetails = false,
   search: initialSearch = null,
+  prints = false,
 }: {
   event: PublicEvent;
   isOwner: boolean;
@@ -191,6 +193,8 @@ export function GuestGallery({
   keepPhotoDetails?: boolean;
   /** AI-2, AI-4: whether the gallery can be searched, its scenes and smart folders. */
   search?: GallerySearchPayload | null;
+  /** GRW-6: prints are on for Klik and for this gallery. */
+  prints?: boolean;
 }) {
   // TRS-3: the guest's language, chosen by the page.
   const { t, locale } = useGuestCopy();
@@ -259,6 +263,19 @@ export function GuestGallery({
     toItems: searchItems,
   });
   const { applyChanges: applySearchChanges, setPayload: setSearchPayload } = gallerySearch;
+  // GRW-6. Kept on this phone until paid.
+  const printCart = usePrintCart(event.id);
+  const [printSheetOpen, setPrintSheetOpen] = useState(false);
+  const [printNotice, setPrintNotice] = useState(false);
+  useEffect(() => {
+    // Back from a checkout that was not finished.
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("prints") !== "cancelled") return;
+    url.searchParams.delete("prints");
+    window.history.replaceState(window.history.state, "", url);
+    const timer = window.setTimeout(() => setPrintNotice(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const [uploadAlbumId, setUploadAlbumId] = useState<string>("");
   // GRW-3. Kept fresh by the sync, which sends it with any change to photos.
   const [board, setBoard] = useState<ChallengeBoard>(initialBoard ?? { challenges: [], done: [], leaderboard: null });
@@ -1356,6 +1373,17 @@ export function GuestGallery({
             // A guest's own upload is theirs to send on, whatever the setting.
             canTakeFile: (item) => event.downloadsEnabled || isOwner || Boolean(item.mine),
           }}
+          // GRW-6: a print is a copy, so it follows the download rule, and
+          // never a watermarked proof.
+          print={
+            prints
+              ? {
+                  canPrint: (item) => !item.proof && (event.downloadsEnabled || isOwner || Boolean(item.mine)),
+                  add: (item, product, copies) => printCart.add(item.id, product, copies),
+                  checkout: () => setPrintSheetOpen(true),
+                }
+              : undefined
+          }
           social={
             features.reactions || features.comments
               ? {
@@ -1369,6 +1397,36 @@ export function GuestGallery({
                 }
               : undefined
           }
+        />
+      )}
+
+      {/* GRW-6: the prints waiting to be paid for, bottom left, clear of the upload button. */}
+      {prints && printCart.count > 0 && !printSheetOpen && viewerIndex < 0 && (
+        <div className="fixed bottom-4 left-4 z-30 flex flex-col items-start gap-2">
+          {printNotice && (
+            <p className="max-w-xs rounded-2xl border border-canvas-line bg-canvas-raised px-3 py-2 text-xs text-paper" role="status">
+              {t.prints.cancelled}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setPrintNotice(false);
+              setPrintSheetOpen(true);
+            }}
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-canvas-line bg-canvas-raised px-4 text-sm font-medium text-paper shadow-none transition-transform active:scale-95"
+          >
+            <Printer className="h-4 w-4 text-volt" aria-hidden="true" />
+            {t.prints.count(printCart.count)}
+          </button>
+        </div>
+      )}
+      {printSheetOpen && (
+        <PrintCartSheet
+          slug={event.slug}
+          cart={printCart}
+          thumbs={new Map(items.map((item) => [item.id, item.thumbSrc ?? null]))}
+          onClose={() => setPrintSheetOpen(false)}
         />
       )}
     </div>

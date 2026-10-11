@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalShell } from "@/components/legal/legal-shell";
+import { optionalProcessors } from "@/lib/processors";
+import { REDACT_AFTER_DAYS } from "@/lib/print-catalog";
 import { CURRENT_CONSENT } from "@/lib/consent";
 import {
   BACKUP_EXPIRY_DAYS,
@@ -145,6 +147,27 @@ export default function PrivacyPage() {
         changes it will be an opt-in feature announced in advance, not a silent update to this page.
       </p>
 
+      <h3>Search, scenes and screening</h3>
+      <p>
+        When search is in use, each photo (or a video&rsquo;s first frame) is described in one plain
+        sentence and a few scene words such as &ldquo;cake&rdquo; or &ldquo;dancing&rdquo;, so people in the
+        gallery can find photos by what is in them. The description never names anyone or guesses
+        their age, race or anything else about who they are. It is kept with the photo, deleted with
+        it, and included when you download what you shared. A search only ever finds photos the
+        person searching could already see. The same pass checks for nudity, gore and hate symbols;
+        a photo it flags is hidden until the organizer looks at it, and our team may look too.
+      </p>
+
+      <h3>Prints</h3>
+      <p>
+        If you order prints, Stripe takes the payment and collects the address to ship to. We keep
+        your email, that address and what you ordered so the order can be printed, shipped and, if
+        needed, refunded, and share the photos and the address with Prodigi, which prints and posts
+        them. A person at {SERVICE_NAME} looks at every order before it is printed. Your email and
+        address are deleted {REDACT_AFTER_DAYS} days after the order is finished; the amount and the
+        date are kept for our accounts.
+      </p>
+
       <h2>What we collect from organizers</h2>
       <ul>
         <li>Name, email address and a password, which is stored only as a bcrypt hash.</li>
@@ -238,6 +261,18 @@ export default function PrivacyPage() {
         <li>
           <strong>Stripe</strong> processes payments and holds the card details we never see.
         </li>
+      </ul>
+      <p>
+        These are used only for a feature that is switched on, and each says whether it is in use
+        today:
+      </p>
+      <ul>
+        {optionalProcessors().map((processor) => (
+          <li key={processor.name}>
+            <strong>{processor.name}</strong> {processor.job}{" "}
+            <em>{processor.active ? "In use." : "Not in use yet."}</em>
+          </li>
+        ))}
       </ul>
       <p>
         That is the complete list. <strong>We do not sell personal information, we do not share it

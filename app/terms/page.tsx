@@ -95,6 +95,18 @@ export default function TermsPage() {
         than you hoped.
       </p>
 
+      <h2>Prints</h2>
+      <p>
+        Where a gallery offers prints, you can order them of photos you are allowed to download.
+        Prices, shipping and the total are shown before you pay, and Stripe takes the payment. We
+        ship to addresses in the United States only. A person at Klik looks at every order before it
+        is printed and may decline one, for example a photo that breaks the rules below or one that
+        would print badly; a declined order is refunded in full. Once printed, an order cannot be
+        cancelled. If prints arrive damaged or wrong, tell us within 30 days and we will reprint or
+        refund them. Ordering a print of a photo does not give you any rights in it beyond keeping
+        the print.
+      </p>
+
       <h2>Referral credit</h2>
       <p>
         When someone signs up through your referral link and their first event goes live, you each

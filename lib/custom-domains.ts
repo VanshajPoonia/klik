@@ -247,7 +247,7 @@ export async function venueForHost(hostname: string): Promise<string | null> {
 /** Paths a custom domain serves; everything else goes to Klik's own domain. */
 const GUEST_PATHS = [
   /^\/$/,
-  /^\/(e|v|s|k)\//,
+  /^\/(e|v|s|k|prints)\//,
   /^\/api\/(e|s|upload|kiosk|recap)(\/|$)/,
   /^\/api\/auth\/session$/,
   /^\/api\/unsubscribe$/,

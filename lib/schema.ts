@@ -348,6 +348,8 @@ export const events = pgTable(
     momentsEnabled: boolean("moments_enabled").notNull().default(true),
     // AI-2: whether guests get search and scenes. The team always has them.
     scenesEnabled: boolean("scenes_enabled").notNull().default(true),
+    // GRW-6: whether guests may order prints, once prints are switched on.
+    printsEnabled: boolean("prints_enabled").notNull().default(true),
     // GRW-3: a ranked list of who has shared most, by display name. Off until
     // the host turns it on. See lib/challenges.ts.
     leaderboardEnabled: boolean("leaderboard_enabled").notNull().default(false),
@@ -977,6 +979,73 @@ export const mediaReports = pgTable("media_reports", {
 });
 
 export type MediaReport = typeof mediaReports.$inferSelect;
+
+export const PRINT_ORDER_STATUSES = [
+  "awaiting_payment",
+  "paid",
+  "submitted",
+  "shipped",
+  "cancelled",
+  "refunded",
+  "expired",
+  "failed",
+] as const;
+export type PrintOrderStatus = (typeof PRINT_ORDER_STATUSES)[number];
+
+export interface PrintOrderItem {
+  mediaId: string;
+  product: string;
+  copies: number;
+  unitCents: number;
+}
+
+export interface PrintRecipient {
+  name: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
+/** GRW-6: one print order. drizzle/0052_prints.sql; lib/prints.ts. */
+export const printOrders = pgTable(
+  "print_orders",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id").references(() => events.id, { onDelete: "set null" }),
+    guestId: text("guest_id").references(() => guests.id, { onDelete: "set null" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    status: text("status").$type<PrintOrderStatus>().notNull().default("awaiting_payment"),
+    items: jsonb("items").$type<PrintOrderItem[]>().notNull(),
+    subtotalCents: integer("subtotal_cents").notNull(),
+    shippingCents: integer("shipping_cents").notNull(),
+    taxCents: integer("tax_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull().default(0),
+    currency: text("currency").notNull().default("usd"),
+    email: text("email"),
+    recipient: jsonb("recipient").$type<PrintRecipient>(),
+    stripeSessionId: text("stripe_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    prodigiOrderId: text("prodigi_order_id"),
+    prodigiStage: text("prodigi_stage"),
+    tracking: jsonb("tracking").$type<Array<{ carrier: string | null; number: string | null; url: string | null }>>(),
+    callbackToken: text("callback_token").notNull(),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    note: text("note"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    shippedAt: timestamp("shipped_at", { withTimezone: true }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    redactedAt: timestamp("redacted_at", { withTimezone: true }),
+  },
+  (table) => [index("print_orders_status_idx").on(table.status, table.createdAt)],
+);
+
+export type PrintOrder = typeof printOrders.$inferSelect;
 
 /** VEN-3: a venue's own domain. drizzle/0051_custom_domains.sql; lib/custom-domains.ts. */
 export const customDomains = pgTable("custom_domains", {

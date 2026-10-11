@@ -57,6 +57,8 @@ const TABLES = [
   // OPS-1. Both stand alone.
   "stream_deletions",
   "provider_secrets",
+  // GRW-6, before `events`, `guests` and `users`.
+  "print_orders",
   // VEN-3, before `users`; the removal queue stands alone.
   "custom_domains",
   "domain_removals",

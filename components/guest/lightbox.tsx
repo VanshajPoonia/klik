@@ -13,6 +13,7 @@ import {
   Pause,
   Pencil,
   Play,
+  Printer,
   Share2,
   Sparkles,
   Trash2,
@@ -26,6 +27,7 @@ import { fetchMediaBlob } from "@/lib/media-share";
 import { ProofNote } from "@/components/guest/proof-note";
 import { useGuestCopy } from "@/components/guest/guest-copy";
 import { StreamVideo } from "@/components/media/stream-video";
+import { PRINT_PRODUCTS, printDpi, printQuality } from "@/lib/print-catalog";
 
 // CAM-2. A few hundred kilobytes that only someone editing should download,
 // and it reaches for `window` the moment it loads.
@@ -54,6 +56,9 @@ export interface LightboxItem {
   proof?: boolean | "mine" | "locked" | null;
   /** OPS-1: the video has a Stream copy to play from. */
   stream?: boolean;
+  /** GRW-6: for how sharp a print will be. */
+  width?: number | null;
+  height?: number | null;
 }
 
 /** CAM-2: editing a photo, which saves an edited copy and leaves the original. */
@@ -74,6 +79,14 @@ export interface LightboxSharpen {
   left: number;
   /** Starts it. Resolves to an error message, or null when it started. */
   start: (item: LightboxItem) => Promise<string | null>;
+}
+
+/** GRW-6: ordering prints of a photo, into the gallery's cart. */
+export interface LightboxPrint {
+  canPrint: (item: LightboxItem) => boolean;
+  /** Adds copies to the cart and answers how many prints it now holds. */
+  add: (item: LightboxItem, product: string, copies: number) => number;
+  checkout: () => void;
 }
 
 /** CAM-3: what the share sheet needs to know about the event and the viewer. */
@@ -140,6 +153,7 @@ export function Lightbox({
   share,
   edit,
   sharpen,
+  print,
 }: {
   items: LightboxItem[];
   index: number;
@@ -165,6 +179,7 @@ export function Lightbox({
   share?: LightboxShare;
   edit?: LightboxEdit;
   sharpen?: LightboxSharpen;
+  print?: LightboxPrint;
 }) {
   // TRS-3: the guest's language; the dashboard, outside any provider, gets English.
   const { t } = useGuestCopy();
@@ -206,6 +221,11 @@ export function Lightbox({
   const [sharpenFor, setSharpenFor] = useState<string | null>(null);
   const [sharpenBusy, setSharpenBusy] = useState(false);
   const [sharpenMessage, setSharpenMessage] = useState<string | null>(null);
+  // GRW-6: the "order a print" panel.
+  const [printFor, setPrintFor] = useState<string | null>(null);
+  const [printSize, setPrintSize] = useState<string>(PRINT_PRODUCTS[0].key);
+  const [printCopies, setPrintCopies] = useState(1);
+  const [printAdded, setPrintAdded] = useState<number | null>(null);
   const sharingOpen = Boolean(item && sharingFor === item.id);
   const photoUrl = item
     ? item.src && !expiredIds.has(item.id)
@@ -300,6 +320,7 @@ export function Lightbox({
 
   const canEdit = Boolean(edit && item.kind === "photo" && edit.canEdit(item));
   const canSharpen = Boolean(sharpen && item.kind === "photo" && sharpen.canSharpen(item));
+  const canPrint = Boolean(print && item.kind === "photo" && print.canPrint(item));
   /** Fetches the photo's bytes, then opens the editor on them. */
   const openEditor = async () => {
     if (!edit || editLoading) return;
@@ -427,6 +448,22 @@ export function Lightbox({
               ) : (
                 <Pencil className="h-5 w-5" aria-hidden="true" />
               )}
+            </button>
+          )}
+          {canPrint && (
+            <button
+              type="button"
+              onClick={() => {
+                setPrintAdded(null);
+                setPrintCopies(1);
+                setPrintFor(printFor === item.id ? null : item.id);
+              }}
+              aria-expanded={printFor === item.id}
+              aria-label={t.prints.order}
+              title={t.prints.order}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
+            >
+              <Printer className="h-5 w-5" aria-hidden="true" />
             </button>
           )}
           {canSharpen && (
@@ -631,7 +668,7 @@ export function Lightbox({
                         value={value}
                         checked={reportReason === value}
                         onChange={() => setReportReason(value)}
-                        className="accent-[var(--color-volt)]"
+                        className="accent-volt"
                       />
                       {t.viewer.reportReasons[value]}
                     </label>
@@ -718,6 +755,89 @@ export function Lightbox({
                 className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper"
               >
                 {t.viewer.keep}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {print && printFor === item.id && (
+          <div
+            role="dialog"
+            aria-label={t.prints.order}
+            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+          >
+            {printAdded !== null ? (
+              <p className="text-sm text-paper" role="status">
+                {t.prints.added(printAdded)}
+              </p>
+            ) : (
+              <>
+                <fieldset className="space-y-2">
+                  <legend className="mb-1 text-sm text-paper">{t.prints.chooseSize}</legend>
+                  {PRINT_PRODUCTS.map((product) => {
+                    const quality = printQuality(printDpi(item.width ?? null, item.height ?? null, product));
+                    return (
+                      <label
+                        key={product.key}
+                        className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 text-sm ${
+                          printSize === product.key ? "border-volt text-paper" : "border-white/15 text-paper/80"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="print-size"
+                            value={product.key}
+                            checked={printSize === product.key}
+                            onChange={() => setPrintSize(product.key)}
+                            className="accent-volt"
+                          />
+                          {product.label}
+                          {t.prints.quality[quality] && (
+                            <span className={`text-xs ${quality === "soft" ? "text-red-300" : "text-muted"}`}>{t.prints.quality[quality]}</span>
+                          )}
+                        </span>
+                        <span className="tabular-nums">${(product.priceCents / 100).toFixed(2)}</span>
+                      </label>
+                    );
+                  })}
+                </fieldset>
+                <div className="flex items-center gap-2 text-sm text-paper">
+                  <span className="mr-auto text-muted">{t.prints.copies}</span>
+                  <button type="button" aria-label={t.prints.fewer} disabled={printCopies <= 1} onClick={() => setPrintCopies((n) => Math.max(1, n - 1))} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 disabled:opacity-40">
+                    −
+                  </button>
+                  <span className="w-6 text-center tabular-nums">{printCopies}</span>
+                  <button type="button" aria-label={t.prints.more} disabled={printCopies >= 20} onClick={() => setPrintCopies((n) => Math.min(20, n + 1))} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 disabled:opacity-40">
+                    +
+                  </button>
+                </div>
+              </>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {printAdded === null ? (
+                <button
+                  type="button"
+                  onClick={() => setPrintAdded(print.add(item, printSize, printCopies))}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-volt px-4 text-sm font-medium text-on-volt"
+                >
+                  <Printer className="h-4 w-4" aria-hidden="true" />
+                  {t.prints.add}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintFor(null);
+                    print.checkout();
+                  }}
+                  className="min-h-11 rounded-full bg-volt px-4 text-sm font-medium text-on-volt"
+                >
+                  {t.prints.checkout}
+                </button>
+              )}
+              <button type="button" onClick={() => setPrintFor(null)} className="min-h-11 rounded-full border border-white/15 px-4 text-sm text-paper">
+                {printAdded === null ? t.common.cancel : t.viewer.ok}
               </button>
             </div>
           </div>

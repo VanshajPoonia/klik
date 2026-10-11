@@ -23,6 +23,7 @@ deliberately not automated, and what to do next.
 | A failed Venue payment | **A 7-day grace a superadmin starts** on the grant (PAY-8), with three emails to the organizer; recording the payment ends it, and the daily reconcile lapses it otherwise |
 | Receipts and card changes | **Stripe's**, through its no-code customer portal link (`STRIPE_BILLING_PORTAL_URL`) when set, a person otherwise. Shown on `/dashboard/billing` |
 | A new account's capability | **Drafts only.** It can create events and set them up; none goes live, shows a QR code or takes a guest until a superadmin grants something |
+| Print orders (GRW-6) | **Built 2026-10-11, off until `STRIPE_SECRET_KEY` and `PRODIGI_API_KEY` are both set.** Guests pay on Stripe's hosted checkout; a superadmin sends each paid order to Prodigi or refunds it on `/admin`. See "Prints" below |
 
 ## The two Stripe accounts
 
@@ -376,6 +377,53 @@ refunds or grants by itself.
   lapses the plan at the end: galleries stop taking photos and stay viewable and
   downloadable, and nothing is deleted. Stripe's own failed-payment emails and
   Smart Retries are worth turning on as well; they cost nothing.
+
+## Prints (GRW-6), 2026-10-11
+
+The one place Klik takes money for something other than a plan, built to the
+same rule: **no payment does anything by itself.**
+
+```
+guest opens a photo they could download -> "Order a print"
+  -> size and copies, into a cart kept on their phone
+  -> POST /api/e/<slug>/prints              lines only; Klik prices them
+  -> a print_orders row, awaiting_payment
+  -> Stripe Checkout Session (hosted, mode payment, US shipping only,
+     flat $5.99 shipping, metadata.printOrderId)
+  -> guest pays on Stripe's page
+  -> back to /prints/<id>?k=<key>&session_id=…
+     Klik retrieves the session from Stripe; paid -> status paid,
+     email and address copied from Stripe, buyer and ALERT_EMAIL told
+
+later:
+superadmin -> /admin, Print orders: every photo, the address, the total,
+              "What will Prodigi charge?" for the margin
+           -> "Send to the printer" (Prodigi order, idempotent on the order id)
+              or "Refund in full" (Stripe refund, buyer told)
+Prodigi -> callback with a per-order secret -> Klik reads the order from
+           Prodigi -> shipped, tracking emailed to the buyer
+```
+
+- **The browser names no price.** It sends media ids, a size key and copies;
+  `lib/print-catalog.ts` prices them. Copies are capped at 20 a line, 50 lines.
+- **Paid is Stripe's word, asked for by Klik.** The return page, the admin
+  queue's recheck and the daily `prints.reconcile` each call
+  `checkout.sessions.retrieve`; the webhook stays unused, as it is for plans.
+  Only the first call that finds it paid writes or emails.
+- **A person sends every order.** The same reasons as grants, plus two of its
+  own: a stolen card printing someone's photos, and a photo that should not be
+  printed at all. A photo deleted or held since the order cannot be sent.
+- **Prices** (Klik's, in `lib/print-catalog.ts`): 4×6 $2.99, 5×7 $5.99, 8×10
+  $12.99, shipping $5.99 an order. Prodigi's cost shows before sending.
+- **Tax.** Off, like the plans (`automatic_tax` is not set). Setting
+  `STRIPE_PRINTS_AUTOMATIC_TAX=1` turns on Stripe Tax for prints, prices tax
+  exclusive, once Klik is registered to collect sales tax on physical goods.
+  Whether it must is a question for an accountant: see LAUNCH.md.
+- **Personal data.** Email and address come from Stripe and are deleted 120
+  days after the order closes (`REDACT_AFTER_DAYS`); amount and date stay.
+- **Prodigi's sandbox first.** Without `PRODIGI_ENV=live`, orders go to the
+  sandbox, which accepts them and prints nothing. `/admin` says which, and
+  "Check the catalogue" confirms each SKU exists and ships to the US.
 
 ## What each piece is for
 

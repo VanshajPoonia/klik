@@ -45,7 +45,9 @@ export type AuditAction =
   | "event.unsuspended"
   | "report.organizer_notified"
   | "domain.added"
-  | "domain.removed";
+  | "domain.removed"
+  | "prints.submitted"
+  | "prints.refunded";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;

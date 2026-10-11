@@ -18,6 +18,11 @@ import { AdminNav } from "@/components/admin/admin-nav";
 import { ActivationRequests } from "@/components/admin/activation-requests";
 import { ReportsQueue } from "@/components/admin/reports-queue";
 import { PausedGalleries } from "@/components/admin/paused-galleries";
+import { PrintOrders, type PrintOrderRow } from "@/components/admin/print-orders";
+import { isPrintsAvailable, listPrintOrders, printDpi, printQuality, productByKey } from "@/lib/prints";
+import { prodigiIsLive } from "@/lib/prodigi";
+import { signObjectUrl } from "@/lib/media-urls";
+import type { PrintOrder } from "@/lib/schema";
 import { REPORT_REASON_LABELS, listOpenReports } from "@/lib/reports";
 import { COMMENT_REPORT_LABELS, listOpenCommentReports, type CommentReportReason } from "@/lib/comments";
 import { CommentReportsQueue } from "@/components/admin/comment-reports-queue";
@@ -64,6 +69,9 @@ export default async function AdminPage() {
   if (!session?.user) redirect("/login");
   if (session.user.role !== "superadmin") redirect("/dashboard");
 
+  // GRW-6: the print queue, once prints are switched on. Photos are signed
+  // here so the person deciding sees exactly what will be printed.
+  const prints = isPrintsAvailable() ? await printQueue() : null;
   const [pending, signups, requests, reports, commentReports, paused] = await Promise.all([
     getPendingActivations(),
     getPendingSignups(),
@@ -323,6 +331,7 @@ export default async function AdminPage() {
             latest: shortDate(row.latest),
           }))}
         />
+        {prints && <PrintOrders waiting={prints.waiting} recent={prints.recent} live={prodigiIsLive()} />}
         <PausedGalleries
           rows={paused.map((row) => ({
             eventId: row.eventId,
@@ -464,4 +473,40 @@ export default async function AdminPage() {
       </div>
     </div>
   );
+}
+
+async function printQueue(): Promise<{ waiting: PrintOrderRow[]; recent: PrintOrderRow[] }> {
+  const { waiting, recent, photos, events: eventRows } = await listPrintOrders();
+  const photoById = new Map(photos.map((photo) => [photo.id, photo]));
+  const eventName = new Map(eventRows.map((event) => [event.id, event.name]));
+  const toRow = async (order: PrintOrder): Promise<PrintOrderRow> => ({
+    id: order.id,
+    status: order.status,
+    eventName: order.eventId ? (eventName.get(order.eventId) ?? null) : null,
+    email: order.email,
+    address: order.recipient
+      ? [order.recipient.name, order.recipient.line1, order.recipient.line2, `${order.recipient.city} ${order.recipient.state} ${order.recipient.postalCode}`, order.recipient.country]
+          .filter(Boolean)
+          .join(", ")
+      : null,
+    totalCents: order.totalCents,
+    paid: order.paidAt ? order.paidAt.toISOString().slice(0, 16).replace("T", " ") : null,
+    stage: order.prodigiStage,
+    error: order.error,
+    lines: await Promise.all(
+      order.items.map(async (item) => {
+        const photo = photoById.get(item.mediaId);
+        const product = productByKey(item.product);
+        const missing = !photo || Boolean(photo.deletedAt) || Boolean(photo.legalHoldAt);
+        return {
+          thumb: photo && !missing ? await signObjectUrl(photo.thumbPathname ?? photo.blobPathname, "image/jpeg", Date.now()) : null,
+          label: product?.label ?? item.product,
+          copies: item.copies,
+          quality: product && photo ? printQuality(printDpi(photo.width, photo.height, product)) : "unknown",
+          missing,
+        };
+      }),
+    ),
+  });
+  return { waiting: await Promise.all(waiting.map(toRow)), recent: await Promise.all(recent.map(toRow)) };
 }

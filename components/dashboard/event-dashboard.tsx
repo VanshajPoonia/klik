@@ -109,6 +109,7 @@ export function EventDashboard({
   search: initialSearch = null,
   visionEnabled = false,
   canEnhance = false,
+  printsAvailable = false,
 }: {
   event: OrganizerEvent;
   initialMedia: DashboardMedia[];
@@ -157,6 +158,8 @@ export function EventDashboard({
   visionEnabled?: boolean;
   /** AI-5: Replicate has a key and this person moderates media. */
   canEnhance?: boolean;
+  /** GRW-6: Stripe and Prodigi both have keys. */
+  printsAvailable?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("gallery");
   const router = useRouter();
@@ -911,6 +914,7 @@ export function EventDashboard({
             <EventSettingsForm
               event={event}
               offerScenes={visionEnabled}
+              offerPrints={printsAvailable}
               canManageClients={canManageClients}
               canCustomizeGallery={canCustomizeGallery}
               canCustomizeQr={canCustomizeQr}

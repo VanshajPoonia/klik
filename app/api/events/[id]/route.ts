@@ -54,6 +54,8 @@ const patchSchema = z.object({
   momentsEnabled: z.boolean().optional(),
   // AI-2. On by default; the team always has search either way.
   scenesEnabled: z.boolean().optional(),
+  // GRW-6. On by default; shown only once prints are switched on.
+  printsEnabled: z.boolean().optional(),
   // GRW-1. On by default: it only offers, each guest still chooses.
   recapEnabled: z.boolean().optional(),
   // GRW-4. Listed on the owner's public profile, so only the owner sets it.

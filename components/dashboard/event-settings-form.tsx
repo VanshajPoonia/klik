@@ -94,10 +94,13 @@ export function EventSettingsForm({
   clients = [],
   addressing = null,
   offerScenes = false,
+  offerPrints = false,
 }: {
   event: OrganizerEvent;
   /** AI-2: search is switched on for Klik, so the guests' half of it is the host's call. */
   offerScenes?: boolean;
+  /** GRW-6: prints are switched on for Klik, so whether guests see them is the host's call. */
+  offerPrints?: boolean;
   /** QR-1: present when the plan allows a custom address. */
   addressing?: { origin: string; formerSlugs: string[] } | null;
   canManageClients?: boolean;
@@ -121,6 +124,7 @@ export function EventSettingsForm({
   const [commentsEnabled, setCommentsEnabled] = useState(event.commentsEnabled);
   const [momentsEnabled, setMomentsEnabled] = useState(event.momentsEnabled);
   const [scenesEnabled, setScenesEnabled] = useState(event.scenesEnabled);
+  const [printsEnabled, setPrintsEnabled] = useState(event.printsEnabled);
   const [recapEnabled, setRecapEnabled] = useState(event.recapEnabled);
   const [showOnProfile, setShowOnProfile] = useState(event.showOnProfile);
   const [guestLanguage, setGuestLanguage] = useState(event.guestLanguage);
@@ -191,6 +195,7 @@ export function EventSettingsForm({
           commentsEnabled,
           momentsEnabled,
           scenesEnabled,
+          printsEnabled,
           recapEnabled,
           guestLanguage,
           keepPhotoDetails: canKeepPhotoDetails ? keepPhotoDetails : undefined,
@@ -493,6 +498,15 @@ export function EventSettingsForm({
             hint="Klik describes each photo so it can be found by what is in it, like “the cake” or “dancing outside”, and groups them into scenes. Guests only ever find photos they could already scroll to. You always have search here."
           >
             Let guests search the gallery and browse it by scene
+          </Checkbox>
+        )}
+        {offerPrints && (
+          <Checkbox
+            checked={printsEnabled}
+            onChange={(change) => setPrintsEnabled(change.target.checked)}
+            hint="Guests can order lustre photo prints of photos they could download, shipped to US addresses. Klik checks each order by hand before it is printed. Your team can always order."
+          >
+            Let guests order prints
           </Checkbox>
         )}
         <Checkbox

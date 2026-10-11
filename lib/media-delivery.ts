@@ -37,6 +37,8 @@ export function toPublicMedia(
     proofReleasedAt?: Date | null;
     streamUid?: string | null;
     streamState?: string | null;
+    width?: number | null;
+    height?: number | null;
   },
   slug: string,
 ) {
@@ -71,6 +73,9 @@ export function toPublicMedia(
     proof: Boolean(item.proofOriginalPathname && !item.proofReleasedAt),
     // OPS-1. The player asks the content route with ?hls=1 for a manifest.
     stream: item.kind === "video" && Boolean(item.streamUid) && item.streamState === "ready",
+    // GRW-6. How sharp a print will be, worked out on the phone.
+    width: item.width ?? null,
+    height: item.height ?? null,
   };
 }
 
