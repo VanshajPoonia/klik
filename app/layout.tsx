@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import { SessionProvider } from "next-auth/react";
+import { ErrorReporting } from "@/components/error-reporting";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,6 +42,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-canvas text-paper">
         <SessionProvider>{children}</SessionProvider>
+        <ErrorReporting />
       </body>
     </html>
   );

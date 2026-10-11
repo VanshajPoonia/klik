@@ -549,7 +549,7 @@ early if you would rather not be asked mid-task.
 | Needed for | What to create | What to give Claude |
 |---|---|---|
 | **OPS-1** video transcoding | Cloudflare dashboard, **Stream**, subscribe (from $5 a month). Then **My Profile, API Tokens, Create Token**, custom token, permission **Account, Stream, Edit**, scoped to this account only | The token, as `CLOUDFLARE_STREAM_API_TOKEN` in `.env.local` and Vercel Production. Claude creates the signing key and the webhook through the API, so you do not have to |
-| **F-9** Sentry | sentry.io, project type **Next.js**, named `klik`. Then **Settings, Auth Tokens** with `project:releases` | `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` |
+| **F-9** Sentry (built, waiting) | sentry.io, a project of type **Browser JavaScript** named `klik` (Klik sends plain envelopes, so no SDK setup is needed). In the project's **Settings, Security & Privacy**, turn on **Prevent Storing of IP Addresses** and leave **Data Scrubber** on | `NEXT_PUBLIC_SENTRY_DSN` (Project settings, Client Keys) in Vercel Production, then redeploy. No auth token, org or project name |
 | **AI-2, AI-6** scene search, similar-scene grouping, safety screening (duplicates and highlights already work without it) | Cloudflare **API Tokens**, permission **Account, Workers AI, Read** | `CLOUDFLARE_AI_API_TOKEN` |
 | **AI-5** cloud enhancement (restore, upscale, low light) | replicate.com, **Account, API tokens** | `REPLICATE_API_TOKEN` |
 | **VEN-3** custom domains for venues | Vercel, **Account Settings, Tokens**, scoped to this team, plus the team id | `VERCEL_API_TOKEN`, `VERCEL_TEAM_ID` |

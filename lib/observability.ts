@@ -33,7 +33,7 @@ const SECRET_KEY_PATTERN =
 /** Values that look like a connection string, whatever the key is called. */
 const SECRET_VALUE_PATTERN = /(postgres(ql)?:\/\/|https?:\/\/[^\s]*:[^\s]*@)/i;
 
-function redact(value: unknown, depth = 0): unknown {
+export function redact(value: unknown, depth = 0): unknown {
   if (depth > 4) return "[deep]";
   if (value === null || value === undefined) return value;
 
@@ -104,8 +104,23 @@ export const log = {
  * not a sentence. Alerts are built on these, and a message that changes wording
  * breaks every rule that matched it.
  */
+/** Marks an error once `reportError` has recorded it, so the framework's own
+ * catch-all (`onRequestError` in instrumentation.ts) does not record it twice. */
+const REPORTED = Symbol.for("klik.reported");
+
+export function wasReported(error: unknown): boolean {
+  return typeof error === "object" && error !== null && REPORTED in error;
+}
+
 export function reportError(event: string, error: unknown, context: LogContext = {}): void {
   emit("error", event, { ...context, error });
+  if (typeof error === "object" && error !== null && !Object.isFrozen(error)) {
+    try {
+      Object.defineProperty(error, REPORTED, { value: true, enumerable: false });
+    } catch {
+      // Already marked, or an exotic object that refuses properties: harmless.
+    }
+  }
 
   for (const reporter of reporters) {
     try {

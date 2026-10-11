@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportClientError } from "@/components/error-reporting";
+
 /**
  * Catches failures in the root layout itself, where app/error.tsx cannot reach.
  * It replaces the whole document, so it ships its own <html> and <body> and
@@ -14,6 +17,11 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // F-9: the layout failed, so the reporter it mounts never ran. Report here.
+  useEffect(() => {
+    reportClientError(error, "client.layout_failed", { digest: error.digest });
+  }, [error]);
+
   return (
     <html lang="en">
       <body

@@ -88,18 +88,19 @@ afterAll(closeDatabase);
 
 describe("GRW-1 asking for the recap when joining", () => {
   it("keeps an address only with its own tick, lower-cased, and schedules the morning after", async () => {
-    const { eventId, slug } = await gallery();
+    // An event still to come, so "the morning after" does not depend on today.
+    const { eventId, slug } = await gallery({ eventDate: new Date("2099-06-14T00:00:00Z") });
     expect((await joinWith(slug, { recapEmail: "Maya@Example.com", recapConsent: true, timeZone: "America/New_York" })).status).toBe(200);
     expect((await joinWith(slug, { recapEmail: "leo@example.com" })).status).toBe(200);
 
     const rows = await testDb.select().from(guests).where(eq(guests.eventId, eventId));
     const withAddress = rows.filter((row) => row.recapEmail);
     expect(withAddress.map((row) => row.recapEmail)).toEqual(["maya@example.com"]);
-    expect(withAddress[0].recapDueAt?.toISOString()).toBe("2026-10-11T13:00:00.000Z");
+    expect(withAddress[0].recapDueAt?.toISOString()).toBe("2099-06-15T13:00:00.000Z");
     expect(withAddress[0].recapConsent).toBe("recap-2026-10-10:en");
 
     const [job] = await testDb.select().from(jobs).where(eq(jobs.kind, "recap.send"));
-    expect(job.runAfter.toISOString()).toBe("2026-10-11T13:00:00.000Z");
+    expect(job.runAfter.toISOString()).toBe("2099-06-15T13:00:00.000Z");
     expect(job.dedupeKey).toBe(`recap:${eventId}`);
   });
 

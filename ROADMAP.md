@@ -48,7 +48,7 @@
 - Watermarked proofs for photographers **are** built (MED-10, 2026-10-10): the photographer sees their proofs clean, everyone else sees the watermark and the photographer's note on how to buy, and the photographer releases the clean photos when paid. Klik takes no money for it.
 - An offline upload queue **is** built (OPS-3, 2026-10-10): every pick is kept on the device until it is in the gallery, survives a reload or a closed tab, resumes a half-sent video part by part, and drains in the background on Android. The kiosk uses it too.
 - The print studio **is** built (QR-4a to QR-4f, 2026-10-10): a canvas editor with eleven templates, print-ready PDF and PNG export, and the four print checks. The QR route's server-drawn sign is still there for Premium's one-click download.
-- Error tracking (F-9 shipped structured logging and email alerts; Sentry is wired but has no DSN). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
+- Error tracking (F-9 shipped structured logging and email alerts; Sentry is built and sends nothing until `NEXT_PUBLIC_SENTRY_DSN` is set, 2026-10-11). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
 
 
 ## Contents
@@ -297,7 +297,7 @@ Still to do: rate limiter concurrency under real contention, and Playwright for 
 Resend is already a dependency for magic links. Add `lib/email/` with typed templates: co-host invite, quota warning at 75 and 90 percent, payment receipt, payment failed, gallery expiring in 7 days, media purged, guest recap. Send through the job runner so a slow SMTP call never blocks a request.
 
 ### F-9. Error tracking and structured logging
-**Size:** S. **Vendor-free half DONE 2026-10-02. Sentry pending a DSN.**
+**Size:** S. **Vendor-free half DONE 2026-10-02. Sentry built 2026-10-11 and waiting for a DSN.**
 
 Done without waiting for a vendor, because the useful part never needed one. Vercel captures stdout, so one JSON object per line is queryable there today.
 
@@ -307,7 +307,9 @@ Done without waiting for a vendor, because the useful part never needed one. Ver
 - The cron logs `purge.completed` on success too. A monitor that only ever sees failures cannot tell "nothing went wrong" from "the cron stopped firing", which is the failure a nightly job is most likely to have.
 - **`GET /api/health`** checks the database and R2 and returns 503 when either is gone. Monitoring the homepage proves Vercel is up, not that Klik works, because the marketing page is static and returns 200 with the database on fire. Public, since an uptime monitor cannot authenticate, so the body carries statuses and durations and nothing else; failure detail goes to the log. Cached 30 seconds so a burst of pollers cannot turn into a burst of R2 calls. Verified live: database up in 1797ms cold, storage in 764ms, second call served from cache in 18ms.
 
-**Still to do, and it needs you.** A Sentry DSN, then `registerErrorReporter` gets its one caller, with event ID and user ID as tags but never guest display names or emails in breadcrumbs. Separately, point an uptime monitor at `/api/health`: free tiers at UptimeRobot or Better Stack are enough, and until something polls it the endpoint only helps whoever thinks to look.
+**Sentry: BUILT 2026-10-11, waiting for its DSN** (`lib/sentry.ts`, `components/error-reporting.tsx`, `instrumentation.ts`, `lib/sentry.test.ts`). Without Sentry's SDK: an event is three lines of JSON posted to Sentry's envelope endpoint, so there is no build wrapper and nothing added to a guest's first page load. The server registers it as an error reporter beside the email alerts, so every `reportError` reaches it, and `onRequestError` now names any throw nothing caught in a page, route or action (`request.unhandled`) instead of leaving it to Next's console line; an error already reported by a wrapped route is not sent twice. The browser reports uncaught errors and rejections from Klik's own scripts, and the error boundaries report what they catch. Grouped by the stable event name, ids as tags, context through the log's `redact`, URLs without their query and with share tokens, invite tokens, kiosk codes and recap signatures masked, the user as an id only. One per distinct failure a minute on the server, five per page in the browser. Off locally. Given up against the SDK: readable stack traces for minified browser code, which need its source map upload; the server's traces are readable as they are. Section C, "Sentry without its SDK". **Needs:** `NEXT_PUBLIC_SENTRY_DSN` in Vercel and a redeploy (LAUNCH.md).
+
+Separately, point an uptime monitor at `/api/health`: free tiers at UptimeRobot or Better Stack are enough, and until something polls it the endpoint only helps whoever thinks to look.
 
 ---
 
@@ -1283,6 +1285,16 @@ The roadmap said "one email per guest per event, no drip". The strongest way to 
 
 ### GRW-1: nine in the guest's morning, by their phone's clock. ANSWERED
 Events have a date but no time zone, and Vercel Hobby's cron runs at 04:00 UTC, which is the previous evening across the Americas: a recap sent then would arrive mid-party. The guest's phone sends its time zone with the request, the job is queued for 9am there, and a party still uploading pushes it back two hours at a time. On Pro (LAUNCH.md step 6) the queue is drained every minute, so it is on time; on Hobby it goes at the next drain after 9am. Recaps are not sent at all without a postal address for the footer, because CAN-SPAM requires one and "host your own" makes this a commercial email.
+
+## Answered (2026-10-11)
+
+Asked with "make everything, and I add the keys later". Every feature below is built, tested against the provider's documented API with the network faked, and switched off until its key exists; LAUNCH.md's "Switching on" table says what to set.
+
+### Sentry without its SDK. ANSWERED
+Sentry takes events as a three-line HTTP envelope, so Klik sends that itself (`lib/sentry.ts`) rather than adding `@sentry/nextjs`. The SDK wraps the whole build, adds tens of kilobytes to every guest's first page on venue wifi, and threads a vendor library through the module graph; the envelope keeps grouping, history, releases and alerts for about two hundred lines that are tested here. The price is unreadable stack traces for minified browser code, which needs the SDK's source map upload. Server traces, where uploads, jobs, crons and webhooks fail, are readable as they are. If browser traces become the problem, the SDK can replace `components/error-reporting.tsx` alone; `reportError` stays the seam.
+
+### The test database is Postgres 17 with pgvector. ANSWERED
+Production (Neon) is Postgres 17.11 with pgvector 0.8 available; the test cluster was 16, which nobody had noticed because nothing depended on the difference. AI-2's search does, so `scripts/test-db.sh` now runs Homebrew's `postgresql@17` with `pgvector` in a fresh `/tmp/klik-test-pg17`.
 
 ## Still open
 

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { Button, buttonClassName } from "@/components/ui/button";
+import { reportClientError } from "@/components/error-reporting";
 
 /**
  * Route-level error boundary. Without this, an unhandled exception showed the
@@ -17,10 +18,11 @@ export default function ErrorBoundary({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Until F-9 wires up Sentry this is the only trace that survives, and on
-    // Vercel it lands in the function logs. The digest is what ties a report
-    // from a guest ("it said DS4F2A") to the actual stack trace server-side.
+    // The digest is what ties a report from a guest ("it said DS4F2A") to the
+    // stack trace server-side. A boundary catches the error, so the window's
+    // own error listener never hears of it: report it here (F-9).
     console.error("Unhandled error", { digest: error.digest, message: error.message });
+    reportClientError(error, "client.render_failed", { digest: error.digest });
   }, [error]);
 
   return (

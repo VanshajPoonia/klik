@@ -294,7 +294,7 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 **The entitlement ledger, 2026-10-08.** See constraint 3 and `BILLING.md`. Grants are made on `/admin` with a reason; payments never grant anything themselves.
 
-Any AI that needs a model. Error tracking beyond structured logging and email alerts, since Sentry is wired but has no DSN. Video transcoding.
+Any AI that needs a model. Error tracking beyond structured logging and email alerts until Sentry's DSN is set (F-9 is built). Video transcoding.
 
 **Built since the last-verified commit, and easy to miss:** `/signup` with `users.activated_at` as the capability gate (see `BILLING.md`, and note that `users.plan_key` defaults to `'event'` so a new account reads as paid when it is not), per-media visibility and `media_shares` from `drizzle/0011_media_visibility_and_shares.sql`, the Stripe tables from `0012`, and Resend email in `lib/email.ts`.
 

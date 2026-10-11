@@ -119,13 +119,20 @@ const schema = z.object({
   // (Dashboard, Settings, Billing, Customer portal), where a customer updates a
   // card and downloads invoices by email, with no Stripe customer id in Klik.
   // Without it the billing page and the payment emails say to write to us.
+  STRIPE_BILLING_PORTAL_URL: optionalString(
+    z.string().url().refine((value) => value.startsWith("https://"), "STRIPE_BILLING_PORTAL_URL must be https"),
+  ),
+
   // GRW-1: the postal address every recap email carries in its footer, which
   // CAN-SPAM requires of any email that invites a purchase. Without it guests
   // are not offered the recap at all, rather than sent one that breaks the law.
   COMPANY_POSTAL_ADDRESS: optionalString(z.string().min(10).max(300)),
 
-  STRIPE_BILLING_PORTAL_URL: optionalString(
-    z.string().url().refine((value) => value.startsWith("https://"), "STRIPE_BILLING_PORTAL_URL must be https"),
+  // F-9: Sentry's DSN. Public by design (it only lets you send events), and
+  // read by the browser too, hence the prefix. Inlined at build time, so
+  // setting it needs a redeploy. Without it nothing is sent anywhere.
+  NEXT_PUBLIC_SENTRY_DSN: optionalString(
+    z.string().regex(/^https:\/\/[^@\s]+@[^/\s]+\/\d+$/, "NEXT_PUBLIC_SENTRY_DSN must look like https://<key>@<host>/<project>"),
   ),
 
   // A URL the purge cron pings after a successful run, for a heartbeat monitor

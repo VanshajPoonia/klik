@@ -6,9 +6,12 @@
 # which test/harness.ts checks before it truncates anything.
 set -euo pipefail
 
+#
+# Postgres 17, because production (Neon) is 17, and pgvector for AI-2's photo
+# search: `brew install postgresql@17 pgvector`.
 PORT="${KLIK_TEST_PG_PORT:-55433}"
-DATA_DIR="${KLIK_TEST_PG_DIR:-/tmp/klik-test-pg}"
-export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+DATA_DIR="${KLIK_TEST_PG_DIR:-/tmp/klik-test-pg17}"
+export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 
 if [ ! -d "$DATA_DIR" ]; then
   echo "Creating cluster in $DATA_DIR"
