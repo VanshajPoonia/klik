@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/schema";
 import { hasVenueGrant } from "@/lib/entitlements";
-import { getAppUrl } from "@/lib/env";
+import { venueEntryUrl } from "@/lib/custom-domains";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "A Klik Venue plan is required" }, { status: 403 });
   }
 
-  const target = `${getAppUrl()}/v/${account.venueSlug}`;
+  // VEN-3: the venue's own domain, once it is live.
+  const target = await venueEntryUrl(session.user.id, account.venueSlug);
   const format = new URL(request.url).searchParams.get("format");
   if (format === "sign") {
     const qr = await QRCode.toDataURL(target, { type: "image/png", width: 1000, margin: 2 });

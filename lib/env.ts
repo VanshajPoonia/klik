@@ -147,6 +147,13 @@ const schema = z.object({
   // database. Without it every video plays from R2 as before.
   CLOUDFLARE_STREAM_API_TOKEN: optionalString(z.string().min(20)),
 
+  // VEN-3: custom domains for venues, through Vercel's API. A token scoped
+  // to the team that owns the project; the team id when there is one. The
+  // project itself is VERCEL_PROJECT_ID, which Vercel sets. Without the token
+  // the setting never shows.
+  VERCEL_API_TOKEN: optionalString(z.string().min(20)),
+  VERCEL_TEAM_ID: optionalString(z.string().regex(/^team_/, "VERCEL_TEAM_ID starts team_")),
+
   // AI-5: Replicate, for "sharpen and enlarge". Without it the button never
   // shows. The version pin and webhook secret are optional overrides: by
   // default Klik asks Replicate for both.

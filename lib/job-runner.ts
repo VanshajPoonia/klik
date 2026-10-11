@@ -71,6 +71,12 @@ const HANDLERS: { [K in JobKind]: () => Promise<Handler<K>> } = {
   "media.transcode": async () => (await import("./job-handlers/transcode")).transcodeVideo,
   "media.backfill_transcodes": async () => (await import("./job-handlers/transcode")).backfillTranscodes,
   "stream.reap": async () => (await import("./job-handlers/transcode")).reapStreamCopies,
+  "domains.reap": async () => async () => {
+    await (await import("./custom-domains")).reapDomains();
+  },
+  "domains.recheck": async () => async () => {
+    await (await import("./custom-domains")).recheckPendingDomains();
+  },
   "recap.send": async () => (await import("./job-handlers/recap")).sendRecaps,
   "recap.backfill": async () => (await import("./job-handlers/recap")).backfillRecaps,
   "events.purge_deleted": async () => async (payload) => {

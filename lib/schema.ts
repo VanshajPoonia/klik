@@ -978,6 +978,31 @@ export const mediaReports = pgTable("media_reports", {
 
 export type MediaReport = typeof mediaReports.$inferSelect;
 
+/** VEN-3: a venue's own domain. drizzle/0051_custom_domains.sql; lib/custom-domains.ts. */
+export const customDomains = pgTable("custom_domains", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  hostname: text("hostname").notNull().unique(),
+  verified: boolean("verified").notNull().default(false),
+  configured: boolean("configured").notNull().default(false),
+  verification: jsonb("verification").$type<Array<{ type: string; name: string; value: string }>>(),
+  records: jsonb("records").$type<Array<{ type: string; name: string; value: string }>>(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
+  activeAt: timestamp("active_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type CustomDomain = typeof customDomains.$inferSelect;
+
+/** VEN-3: hostnames to take off the Vercel project, filled by a trigger. */
+export const domainRemovals = pgTable("domain_removals", {
+  hostname: text("hostname").primaryKey(),
+  queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
+  attempts: integer("attempts").notNull().default(0),
+});
+
 /** OPS-1: Stream copies whose video is gone, waiting for `stream.reap`. Filled by a trigger. */
 export const streamDeletions = pgTable("stream_deletions", {
   uid: text("uid").primaryKey(),

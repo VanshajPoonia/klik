@@ -43,7 +43,9 @@ export type AuditAction =
   | "plan.grace_cleared"
   | "event.suspended"
   | "event.unsuspended"
-  | "report.organizer_notified";
+  | "report.organizer_notified"
+  | "domain.added"
+  | "domain.removed";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;

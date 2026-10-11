@@ -75,6 +75,10 @@ export const JOB_PAYLOADS = {
   "media.backfill_transcodes": z.object({}),
   /** OPS-1: delete the Stream copies of videos that are gone. */
   "stream.reap": z.object({}),
+  /** VEN-3: take removed custom domains off the Vercel project. */
+  "domains.reap": z.object({}),
+  /** VEN-3: look again at custom domains that are not live yet. */
+  "domains.recheck": z.object({}),
   /** AI-5: start one "sharpen and enlarge", then look again until it ends. */
   "ai.enhance": z.object({ enhancementId: z.string().min(1).max(64) }),
   /** GRW-1: send one event's due recaps, then wait for the next one due. */
@@ -271,6 +275,9 @@ export async function scheduleDailyJobs(now = new Date()): Promise<JobKind[]> {
     // video is gone. Both return at once without a key.
     { kind: "media.backfill_transcodes", payload: {} },
     { kind: "stream.reap", payload: {} },
+    // VEN-3: removed domains off the project, and pending ones looked at again.
+    { kind: "domains.reap", payload: {} },
+    { kind: "domains.recheck", payload: {} },
   ];
 
   const scheduled: JobKind[] = [];

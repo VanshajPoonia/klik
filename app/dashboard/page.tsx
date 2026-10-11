@@ -16,6 +16,9 @@ import { getAccountEntitlements } from "@/lib/entitlements";
 import { eventLicenseState } from "@/lib/license";
 import { VenueClientsPanel } from "@/components/dashboard/venue-clients-panel";
 import { VenueQrPanel } from "@/components/dashboard/venue-qr-panel";
+import { CustomDomainCard } from "@/components/dashboard/custom-domain-card";
+import { domainFor } from "@/lib/custom-domains";
+import { isDomainsConfigured } from "@/lib/vercel-domains";
 import { SupportCard } from "@/components/dashboard/support-card";
 import { AwaitingActivation } from "@/components/dashboard/awaiting-activation";
 import { DeletedEvents } from "@/components/dashboard/deleted-events";
@@ -86,6 +89,20 @@ export default async function DashboardPage() {
   // longer read anywhere; it defaulted to 'event' and so described a plan nobody
   // had granted.
   const venue = held.accountGrants.find((grant) => grant.planKey === "venue") ?? null;
+  // VEN-3: the venue's own domain, and the address its QR code uses.
+  const ownDomain = venue ? await domainFor(session.user.id) : null;
+  const customDomain = ownDomain
+    ? {
+        hostname: ownDomain.hostname,
+        active: Boolean(ownDomain.activeAt),
+        verified: ownDomain.verified,
+        configured: ownDomain.configured,
+        records: ownDomain.records ?? [],
+        verification: ownDomain.verification ?? [],
+        checkedAt: ownDomain.checkedAt?.toISOString() ?? null,
+      }
+    : null;
+  const venueUrl = ownDomain?.activeAt ? `https://${ownDomain.hostname}` : null;
   const venueEvents = venue ? ownedRows.filter((event) => event.entitlementId === venue.id) : [];
   const venueLive = venueEvents.filter((event) => isEventActive(event)).length;
   const monthStart = getUtcMonthStart();
@@ -188,9 +205,11 @@ export default async function DashboardPage() {
           {account?.venueSlug && (
             <VenueQrPanel
               venueSlug={account.venueSlug}
-              venueUrl={`${getAppUrl()}/v/${account.venueSlug}`}
+              venueUrl={venueUrl ?? `${getAppUrl()}/v/${account.venueSlug}`}
             />
           )}
+          {/* VEN-3: shown once custom domains are switched on, to Venue accounts. */}
+          {venue && isDomainsConfigured() && <CustomDomainCard initial={customDomain} />}
           {venue && <VenueClientsPanel initialClients={clientRows} />}
           {/* The form, or the reason it is absent. Rendering it disabled was the
               other option, and a dead control reads as a broken page rather
