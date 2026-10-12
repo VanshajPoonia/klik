@@ -560,6 +560,17 @@ Environment Variables, Production**, redeploy, and run the check. Keys go in Ver
 only, never in a chat or a file in the repo. Each provider appears in the Privacy
 Policy's list as "In use" from that deploy on, by itself.
 
+**Order to do them in** (2026-10-12): Sentry first, since it is free and catches the
+others' mistakes; then Workers AI (search and screening); then Stream; then Replicate;
+then Vercel for venue domains, once a Venue customer asks for one. You can add several
+keys and redeploy once. `CLOUDFLARE_ACCOUNT_ID` is not needed: Klik uses `R2_ACCOUNT_ID`'s
+account, which is already set.
+
+**Prints wait for Stripe's API.** Plans are sold through Payment Links, which need no key,
+and that stays as it is. Prints need `STRIPE_SECRET_KEY`, because each order's price is
+made up at checkout, so they stay off (no button anywhere) until you decide to use
+Stripe's API. Do not set a Prodigi key before then; on its own it does nothing.
+
 | Feature | What to create | What to set, then redeploy |
 |---|---|---|
 | **OPS-1** video transcoding (built, waiting) | Cloudflare dashboard, **Stream**, subscribe (from $5 a month). Then **My Profile, API Tokens, Create Token**, custom token, permission **Account, Stream, Edit**, scoped to this account only | `CLOUDFLARE_STREAM_API_TOKEN` in Vercel Production, then redeploy. Klik creates its own signing key and the webhook the first time a video goes up, so there is nothing else to copy |
@@ -567,7 +578,7 @@ Policy's list as "In use" from that deploy on, by itself.
 | **AI-2, AI-4, AI-6** search, scenes, smart folders and safety screening (built, waiting; duplicates and highlights already work without it) | Cloudflare **My Profile, API Tokens, Create Token**, custom token, permission **Account, Workers AI, Read**, this account only | `CLOUDFLARE_AI_API_TOKEN` in Vercel Production, then redeploy. The daily backfill describes existing photos, newest first, 500 a day; new uploads are described as they land |
 | **AI-5** sharpen and enlarge (built, waiting) | replicate.com, **Account, API tokens**. Add a payment method, since Replicate bills per run (a few tenths of a cent each) | `REPLICATE_API_TOKEN` in Vercel Production, then redeploy. Klik finds the model's version and the webhook secret itself |
 | **VEN-3** custom domains for venues (built, waiting) | Vercel, **Account Settings, Tokens**, scoped to the team that owns the `klik` project; the team id is under the team's **Settings, General**. Then in Cloudflare, **R2, `klik-media-us`, Settings, CORS policy**: add each venue's `https://` domain to `AllowedOrigins`, or set it to `["*"]` once (safe, because every upload URL is signed), or uploads on a venue's domain fail | `VERCEL_API_TOKEN` and `VERCEL_TEAM_ID` in Vercel Production, then redeploy. `VERCEL_PROJECT_ID` is set by Vercel itself |
-| **GRW-6** print orders (built, waiting) | prodigi.com, sign up, **Settings, Integrations**: the **sandbox** key first. Prints also need Stripe's live secret key (BILLING.md step 4). Ask an accountant whether Klik must collect sales tax on prints before going live | `PRODIGI_API_KEY` (sandbox) and `STRIPE_SECRET_KEY` in Vercel Production, then redeploy. On `/admin`, **Check the catalogue**, then place a test order with a Stripe test card. Only then the live Prodigi key and `PRODIGI_ENV=live` |
+| **GRW-6** print orders (built, waiting for Stripe's API, see above) | prodigi.com, sign up, **Settings, Integrations**: the **sandbox** key first. Prints also need Stripe's live secret key (BILLING.md step 4). Ask an accountant whether Klik must collect sales tax on prints before going live | `PRODIGI_API_KEY` (sandbox) and `STRIPE_SECRET_KEY` in Vercel Production, then redeploy. On `/admin`, **Check the catalogue**, then place a test order with a Stripe test card. Only then the live Prodigi key and `PRODIGI_ENV=live` |
 | **ACC** sign in with Google, optional | Google Cloud Console OAuth client. Redirect URI `https://klik.kreativvantage.com/api/auth/callback/google` | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` |
 
 **How to check each one works**, since none could be tried against the real service
@@ -605,7 +616,7 @@ before its key existed:
 - [ ] Replicate token set and one photo enhanced
 - [ ] Stream token set and one video playing as a stream
 - [ ] Vercel token and team id set, R2 CORS changed, and one venue domain live
-- [ ] Prodigi sandbox order end to end in test mode, then live keys
+- [ ] Later, once Stripe's API is in use: Prodigi sandbox order end to end in test mode, then live keys
 
 ---
 
