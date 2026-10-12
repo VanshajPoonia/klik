@@ -555,268 +555,317 @@ right to post.
 
 Checked on 2026-10-12 against what is in Vercel. **Already set and working:** the
 database, `AUTH_SECRET`, sign-in emails (Resend), R2 storage and its backup bucket,
-`CRON_SECRET` and `APP_URL`. **Everything below is not set yet.** What each one turns on
-is built, deployed and switched off until its value is in Vercel, and they are
-independent: do them in this order, or skip any.
+`CRON_SECRET` and `APP_URL`. **Everything below is not set yet.** Each one switches on
+something already built and deployed; they are independent, so skip any you like.
+Paths were checked against each provider's own documentation on 2026-10-12; if a screen
+has moved, the provider's search box finds it by the name in bold.
 
-Keys go into Vercel only, never into a chat or a file in the repo. Claude does not need
-to see any of them. When you have redeployed, tell Claude and it checks production.
+Keys go into Vercel only, never into a chat or a file in the repo. When you have
+redeployed, tell Claude which steps you did and it checks production.
 
-| Step | Turns on | Variables | Cost |
-|---|---|---|---|
-| 1 | Error emails to you | `ALERT_EMAIL` | Free |
-| 2 | Sentry error tracking | `NEXT_PUBLIC_SENTRY_DSN` | Free plan |
-| 3 | Continue with Google | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Free |
-| 4 | Guests' morning-after email | `COMPANY_POSTAL_ADDRESS` | Free; Resend may need Pro |
-| 5 | An alarm if the nightly cron stops | `CRON_HEARTBEAT_URL` | Free |
-| 6 | Search, scenes, smart folders, screening | `CLOUDFLARE_AI_API_TOKEN` | Under a dollar for a 2,000-photo wedding |
-| 7 | Videos play as streams | `CLOUDFLARE_STREAM_API_TOKEN` | From $5 a month |
-| 8 | Sharpen and enlarge | `REPLICATE_API_TOKEN` | A fraction of a cent a photo |
-| 9 | Venues' own domains | `VERCEL_API_TOKEN`, `VERCEL_TEAM_ID` | Free; when a Venue customer asks |
-| 10 | Customers manage their own invoices | `STRIPE_BILLING_PORTAL_URL` | Free; a link, not an API key |
-| 11 | Prints | `STRIPE_SECRET_KEY`, `PRODIGI_API_KEY` | Later: waits for Stripe's API |
+| Step | Turns on | Variables | Time | Cost |
+|---|---|---|---|---|
+| 1 | Error emails to you | `ALERT_EMAIL` | 2 min | Free |
+| 2 | Sentry error tracking | `NEXT_PUBLIC_SENTRY_DSN` | 10 min | Free |
+| 3 | Continue with Google | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | 20 min | Free |
+| 4 | Guests' morning-after email | `COMPANY_POSTAL_ADDRESS` | 5 min | Free; Resend may need Pro |
+| 5 | An alarm if the nightly cleanup stops | `CRON_HEARTBEAT_URL` | 5 min | Free |
+| 6 | Search, scenes, smart folders, screening | `CLOUDFLARE_AI_API_TOKEN` | 5 min | Under $1 for a 2,000-photo wedding |
+| 7 | Videos play as streams | `CLOUDFLARE_STREAM_API_TOKEN` | 10 min | From $5 a month |
+| 8 | Sharpen and enlarge | `REPLICATE_API_TOKEN` | 5 min | A fraction of a cent a photo |
+| 9 | Venues' own domains | `VERCEL_API_TOKEN`, `VERCEL_TEAM_ID` | 10 min | Free; when a Venue customer asks |
+| 10 | Customers manage their own invoices | `STRIPE_BILLING_PORTAL_URL` | 5 min | Free; a link, not an API key |
+| 11 | Prints | `STRIPE_SECRET_KEY`, `PRODIGI_API_KEY` | | Later: waits for Stripe's API |
 
-### How to add a variable (every step uses this)
+### Adding a variable in Vercel (every step ends with this)
 
-1. **vercel.com**, the **klik** project, **Settings**, **Environment Variables**.
-2. Under **Add Environment Variable**: **Key** is the exact name from the step, **Value**
-   is what you copied. No quotes, and no spaces before or after it.
-3. **Environments**: tick **Production** only.
-4. For tokens and secrets, turn on **Sensitive**: the value can then be replaced but never
-   read back, by anyone. Not needed for the alert email, the Sentry DSN, the Google client
-   ID, the team ID or the postal address.
-5. **Save**.
-6. A variable only reaches deployments made after it. When you have added a batch, go to
-   **Deployments**, open the **⋯** menu on the newest Production deployment, press
-   **Redeploy**, and confirm. One redeploy covers every variable added before it.
+1. Open <https://vercel.com/vanshaj-poonias-projects/klik/settings/environment-variables>.
+   (By hand: vercel.com → the **klik** project → **Settings** → **Environment Variables**
+   in the left sidebar.)
+2. In the form at the top of the page:
+   - **Type**: **Secret** for tokens, keys and secrets, **Config** for everything else.
+     Each step says which. A Secret can be replaced later but never read again.
+   - **Key**: the name exactly as the step writes it.
+   - **Value**: paste what you copied. No quotes, no spaces before or after.
+   - **Environments**: tick **Production** only. Untick **Preview** and **Development**.
+3. Press **Save**.
 
-Klik checks the shape of most values when it builds. A mistyped one fails that redeploy,
-with "Invalid environment configuration" and the variable's name in the build log, and the
-live site stays on the version before. Fix the value and redeploy again.
+**Redeploying**, once after each batch, because a variable only reaches deployments made
+after it:
 
-### 1. Error emails (`ALERT_EMAIL`)
+1. At the top of the project, the **Deployments** tab.
+2. The top row, marked **Production** and **Current**: press **⋯** at its right end, then
+   **Redeploy**.
+3. In the box, untick **Use existing Build Cache**, then press **Redeploy**.
+4. Wait for **Ready**, about two minutes.
 
-Klik emails you when something fails in production, at most once per kind of failure every
-15 minutes, through the same Resend account that sends sign-in emails.
+If a value has the wrong shape, that build fails with "Invalid environment configuration"
+and the variable's name in its log, and the live site stays on the version before. Fix the
+value (**⋯** → **Edit** on that variable's row) and redeploy again.
 
-1. Add `ALERT_EMAIL`: the address that should get them, such as the contact mailbox from
-   step 1 of "Do these now".
-2. Redeploy. The check is shared with Sentry's, at the end of step 2.
+### 1. Error emails: `ALERT_EMAIL`
 
-### 2. Sentry error tracking (`NEXT_PUBLIC_SENTRY_DSN`)
+Klik emails you when something fails in production, at most once per kind of failure
+every 15 minutes.
 
-Sentry keeps every error, from the server and from browsers, grouped, with where in the
-code it happened and how often. Klik sends to it directly, without Sentry's code library,
-and strips names, emails and gallery links first.
+1. Vercel: Type **Config**, Key `ALERT_EMAIL`, Value: the address that should get them.
+2. Redeploy, or carry on and redeploy after step 2. The check is at the end of step 2.
 
-1. Sign up at **sentry.io**. When it asks where to store data, choose **United States**,
-   where the rest of Klik's data is. The free **Developer** plan is enough.
-2. **Projects**, **Create Project**. Platform: **Browser JavaScript**. Alert frequency:
-   **Alert me on every new issue**. Project name: `klik`. **Create Project**.
-3. Sentry then shows setup instructions for its code library. Skip them; Klik needs none
-   of it.
-4. **Settings**, **Projects**, **klik**, **Client Keys (DSN)**. Copy the **DSN**. It looks
-   like `https://abc123@o123456.ingest.us.sentry.io/4567890`.
-5. In the same project settings, **Security & Privacy**: turn on **Prevent Storing of IP
-   Addresses**, and leave **Data Scrubber** and **Use Default Scrubbers** on. Leave
-   **Allowed Domains** as `*`: venues' own domains send errors too, and a narrower list
-   would drop theirs.
-6. Add `NEXT_PUBLIC_SENTRY_DSN` with the DSN. It is public by design (it can only send
-   errors), so it does not need **Sensitive**.
-7. Redeploy.
+### 2. Sentry: `NEXT_PUBLIC_SENTRY_DSN`
 
-**Check steps 1 and 2 together.** Signed in as yourself, open `/admin`, open the browser
-console (right click, **Inspect**, **Console**; Chrome may ask you to type `allow pasting`
-first), paste this and press Enter:
+Sentry keeps every error from the server and from browsers, grouped, with where in the
+code it happened and how often. Klik sends to it without Sentry's code library, and
+strips names, emails and gallery links first.
 
-```js
-fetch("/api/admin/test-error", { method: "POST" }).then((r) => r.json())
-```
+1. <https://sentry.io/signup/>: sign up with email, Google or GitHub.
+2. **Organization name**: `Kreativ Vantage`. **Data storage location**: **United States**.
+   If it asks for a plan, the free **Developer** plan.
+3. **Select a platform**: type `browser` in its search box and choose **Browser
+   JavaScript**.
+4. **Set your alert frequency**: leave **Alert me on high priority issues**. Klik's own
+   alert email already covers every error.
+5. **Project name**: `klik`. **Team**: leave it. Press **Create Project**.
+6. The next page explains how to install Sentry's code. Ignore it: Klik needs none of it.
+7. Left sidebar, **Settings** (the gear) → **Projects** → **klik** → in the project menu,
+   **Client Keys (DSN)**. Press the copy button beside **DSN**. It looks like
+   `https://1a2b3c4d@o4501234.ingest.us.sentry.io/4501234567`.
+8. Same project menu → **Security & Privacy**. Under **Data Scrubbing**, turn on **Prevent
+   Storing of IP Addresses**, and check **Data Scrubber** and **Use Default Scrubbers** are
+   on. Changes save by themselves.
+9. Vercel: Type **Config**, Key `NEXT_PUBLIC_SENTRY_DSN`, Value: the DSN. It is public by
+   design: it can only send errors.
+10. Redeploy.
 
-It answers `{ ok: true, sentry: true, email: true }`. Within a minute Sentry's **Issues**
-shows "A test error sent from /admin" for `ops.test_error`, and `ALERT_EMAIL` gets an
-email about it. Resolve the issue in Sentry.
+**Check steps 1 and 2:**
 
-### 3. Continue with Google (`AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`)
+1. Signed in to Klik as yourself, open <https://klik.kreativvantage.com/admin>.
+2. Right click anywhere → **Inspect** → the **Console** tab.
+3. Paste this and press Enter. If Chrome warns about pasting, type `allow pasting`, press
+   Enter, and paste again.
+   ```js
+   fetch("/api/admin/test-error", { method: "POST" }).then((r) => r.json())
+   ```
+4. It prints `{ok: true, sentry: true, email: true}`.
+5. Within a minute, Sentry's **Issues** page shows "A test error sent from /admin", and the
+   `ALERT_EMAIL` inbox has an email about it.
+6. In Sentry, open the issue and press **Resolve**.
 
-Adds **Continue with Google** to the sign-in page. Klik asks Google for the name, email
-and profile picture only, which the Privacy Policy already says.
+### 3. Google sign-in: `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`
 
-How it behaves, so nothing surprises you:
+Adds **Continue with Google** to the sign-in page. Klik asks Google for name, email and
+profile picture only, which the Privacy Policy already says. Worth knowing first:
 
 - Someone new who continues with Google gets a Klik account, as with an email code.
-- An email that already has a Klik account, made with a password or a code, cannot then
-  continue with Google. It sees "That email already has a Klik account. Sign in the way you
-  first did, or with an email code." That is Auth.js's safe default. Since Google confirms
-  its users' emails, linking the two automatically is a small change; ask Claude if you
-  want it.
-- It works on `klik.kreativvantage.com`. A venue's own domain sends sign-in there anyway.
+- An email that already has a Klik account (made with a password or a code) cannot then
+  use Google: it is told "That email already has a Klik account. Sign in the way you first
+  did, or with an email code." That is Auth.js's safe default. Since Google confirms its
+  users' emails, linking the two automatically is a small change; ask Claude if you want it.
 
-Steps:
+**Make the project**
 
-1. **console.cloud.google.com**, signed in with the Google account that should own this.
-   A business account is better than a personal one you might lose.
-2. The project picker at the top, **New Project**. Name: `Klik`. **Create**, then select it
-   in the picker.
-3. Search the console for **Google Auth Platform** and open it (it is also **APIs &
-   Services**, **OAuth consent screen**). Press **Get started**:
-   - **App name** `Klik`, **User support email** your contact mailbox. **Next**.
-   - **Audience**: **External**. **Next**.
-   - **Contact information**: your email. **Next**.
-   - Agree to Google's user data policy, **Continue**, **Create**.
-4. **Branding**, in the left menu:
+1. <https://console.cloud.google.com>, signed in with the Google account that should own
+   this. A business account is better than a personal one. Accept the terms if asked.
+2. In the top bar, the project picker (beside the Google Cloud logo) → **New project**.
+   **Project name**: `Klik`. Leave **Location**. Press **Create**.
+3. When the notification says it is ready, press **Select project**. From here on the top
+   bar must say **Klik**.
+
+**Set up the sign-in screen**
+
+4. Open <https://console.cloud.google.com/auth/overview>, or search the top bar for
+   **Google Auth Platform**. Press **Get started**.
+5. **App Information**: **App name** `Klik`. **User support email**: choose your address
+   in the dropdown. **Next**.
+6. **Audience**: **External**. **Next**.
+7. **Contact Information**: your email address. **Next**.
+8. **Finish**: tick the box agreeing to the **Google API Services: User Data Policy**.
+   **Continue**, then **Create**.
+9. Left menu, **Branding**:
    - **Application home page**: `https://klik.kreativvantage.com`
    - **Application privacy policy link**: `https://klik.kreativvantage.com/privacy`
    - **Application terms of service link**: `https://klik.kreativvantage.com/terms`
-   - **Authorized domains**, **Add domain**: `kreativvantage.com`
-   - Leave the **logo** empty. A logo makes Google review the app first, which takes days.
-   - **Save**.
-5. **Data Access**, **Add or remove scopes**: tick `openid`, `.../auth/userinfo.email`
-   and `.../auth/userinfo.profile`. **Update**, then **Save**. These three need no review.
-6. **Audience**: **Publishing status** says **Testing**. Press **Publish app** and
-   confirm, so it says **In production**. In Testing, only test users you list by hand
-   can sign in.
-7. **Clients**, **Create client**:
-   - **Application type**: **Web application**. **Name**: `Klik production`.
-   - **Authorized JavaScript origins**, **Add URI**: `https://klik.kreativvantage.com`
-   - **Authorized redirect URIs**, **Add URI**:
-     `https://klik.kreativvantage.com/api/auth/callback/google`, exactly, with no slash
-     at the end.
-   - **Create**.
-8. A box shows the **Client ID** (ending `.apps.googleusercontent.com`) and the **Client
-   secret** (starting `GOCSPX-`). Copy both now, or press **Download JSON**: Google shows
-   the secret only once. If it is lost, add a new secret on the client's page and delete
-   the old one.
-9. Add `AUTH_GOOGLE_ID` (the client ID) and `AUTH_GOOGLE_SECRET` (the secret,
-   **Sensitive**). Redeploy.
+   - **Authorized domains** → **Add domain** → `kreativvantage.com`
+   - Leave **App logo** empty: a logo waits for Google's review before it shows.
+   - Press **Save** at the bottom.
+10. Left menu, **Data Access** → **Add or remove scopes**. In the panel, tick the three
+    rows `.../auth/userinfo.email`, `.../auth/userinfo.profile` and `openid`. Press
+    **Update**, then **Save** at the bottom of the page.
+11. Left menu, **Audience**. **Publishing status** says **Testing**: press **Publish app**,
+    then **Confirm**. It now says **In production**. Without this, only test users you list
+    by hand can sign in. These three scopes need no review from Google.
 
-**Check.** In a private window open `https://klik.kreativvantage.com/login`: **Continue
-with Google** is there. Use a Google account that has never used Klik; you land signed in,
-and `/me` shows the account. Then try one whose email already has a Klik account and see
-the message above. If Google says `redirect_uri_mismatch`, the URI in step 7 differs by a
-character from the one above; correct it there, no redeploy needed. Google's screen may
-name the domain rather than "Klik" until Google has verified the branding, which is
-harmless; **Branding**, **Verify branding** does that later, once you prove you own the
-domain with a DNS record.
+**Make the keys**
 
-### 4. Guests' morning-after email (`COMPANY_POSTAL_ADDRESS`)
+12. Left menu, **Clients** → **Create client**.
+13. **Application type**: **Web application**. **Name**: `Klik production`.
+14. **Authorized JavaScript origins** → **Add URI** → `https://klik.kreativvantage.com`
+15. **Authorized redirect URIs** → **Add URI** →
+    `https://klik.kreativvantage.com/api/auth/callback/google`
+    exactly, with no slash at the end.
+16. Press **Create**. A box shows the **Client ID** and **Client secret**. Press **Download
+    JSON**, and copy both now: Google never shows the secret again. If it is ever lost,
+    open the client, **Add secret**, and delete the old one.
+17. Vercel: Type **Config**, Key `AUTH_GOOGLE_ID`, Value: the Client ID (ends
+    `.apps.googleusercontent.com`).
+18. Vercel: Type **Secret**, Key `AUTH_GOOGLE_SECRET`, Value: the Client secret (starts
+    `GOCSPX-`).
+19. Redeploy.
 
-Step 11 of "Do these now" explains it. In short:
+**Check:**
 
-1. Add `COMPANY_POSTAL_ADDRESS`: a real address where the business receives mail, on one
-   line, such as `Kreativ Vantage, 123 Example St, Suite 4, Austin, TX 78701, USA`. A PO
-   box or a registered mail service is fine. US law (CAN-SPAM) requires it in the footer.
-2. Check your Resend plan: **resend.com**, **Settings**, **Billing**. The free plan sends
-   100 emails a day, and a 200-guest wedding can pass that on its own morning. **Pro**
-   ($20 a month) sends 50,000 a month.
-3. Redeploy, then do step 11's test.
+1. In a private window, open <https://klik.kreativvantage.com/login>. **Continue with
+   Google** is there.
+2. Use a Google account whose email has never used Klik. You land signed in, and
+   <https://klik.kreativvantage.com/me> shows it.
+3. Sign out and try a Google account whose email already has a Klik account. You see the
+   "already has a Klik account" message.
 
-### 5. Nightly cron heartbeat (`CRON_HEARTBEAT_URL`)
+If Google says `Error 400: redirect_uri_mismatch`, the URI in step 15 differs by a
+character: fix it on the client's page (no redeploy needed) and wait a few minutes, as
+Google's changes take a little while to apply. Google's screen shows your domain rather
+than "Klik" until the branding is verified; that is normal. **Branding** → **Verify
+branding** does it later, once you prove you own the domain.
 
-Each night at about 03:00 UTC Klik deletes expired galleries. If Vercel ever stopped
-running it, nothing would error; it would just be quiet. A heartbeat monitor emails you
-when the nightly ping does not arrive.
+### 4. Morning-after email: `COMPANY_POSTAL_ADDRESS`
 
-1. Sign up at **healthchecks.io**. The free plan is enough.
-2. **Add Check**. Name: `klik nightly purge`. Schedule: **Cron**, expression `0 3 * * *`,
-   time zone **UTC**, **Grace time** 2 hours (on Vercel Hobby a cron can run any time in
-   its hour).
-3. Copy its ping URL (`https://hc-ping.com/...`).
-4. Add `CRON_HEARTBEAT_URL` with it. Redeploy.
+1. Vercel: Type **Config**, Key `COMPANY_POSTAL_ADDRESS`, Value: one line, such as
+   `Kreativ Vantage, 123 Example St, Suite 4, Austin, TX 78701, USA`. A real address where
+   the business receives mail; a PO box or virtual mailbox is fine. US law (CAN-SPAM)
+   requires it in the footer.
+2. <https://resend.com> → **Settings** → **Billing**. If the plan is **Free** (100 emails a
+   day), a 200-guest wedding can pass that on its own morning; upgrade to **Pro** ($20 a
+   month) before your first big event.
+3. Redeploy.
 
-**Check.** The next morning the check says **up**, with one ping.
+**Check:** on your phone, signed out, join one of your galleries and leave your email with
+the tick. The email arrives the next morning, after the 04:00 UTC job on Hobby. Check it is
+not in spam, the photos show, and "Never email me a recap again" works.
 
-### 6. Search, scenes, smart folders and screening (`CLOUDFLARE_AI_API_TOKEN`)
+### 5. Nightly cleanup alarm: `CRON_HEARTBEAT_URL`
 
-Each photo gets a one-sentence description (never who is in it), so guests can search
+Each night at about 03:00 UTC Klik deletes expired galleries, then pings this address. If
+Vercel ever stopped running it, nothing would error; it would just go quiet. The monitor
+emails you when a night's ping does not arrive.
+
+1. <https://healthchecks.io> → **Sign Up** → your email → open the link it sends.
+2. It opens a project. Press **Add Check** at the bottom of the list (or use the check it
+   made for you), then click the check to open it.
+3. Beside its name, **Edit**: name it `klik nightly cleanup`, **Save**.
+4. **Change Schedule…** → the **Cron** tab: **Cron Expression** `0 3 * * *`, **Time Zone**
+   `UTC`, **Grace Time** 2 hours (on Hobby a cron can run any time in its hour). **Save**.
+5. Copy the **ping URL** shown on the check (`https://hc-ping.com/...`).
+6. Vercel: Type **Secret**, Key `CRON_HEARTBEAT_URL`, Value: the ping URL.
+7. Redeploy.
+
+**Check:** the next morning, after 04:00 UTC, the check is green and says **up**. Alerts go
+to your signup email; **Integrations** adds others.
+
+### 6. Search, scenes, smart folders and screening: `CLOUDFLARE_AI_API_TOKEN`
+
+Each photo gets a one-sentence description, never of who is in it, so guests can search
 "the cake", photos group into scene chips, any search can be saved as a smart folder, and
-nudity, gore and hate symbols are held back for the organizer to look at.
+nudity, gore and hate symbols are held back for the organizer.
 
-1. **dash.cloudflare.com**, in the account that holds the `klik-media-us` bucket.
-2. **AI**, **Workers AI**, **Use REST API**, **Create a Workers AI API Token**. The
-   permissions are filled in for you: Workers AI **Read** and **Edit**, and both are
-   needed. **Create API Token**, and copy it. It is shown once.
-3. Add `CLOUDFLARE_AI_API_TOKEN` (**Sensitive**). `CLOUDFLARE_ACCOUNT_ID` is not needed:
-   Klik uses the account from `R2_ACCOUNT_ID`.
-4. Redeploy.
+1. <https://dash.cloudflare.com>, and pick the account that holds the `klik-media-us`
+   bucket.
+2. Search the dashboard (the search box at the top, or ⌘K) for **Workers AI** and open it.
+3. Press **Use REST API**.
+4. Press **Create a Workers AI API Token**. The form comes filled in, with Workers AI
+   **Read** and **Edit** for your account; both are needed, so change nothing. Press
+   **Create API Token**.
+5. Press **Copy API Token**; it is shown once. Then **Finish**. The Account ID on that
+   page is not needed.
+6. Vercel: Type **Secret**, Key `CLOUDFLARE_AI_API_TOKEN`.
+7. Redeploy.
 
 Cost: Workers AI has a free allowance each day. On Cloudflare's free Workers plan, calls
-past it fail until the next day, so once real events are running, subscribe to **Workers
-Paid** ($5 a month, under **Workers & Pages**, **Plans**), which bills past the allowance
+past it fail until the next day, so once real events run, search the dashboard for
+**Workers plans** and choose **Workers Paid** ($5 a month), which bills past the allowance
 instead. Klik uses Meta's Llama 4 Scout model; if Cloudflare asks for Meta's licence to be
 accepted, Klik accepts it by itself.
 
-**Check.** Upload three photos to a test event: a cake, people dancing, anything. Within a
+**Check:** upload three photos to a test event: a cake, people dancing, anything. Within a
 minute or two the gallery shows a search box; search "cake". Once four photos share a
 scene, scene chips appear. `/admin` shows nothing new under Reports for ordinary photos.
 Photos already uploaded are described by the nightly job, newest first, 500 a night.
 
-### 7. Videos as streams (`CLOUDFLARE_STREAM_API_TOKEN`)
+### 7. Videos as streams: `CLOUDFLARE_STREAM_API_TOKEN`
 
-1. Cloudflare dashboard, **Stream**, and subscribe. It starts at $5 a month and bills by
-   minutes of video stored and watched.
-2. Top right, **My Profile**, **API Tokens**, **Create Token**, **Custom token**, **Get
-   started**. Name: `klik stream`. **Permissions**: **Account**, **Stream**, **Edit**.
-   **Account Resources**: **Include**, your account. Leave IP filtering and TTL empty.
-   **Continue to summary**, **Create Token**, and copy it.
-3. Add `CLOUDFLARE_STREAM_API_TOKEN` (**Sensitive**). Redeploy.
+1. Cloudflare dashboard, search for **Stream** and open it. If it offers plans, choose the
+   smallest and complete the purchase. It bills by minutes of video stored and watched.
+2. Open <https://dash.cloudflare.com/profile/api-tokens> (or the profile icon, top right
+   → **Profile** → **API Tokens**) → **Create Token**.
+3. Scroll to **Custom token** → **Get started**.
+4. **Token name**: `klik stream`.
+5. **Permissions**, the three dropdowns in one row: **Account**, **Stream**, **Edit**.
+6. **Account Resources**: **Include**, then your account.
+7. Leave **Client IP Address Filtering** and **TTL** empty.
+8. **Continue to summary** → **Create Token** → **Copy**. It is shown once.
+9. Vercel: Type **Secret**, Key `CLOUDFLARE_STREAM_API_TOKEN`.
+10. Redeploy.
 
-Klik makes its own signing key and points Stream's webhook at itself the first time a video
+Klik makes its own signing key and points Stream's webhook at itself when the first video
 goes up. Stream allows one webhook per Cloudflare account, so do not point it anywhere
 else later.
 
-**Check.** Upload a short video to a test event. A few minutes later open it on a laptop in
-Chrome with **Inspect**, **Network** open: it loads `video.m3u8` from
+**Check:** upload a short video to a test event. A few minutes later, open it on a laptop
+in Chrome with **Inspect** → **Network** open: it loads `video.m3u8` from
 `customer-....cloudflarestream.com`, not the whole file. Older videos are copied over by
 the nightly job.
 
-### 8. Sharpen and enlarge (`REPLICATE_API_TOKEN`)
+### 8. Sharpen and enlarge: `REPLICATE_API_TOKEN`
 
-1. **replicate.com**, and sign in.
-2. **Account**, **Billing**: add a card. Replicate bills per run, a fraction of a cent for
-   each photo. Klik allows 25 per event on Event and 100 on Premium and Venue.
-3. **Account**, **API tokens**: create one named `klik-production` and copy it. It starts
-   `r8_`.
-4. Add `REPLICATE_API_TOKEN` (**Sensitive**). Redeploy. Klik finds the model's version and
-   its webhook secret by itself.
+1. <https://replicate.com> → **Sign in**, with GitHub or email.
+2. <https://replicate.com/account/billing>: add a card. Replicate bills per run, a
+   fraction of a cent a photo; Klik allows 25 per event on Event and 100 on Premium and
+   Venue.
+3. <https://replicate.com/account/api-tokens>: **Token name** `klik-production` →
+   **Create token** → copy it. It starts `r8_`.
+4. Vercel: Type **Secret**, Key `REPLICATE_API_TOKEN`.
+5. Redeploy. Klik finds the model's version and the webhook secret by itself.
 
-**Check.** On the dashboard, open a photo, press the wand and confirm. Within a minute or
+**Check:** on the dashboard, open a photo, press the wand and confirm. Within a minute or
 two the gallery tab's **Enhancements** panel shows the copy; try **Show it instead** and
 look at it full size.
 
-### 9. Venues' own domains (`VERCEL_API_TOKEN`, `VERCEL_TEAM_ID`)
+### 9. Venues' own domains: `VERCEL_API_TOKEN` and `VERCEL_TEAM_ID`
 
 Do this when a Venue customer asks for `photos.theirvenue.com`. Nothing shows until then.
 
-1. Vercel, your avatar, **Account Settings**, **Tokens**. Name: `klik domains`. **Scope**:
-   the team that owns `klik` (`vanshaj-poonias-projects`). Expiration: **No expiration**,
-   or a year with a reminder in your diary. **Create**, and copy it.
-2. That team's **Settings**, **General**: copy the **Team ID** (starting `team_`).
-3. Add `VERCEL_API_TOKEN` (**Sensitive**) and `VERCEL_TEAM_ID`. `VERCEL_PROJECT_ID` is
-   set by Vercel itself.
-4. Cloudflare, **R2**, `klik-media-us`, **Settings**, **CORS Policy**, **Edit**. The
-   bucket refuses uploads from pages it does not list, so change `AllowedOrigins` to
-   `["*"]`, keeping the methods and headers as they are, and save. This is safe because
-   every upload and download link is signed and expires; the rule only says which pages
-   may use such a link. (The stricter choice is adding each venue's `https://` address
-   to the list as it goes live.)
-5. Redeploy.
+1. <https://vercel.com/account/settings/tokens>, the **Create Token** form:
+   - **Token Name**: `klik domains`
+   - **Scope**: **Vanshaj Poonia's projects**
+   - **Expiration**: **No Expiration**, or a year with a reminder in your diary
+   - **Create**, then **Copy**. It is shown once.
+2. Vercel variables: Type **Secret**, Key `VERCEL_API_TOKEN`, Value: the token. Then Type
+   **Config**, Key `VERCEL_TEAM_ID`, Value: `team_aLW6Esi8FZsGYiHtzCHZl99O` (the team's ID,
+   from this repo's Vercel link; it is not a secret).
+3. Cloudflare dashboard, search for **R2** → **R2 Object Storage** → the `klik-media-us`
+   bucket → the **Settings** tab → **CORS Policy** → **Edit**. In the JSON, change only the
+   origins line, which today lists `https://klik.kreativvantage.com` and
+   `http://localhost:3000`, to `"AllowedOrigins": ["*"],` and press **Save**. This is safe:
+   every upload and download link is signed and expires, and the rule only says which
+   pages may use one. (The stricter choice is adding each venue's `https://` address to
+   that list as it goes live.)
+4. Redeploy.
 
-**Check.** On a Venue account's dashboard, **Your own address**: add a subdomain you
+**Check:** on a Venue account's dashboard, **Your own address**: add a subdomain you
 control, add the records it shows at your DNS provider, and press **Check again** until it
 says **Live**. Then open it on your phone, join, and upload a photo.
 
-### 10. Billing portal link (`STRIPE_BILLING_PORTAL_URL`, optional)
+### 10. Billing portal link: `STRIPE_BILLING_PORTAL_URL` (optional)
 
 A link copied from Stripe's dashboard, not an API key, so it fits selling through Payment
 Links.
 
-1. Stripe dashboard, in live mode, **Settings**, **Billing**, **Customer portal**. Activate
-   the login link and copy it. It starts `https://billing.stripe.com/p/login/`.
-2. Add `STRIPE_BILLING_PORTAL_URL`. Redeploy. Until then, the billing page and payment
-   emails give your email and phone instead.
-3. While there, **Settings**, **Billing**, **Subscriptions and emails**: turn on
-   failed-payment emails and **Smart Retries**.
+1. <https://dashboard.stripe.com/settings/billing/portal>, in live mode (the test mode
+   switch off).
+2. Under **Ways to get started**, press **Activate link**. Below it you can choose what
+   customers may do: update their card, see invoices, cancel. Save if you change any.
+3. Copy the login link. It starts `https://billing.stripe.com/p/login/`.
+4. Vercel: Type **Config**, Key `STRIPE_BILLING_PORTAL_URL`.
+5. Redeploy. Until then, the billing page and payment emails give your email and phone
+   instead.
 
 ### 11. Later: prints (needs Stripe's API)
 
@@ -826,9 +875,11 @@ with no button anywhere, until you decide to use Stripe's API. Do not set a Prod
 before then; on its own it does nothing. When you are ready:
 
 1. Ask an accountant whether Klik must collect sales tax on prints.
-2. **prodigi.com**: sign up, **Settings**, **Integrations**, and copy the **sandbox** key.
+2. <https://dashboard.prodigi.com>: sign up, **Settings** → **Integrations**, and copy the
+   **sandbox** key.
 3. Set Stripe's **test mode** secret key (`sk_test_...`, see `BILLING.md`) as
-   `STRIPE_SECRET_KEY` and the Prodigi sandbox key as `PRODIGI_API_KEY`. Redeploy.
+   `STRIPE_SECRET_KEY` and the Prodigi sandbox key as `PRODIGI_API_KEY`, both **Secret**.
+   Redeploy.
 4. On `/admin`, **Check the catalogue**. Order a 4×6 from a test gallery with card
    `4242 4242 4242 4242`, then on `/admin` press **What will Prodigi charge?** and **Send
    to the printer**.
