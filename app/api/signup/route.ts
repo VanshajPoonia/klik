@@ -169,7 +169,9 @@ export async function POST(request: Request) {
         ? `Sent to ${email}.`
         : result.reason === "not_configured"
           ? "Email is not configured on this deployment."
-          : `The provider refused the send to ${email}.`,
+          : result.reason === "daily_limit"
+            ? "Klik's daily email limit was reached."
+            : `The provider refused the send to ${email}.`,
     });
   } catch (error) {
     reportError("signup.welcome_email_failed", error, { userId: created.id });

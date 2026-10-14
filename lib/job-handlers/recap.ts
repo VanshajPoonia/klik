@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lte, max, min } from "drizzle-orm";
 import { db } from "../db";
 import { emailSuppressions, events, guests, media, users } from "../schema";
-import { sendEmail } from "../email";
+import { sendEmail, untilEmailDayResets } from "../email";
 import { recapEmail } from "../emails/recap";
 import { env, getAppUrl } from "../env";
 import { highlightsFor } from "../highlights";
@@ -150,16 +150,23 @@ export async function sendRecaps(payload: JobPayload<"recap.send">, context: Job
         privacyUrl: `${appUrl}/privacy`,
         postalAddress: env.COMPANY_POSTAL_ADDRESS as string,
       });
-      const result = await sendEmail({
-        to: email,
-        ...message,
-        headers: { "List-Unsubscribe": `<${unsubscribe.oneClick}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
-      });
+      const result = await sendEmail(
+        {
+          to: email,
+          ...message,
+          headers: { "List-Unsubscribe": `<${unsubscribe.oneClick}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+        },
+        { bulk: true },
+      );
 
       if (result.sent) {
         await db.update(guests).set({ recapEmail: null, recapSentAt: new Date() }).where(inArray(guests.id, ids));
       } else if (result.reason === "not_configured") {
         return { requeue: { delayMs: DAY } };
+      } else if (result.reason === "daily_limit") {
+        // Klik's own daily cap, not a failure: nothing is counted against these
+        // guests, and the rest go out after midnight UTC, oldest first.
+        return { requeue: { delayMs: untilEmailDayResets() } };
       } else if (Math.max(...group.map((guest) => guest.failures)) + 1 >= MAX_FAILURES) {
         await db.update(guests).set({ recapEmail: null }).where(inArray(guests.id, ids));
         log.warn("recap.given_up", { eventId: event.id, guests: ids.length });

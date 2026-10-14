@@ -28,8 +28,8 @@ export type ActivationNoticeResult =
   | { sent: true }
   /** No address on file. An /admin/new account can have a username and no email. */
   | { sent: false; reason: "no_email" }
-  /** Email is not configured, or the provider refused it. See `sendEmail`. */
-  | { sent: false; reason: "not_configured" | "rejected" }
+  /** Email is not configured, the provider refused it, or today's limit is used up. See `sendEmail`. */
+  | { sent: false; reason: "not_configured" | "rejected" | "daily_limit" }
   /** An unexpected throw, already reported. */
   | { sent: false; reason: "failed" };
 
@@ -83,7 +83,9 @@ export async function sendActivationNotice(
         detail:
           result.reason === "not_configured"
             ? "Email is not configured on this deployment."
-            : `The provider refused the send to ${account.email}.`,
+            : result.reason === "daily_limit"
+              ? "Klik's daily email limit was reached. Send it again after midnight UTC."
+              : `The provider refused the send to ${account.email}.`,
         actor,
       });
       return { sent: false, reason: result.reason };
@@ -128,6 +130,8 @@ export function describeActivationNotice(result: ActivationNoticeResult): string
       return "Activated. Email is not configured on this deployment, so nothing was sent.";
     case "rejected":
       return "Activated, but the email was refused. Check the address and send it again.";
+    case "daily_limit":
+      return "Activated, but today's email limit is used up. Send it again after midnight UTC.";
     case "failed":
       return "Activated, but sending the email failed. Try sending it again.";
   }

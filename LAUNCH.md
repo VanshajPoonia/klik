@@ -523,10 +523,12 @@ requires a postal address in the footer of any email like it:
    Production: a real address where the business receives mail, on one line, for example
    `Kreativ Vantage, 123 Example St, Suite 4, Austin, TX 78701, USA`. A PO box or a
    registered mail service is fine. Redeploy. The entry sheet then shows the email field.
-2. **Check your Resend plan.** The free plan sends 100 emails a day and 3,000 a month, and a
-   single 200-guest wedding can pass the daily limit on its own morning. Resend **Pro** ($20 a
-   month, 50,000 a month) removes the problem. Sends that are refused are retried twice, six
-   hours apart, and then dropped.
+2. **Know the daily cap.** Resend's free plan sends 100 emails a day, resetting at midnight
+   UTC, so Klik stops itself at 80 (`lib/email.ts`). Recaps stop at 60, keeping the last 20
+   for sign-in codes. Recaps over the cap are not lost: they go out after midnight UTC,
+   oldest first, so a 200-guest wedding's recaps can take a few days. Resend **Pro** ($20 a
+   month, no daily cap) makes them all go the same morning; raise `EMAIL_DAILY_LIMIT` and
+   `BULK_EMAIL_DAILY_LIMIT` when you upgrade.
 
 Then try it: join one of your galleries on your phone, signed out, with your own email and
 the tick. The email comes at 9am the next day (on Vercel Hobby, at the first job run after
@@ -535,7 +537,7 @@ spam, that the photos show, and that "Never email me a recap again" works. Hosts
 offer off per event in **Settings**.
 
 - [ ] Set COMPANY_POSTAL_ADDRESS in Vercel and redeployed
-- [ ] Checked the Resend plan against the size of the events you expect
+- [ ] Decided whether the 80-a-day cap is enough for the events you expect
 - [ ] Received a recap on a test event and pressed its unsubscribe link
 
 ### 12. Make a highlight reel (works today, no key)
@@ -568,7 +570,7 @@ redeployed, tell Claude which steps you did and it checks production.
 | 1 | Error emails to you | `ALERT_EMAIL` | 2 min | Free |
 | 2 | Sentry error tracking | `NEXT_PUBLIC_SENTRY_DSN` | 10 min | Free |
 | 3 | Continue with Google | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | 20 min | Free |
-| 4 | Guests' morning-after email | `COMPANY_POSTAL_ADDRESS` | 5 min | Free; Resend may need Pro |
+| 4 | Guests' morning-after email | `COMPANY_POSTAL_ADDRESS` | 2 min | Free; capped at 80 emails a day |
 | 5 | An alarm if the nightly cleanup stops | `CRON_HEARTBEAT_URL` | 5 min | Free |
 | 6 | Search, scenes, smart folders, screening | `CLOUDFLARE_AI_API_TOKEN` | 5 min | Under $1 for a 2,000-photo wedding |
 | 7 | Videos play as streams | `CLOUDFLARE_STREAM_API_TOKEN` | 10 min | From $5 a month |
@@ -732,10 +734,11 @@ branding** does it later, once you prove you own the domain.
    `Kreativ Vantage, 123 Example St, Suite 4, Austin, TX 78701, USA`. A real address where
    the business receives mail; a PO box or virtual mailbox is fine. US law (CAN-SPAM)
    requires it in the footer.
-2. <https://resend.com> → **Settings** → **Billing**. If the plan is **Free** (100 emails a
-   day), a 200-guest wedding can pass that on its own morning; upgrade to **Pro** ($20 a
-   month) before your first big event.
-3. Redeploy.
+2. Redeploy.
+
+Klik sends at most 80 emails a day (Resend's free plan allows 100), and recaps at most 60
+of them, so sign-in codes always have room. Recaps past that go out the next day. Upgrade
+Resend to **Pro** only if that wait matters.
 
 **Check:** on your phone, signed out, join one of your galleries and leave your email with
 the tick. The email arrives the next morning, after the 04:00 UTC job on Hobby. Check it is
@@ -860,12 +863,28 @@ Links.
 
 1. <https://dashboard.stripe.com/settings/billing/portal>, in live mode (the test mode
    switch off).
-2. Under **Ways to get started**, press **Activate link**. Below it you can choose what
-   customers may do: update their card, see invoices, cancel. Save if you change any.
-3. Copy the login link. It starts `https://billing.stripe.com/p/login/`.
-4. Vercel: Type **Config**, Key `STRIPE_BILLING_PORTAL_URL`.
-5. Redeploy. Until then, the billing page and payment emails give your email and phone
+   Check the account name at the top left is Kreativ Vantage, not the sandbox.
+2. Under **Ways to get started**, press **Activate link**.
+3. Further down the same page, set what customers may do, then **Save**:
+   - **Cancel subscription**: turn it **off** (it starts on). Klik does not hear from
+     Stripe, so a cancel there would leave Venue switched on in Klik. Customers ask you,
+     and you end it on `/admin`.
+   - **Invoice history** and **Payment methods**: leave on, so customers find receipts
+     and fix a failed card themselves.
+   - **Switch plan**: leave off. There is one Venue plan.
+   - **Terms of service link**: `https://klik.kreativvantage.com/terms`.
+   - **Default redirect link**: `https://klik.kreativvantage.com/dashboard/billing`.
+4. Copy the login link. It starts `https://billing.stripe.com/p/login/`.
+5. Vercel: Type **Config**, Key `STRIPE_BILLING_PORTAL_URL`.
+6. Redeploy. Until then, the billing page and payment emails give your email and phone
    instead.
+7. <https://dashboard.stripe.com/settings/emails>: turn on **Successful payments**, so every
+   buyer gets Stripe's receipt by email. The portal finds a customer by email, and a
+   one-time pass bought through a Payment Link may be saved as a guest it cannot find, so
+   this receipt is what pass buyers have.
+
+**Check:** signed in, `/dashboard/billing` links to `billing.stripe.com`. Enter a Venue
+customer's email there and Stripe emails them a sign-in link.
 
 ### 11. Later: prints (needs Stripe's API)
 
@@ -891,7 +910,7 @@ before then; on its own it does nothing. When you are ready:
 - [ ] 1. `ALERT_EMAIL` set
 - [ ] 2. Sentry DSN set, and the test error seen in Sentry and by email
 - [ ] 3. Google sign-in: a new account made, and the "already has an account" message seen
-- [ ] 4. `COMPANY_POSTAL_ADDRESS` set and the Resend plan checked
+- [ ] 4. `COMPANY_POSTAL_ADDRESS` set
 - [ ] 5. Heartbeat set, and the check says up the next morning
 - [ ] 6. Workers AI token set, and a search that found something
 - [ ] 7. Stream token set, and one video playing as a stream
