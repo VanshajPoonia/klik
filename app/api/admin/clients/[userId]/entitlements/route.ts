@@ -69,9 +69,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
       venueSlug: users.venueSlug,
     })
     .from(users)
-    .where(and(eq(users.id, userId), eq(users.role, "organizer")))
+    // Any account, a superadmin's included: Klik's own test and demo events are
+    // licensed the same way a customer's are, and refusing them left those
+    // drafts in "Waiting to go live" with no way to grant.
+    .where(eq(users.id, userId))
     .limit(1);
-  if (!account) return NextResponse.json({ error: "Organizer not found" }, { status: 404 });
+  if (!account) return NextResponse.json({ error: "Account not found" }, { status: 404 });
 
   if (eventId) {
     const [owned] = await db
