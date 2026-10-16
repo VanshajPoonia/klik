@@ -49,8 +49,15 @@ export type UsernameChange =
  * WHERE, so two tabs pressing save at once make one change; the unique index
  * and the parking trigger decide whether the handle is free, so a check made a
  * moment earlier cannot be raced.
+ *
+ * `bySuperadmin` skips the 30 days, which exist to stop a person churning
+ * their own handle, not Klik correcting one. The old handle is still parked.
  */
-export async function changeUsername(userId: string, raw: string): Promise<UsernameChange> {
+export async function changeUsername(
+  userId: string,
+  raw: string,
+  { bySuperadmin = false }: { bySuperadmin?: boolean } = {},
+): Promise<UsernameChange> {
   const check = validateUsername(raw);
   if (!check.ok) return { ok: false, status: 400, reason: check.reason };
 
@@ -69,7 +76,9 @@ export async function changeUsername(userId: string, raw: string): Promise<Usern
       .where(
         and(
           eq(users.id, userId),
-          sql`(${users.usernameChangedAt} IS NULL OR ${users.usernameChangedAt} <= now() - (${USERNAME_CHANGE_DAYS}::int * interval '1 day'))`,
+          bySuperadmin
+            ? sql`true`
+            : sql`(${users.usernameChangedAt} IS NULL OR ${users.usernameChangedAt} <= now() - (${USERNAME_CHANGE_DAYS}::int * interval '1 day'))`,
         ),
       )
       .returning({ username: users.username });

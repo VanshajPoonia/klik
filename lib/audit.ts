@@ -41,6 +41,7 @@ export type AuditAction =
   | "credit.used"
   | "plan.grace_started"
   | "plan.grace_cleared"
+  | "account.details_changed"
   | "event.suspended"
   | "event.unsuspended"
   | "report.organizer_notified"

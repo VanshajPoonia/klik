@@ -28,8 +28,9 @@ vi.mock("next/server", async (importOriginal) => ({
 
 const { POST: grant } = await import("@/app/api/admin/clients/[userId]/entitlements/route");
 const { POST: revoke } = await import("@/app/api/admin/entitlements/[entitlementId]/revoke/route");
+const { PATCH: editClient } = await import("@/app/api/admin/clients/[userId]/route");
 const { eventLicenseState } = await import("@/lib/license");
-const { events, users } = await import("@/lib/schema");
+const { accountTimeline, events, users } = await import("@/lib/schema");
 const { closeDatabase, makeEvent, makeUser, resetDatabase, testDb } = await import("./harness");
 
 beforeEach(async () => {
@@ -38,9 +39,9 @@ beforeEach(async () => {
 });
 afterAll(closeDatabase);
 
-function post(url: string, body: unknown) {
+function post(url: string, body: unknown, method = "POST") {
   return new Request(`https://example.test${url}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -119,6 +120,28 @@ describe("granting from /admin", () => {
     const { status } = await grantTo(admin.user.id, { planKey: "premium", eventId: id });
     expect(status).toBe(201);
     expect((await stateOf(id)).state).toBe("live");
+  });
+});
+
+describe("editing an account", () => {
+  const edit = (userId: string, body: unknown) =>
+    editClient(post(`/api/admin/clients/${userId}`, body, "PATCH"), { params: Promise.resolve({ userId }) });
+
+  it("changes name, email and handle, and writes what they were to the history", async () => {
+    const userId = await makeUser({ name: "Dave", email: "dave@old.test", username: "dave_old", usernameChangedAt: new Date() });
+    const response = await edit(userId, { name: "Dave Smith", email: "Dave@New.test", username: "davesmith" });
+    expect(response.status).toBe(200);
+    const [row] = await testDb.select().from(users).where(eq(users.id, userId));
+    expect(row).toMatchObject({ name: "Dave Smith", email: "dave@new.test", username: "davesmith" });
+    const [entry] = await testDb.select().from(accountTimeline).where(eq(accountTimeline.userId, userId));
+    expect(entry.kind).toBe("details_changed");
+    expect(entry.detail).toContain("dave@old.test");
+  });
+
+  it("refuses an email another account has", async () => {
+    await makeUser({ email: "taken@x.test" });
+    const userId = await makeUser();
+    expect((await edit(userId, { email: "taken@x.test" })).status).toBe(409);
   });
 });
 
