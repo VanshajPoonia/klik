@@ -60,9 +60,13 @@ export function skuOf(product: Pick<PrintProduct, "key" | "sku">): string {
   return process.env[`PRODIGI_SKU_${product.key.toUpperCase()}`] || product.sku;
 }
 
-/** Prints need both Stripe (to be paid) and Prodigi (to be printed). */
+/**
+ * Prints need a decision (PRINTS_ENABLED=1), Stripe (to be paid) and Prodigi
+ * (to be printed). Without all three nothing anywhere offers or promises one.
+ */
 export function isPrintsAvailable(): boolean {
-  return Boolean(getStripe()) && isProdigiConfigured();
+  // Read live, like the Prodigi key, rather than from the parsed `env`.
+  return process.env.PRINTS_ENABLED === "1" && Boolean(getStripe()) && isProdigiConfigured();
 }
 
 export class PrintError extends Error {
@@ -127,7 +131,10 @@ export async function startOrder({
   origin?: string;
 }): Promise<{ orderId: string; url: string }> {
   const stripe = getStripe();
-  if (!stripe || !isProdigiConfigured()) throw new PrintError("unavailable");
+  // The same check every button uses, so an order cannot start by calling the
+  // route directly while prints are switched off. Refunds below need only
+  // Stripe: an order taken before a switch-off can still be put right.
+  if (!stripe || !isPrintsAvailable()) throw new PrintError("unavailable");
   if (!event.printsEnabled || event.suspendedAt) throw new PrintError("off");
   const wanted = lines.filter((line) => line.copies > 0);
   if (wanted.length === 0) throw new PrintError("empty");

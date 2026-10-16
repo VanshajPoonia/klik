@@ -73,6 +73,7 @@ beforeEach(async () => {
   shipments = [];
   stripeOn = true;
   process.env.PRODIGI_API_KEY = "prodigi-sandbox-key";
+  process.env.PRINTS_ENABLED = "1";
   process.env.ALERT_EMAIL = "ops@example.test";
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => prodigi(String(input), init)));
   await resetDatabase();
@@ -80,6 +81,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.unstubAllGlobals();
   delete process.env.PRODIGI_API_KEY;
+  delete process.env.PRINTS_ENABLED;
   delete process.env.ALERT_EMAIL;
 });
 afterAll(closeDatabase);
@@ -152,6 +154,10 @@ describe("starting an order", () => {
     await expect(startOrder({ event, viewer: asGuest(guestId), lines: line(ok), email: null })).rejects.toMatchObject({ code: "unavailable" });
     stripeOn = true;
     delete process.env.PRODIGI_API_KEY;
+    await expect(startOrder({ event, viewer: asGuest(guestId), lines: line(ok), email: null })).rejects.toMatchObject({ code: "unavailable" });
+    // Both keys set is still not a decision to sell prints.
+    process.env.PRODIGI_API_KEY = "prodigi-sandbox-key";
+    delete process.env.PRINTS_ENABLED;
     await expect(startOrder({ event, viewer: asGuest(guestId), lines: line(ok), email: null })).rejects.toMatchObject({ code: "unavailable" });
   });
 

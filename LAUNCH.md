@@ -902,8 +902,10 @@ before then; on its own it does nothing. When you are ready:
 4. On `/admin`, **Check the catalogue**. Order a 4×6 from a test gallery with card
    `4242 4242 4242 4242`, then on `/admin` press **What will Prodigi charge?** and **Send
    to the printer**.
-5. When that works, set the live Stripe secret key, the live Prodigi key and
-   `PRODIGI_ENV=live` together, and redeploy.
+5. When that works, set the live Stripe secret key, the live Prodigi key,
+   `PRODIGI_ENV=live` and `PRINTS_ENABLED=1` together, and redeploy. Until
+   `PRINTS_ENABLED=1` is set, prints stay off whatever keys exist, and the Terms
+   and Privacy pages do not mention them. Set it in step 3 as well to test.
 
 ### Ticks
 

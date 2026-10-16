@@ -154,7 +154,12 @@ const schema = z.object({
   VERCEL_API_TOKEN: optionalString(z.string().min(20)),
   VERCEL_TEAM_ID: optionalString(z.string().regex(/^team_/, "VERCEL_TEAM_ID starts team_")),
 
-  // GRW-6: Prodigi prints and ships print orders a person at Klik approves.
+  // GRW-6: Klik does not sell physical prints. They are built, and stay off,
+  // with no button, no Terms section and no Privacy entry, until this is set
+  // to 1 on purpose, as well as the two keys below. Setting a Stripe key for
+  // something else never switches them on by accident.
+  PRINTS_ENABLED: optionalString(z.string().regex(/^[01]$/, "PRINTS_ENABLED is 0 or 1")),
+  // Prodigi prints and ships print orders a person at Klik approves.
   // PRODIGI_ENV=live sends them to the real printer; anything else is the
   // sandbox. Prints also need STRIPE_SECRET_KEY, since guests pay for them.
   PRODIGI_API_KEY: optionalString(z.string().min(10)),

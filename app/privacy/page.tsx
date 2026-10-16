@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalShell } from "@/components/legal/legal-shell";
 import { optionalProcessors } from "@/lib/processors";
+import { isPrintsAvailable } from "@/lib/prints";
 import { REDACT_AFTER_DAYS } from "@/lib/print-catalog";
 import { CURRENT_CONSENT } from "@/lib/consent";
 import {
@@ -158,15 +159,19 @@ export default function PrivacyPage() {
         a photo it flags is hidden until the organizer looks at it, and our team may look too.
       </p>
 
-      <h3>Prints</h3>
-      <p>
-        If you order prints, Stripe takes the payment and collects the address to ship to. We keep
-        your email, that address and what you ordered so the order can be printed, shipped and, if
-        needed, refunded, and share the photos and the address with Prodigi, which prints and posts
-        them. A person at {SERVICE_NAME} looks at every order before it is printed. Your email and
-        address are deleted {REDACT_AFTER_DAYS} days after the order is finished; the amount and the
-        date are kept for our accounts.
-      </p>
+      {isPrintsAvailable() && (
+        <>
+          <h3>Prints</h3>
+          <p>
+            If you order prints, Stripe takes the payment and collects the address to ship to. We keep
+            your email, that address and what you ordered so the order can be printed, shipped and, if
+            needed, refunded, and share the photos and the address with Prodigi, which prints and posts
+            them. A person at {SERVICE_NAME} looks at every order before it is printed. Your email and
+            address are deleted {REDACT_AFTER_DAYS} days after the order is finished; the amount and the
+            date are kept for our accounts.
+          </p>
+        </>
+      )}
 
       <h2>What we collect from organizers</h2>
       <ul>

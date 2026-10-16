@@ -384,6 +384,12 @@ refunds or grants by itself.
 
 ## Prints (GRW-6), 2026-10-11
 
+**Switched off, and not sold (2026-10-17).** Prints need `PRINTS_ENABLED=1` as well as
+`STRIPE_SECRET_KEY` and `PRODIGI_API_KEY`, so setting a Stripe key for the embedded
+checkout can never start selling them. Until then no gallery offers a print, an order
+cannot start even by calling the route, and the Terms and Privacy pages say nothing
+about prints. What follows is how they work if that is ever decided.
+
 The one place Klik takes money for something other than a plan, built to the
 same rule: **no payment does anything by itself.**
 
