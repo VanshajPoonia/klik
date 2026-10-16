@@ -89,7 +89,10 @@ export async function hasVenueGrant(userId: string, now = new Date()): Promise<b
         eq(entitlements.scope, "account"),
         eq(entitlements.planKey, "venue"),
         eq(entitlements.status, "active"),
-        sql`${entitlements.startsAt} <= ${now}`,
+        // Postgres keeps microseconds and a JavaScript Date does not, so a
+        // grant made in this same millisecond would read as not started yet.
+        // Compared at the precision the rest of the code sees it with.
+        sql`date_trunc('milliseconds', ${entitlements.startsAt}) <= ${now}`,
         or(isNull(entitlements.endsAt), gt(entitlements.endsAt, now)),
       ),
     )

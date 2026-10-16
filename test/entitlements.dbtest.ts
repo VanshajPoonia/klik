@@ -170,6 +170,20 @@ describe("hasVenueGrant", () => {
       .where(eq(entitlements.id, entitlement.id));
     expect(await hasVenueGrant(owner)).toBe(false);
   });
+
+  it("counts a grant made in the same millisecond as the check", async () => {
+    // Postgres stamps microseconds; a Date has milliseconds. Asked at .123 about
+    // a grant from .123456, it used to answer "not started yet", which is what
+    // made custom-domains.dbtest.ts fail now and then.
+    const owner = await makeUser();
+    const { entitlement } = await grant(owner, "venue");
+    await testDb
+      .update(entitlements)
+      .set({ startsAt: sql`'2026-10-17 10:00:00.123456+00'::timestamptz` })
+      .where(eq(entitlements.id, entitlement.id));
+    expect(await hasVenueGrant(owner, new Date("2026-10-17T10:00:00.123Z"))).toBe(true);
+    expect(await hasVenueGrant(owner, new Date("2026-10-17T10:00:00.122Z"))).toBe(false);
+  });
 });
 
 describe("revoking", () => {
