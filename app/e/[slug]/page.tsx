@@ -118,10 +118,13 @@ export default async function GuestEventPage({
 
   // GRW-1: offered only where the host allows it and Klik can send it.
   const offerRecap = event.recapEnabled && isRecapAvailable();
+  // Premium shows the host's own colours; any plan shows a template's.
+  const colors = eventColors(event, canCustomizeGallery(plan.key));
+  const sheetColors = { accentColor: colors.accent, backgroundColor: colors.background };
 
   if (!access.allowed) {
     if (access.reason === "password_required") {
-      return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword offerRecap={offerRecap} />);
+      return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword offerRecap={offerRecap} {...sheetColors} />);
     }
     return speak(
       <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
@@ -160,7 +163,7 @@ export default async function GuestEventPage({
   const hasConsented = Boolean(guestSession && guestSession.eventId === event.id);
 
   if (!hasConsented && !isOwner) {
-    return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword={false} offerRecap={offerRecap} />);
+    return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword={false} offerRecap={offerRecap} {...sheetColors} />);
   }
 
   // GRW-7: an open by someone other than the event's team. Counted after the
@@ -252,8 +255,6 @@ export default async function GuestEventPage({
         developed: !rollUndeveloped(event),
       }
     : null;
-  // Premium shows the host's own colours; any plan shows a template's.
-  const colors = eventColors(event, canCustomizeGallery(plan.key));
   const publicEvent = toPublicEvent({
     ...event,
     coverMediaId: canCustomizeGallery(plan.key) ? event.coverMediaId : null,

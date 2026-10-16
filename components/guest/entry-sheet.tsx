@@ -9,16 +9,23 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { CURRENT_CONSENT, consentText } from "@/lib/consent";
 import { LanguageSwitch, useGuestCopy } from "@/components/guest/guest-copy";
 import { refusalText } from "@/lib/i18n/guest";
+import { galleryContentTheme } from "@/components/guest/gallery-theme";
+import { KLIK_COLORS } from "@/lib/gallery-templates";
 
 export function EntrySheet({
   slug,
   eventName,
   requiresPassword,
   offerRecap = false,
+  accentColor = KLIK_COLORS.accent,
+  backgroundColor = KLIK_COLORS.background,
 }: {
   slug: string;
   eventName: string;
   requiresPassword: boolean;
+  /** The gallery's own colours, so the sheet in front of it already wears them. */
+  accentColor?: string;
+  backgroundColor?: string;
   /** GRW-1: the host offers the morning-after email and Klik can send it. */
   offerRecap?: boolean;
 }) {
@@ -71,7 +78,14 @@ export function EntrySheet({
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
+    <div
+      className="flex min-h-screen flex-col items-center justify-center px-6 py-16"
+      style={{
+        backgroundColor,
+        ["--color-canvas" as string]: backgroundColor,
+        ...galleryContentTheme(accentColor, backgroundColor),
+      }}
+    >
       <div className="w-full max-w-sm">
         <h1 className="text-center font-display text-2xl text-paper">{eventName}</h1>
         <p className="mt-2 text-center text-sm text-muted">

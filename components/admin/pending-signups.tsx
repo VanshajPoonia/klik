@@ -41,7 +41,7 @@ export function PendingSignups({
                 </span>
               </summary>
               <div className="space-y-3 px-4 pb-4">
-                <GrantControl userId={signup.userId} events={[]} />
+                <GrantControl userId={signup.userId} events={[]} settleMs={3000} />
                 <div className="flex flex-wrap gap-4 text-xs">
                   <Link href={`/admin/clients/${signup.userId}`} className="text-muted hover:text-paper">
                     Open their page

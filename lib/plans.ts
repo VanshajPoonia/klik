@@ -233,6 +233,8 @@ export function canUsePrintStudio(planKey: PlanKey): boolean {
 
 export function formatFileSize(bytes: number): string {
   if (bytes >= 1024 * MB) return `${Math.round(bytes / (1024 * MB))} GB`;
+  // Under a megabyte reads as "0 MB" for a gallery with photos in it.
+  if (bytes > 0 && bytes < MB) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${Math.round(bytes / MB)} MB`;
 }
 

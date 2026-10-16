@@ -30,9 +30,15 @@ export function GrantControl({
   userId,
   events,
   target,
+  settleMs = 0,
 }: {
   userId: string;
   events: GrantTarget[];
+  /**
+   * How long the outcome stays readable before the page refreshes. A queue row
+   * leaves the queue on refresh, and took the "now live" with it.
+   */
+  settleMs?: number;
   /** One event this form puts live, with no picker: the "Go live" form beside a waiting event. */
   target?: GrantTarget;
 }) {
@@ -75,7 +81,10 @@ export function GrantControl({
     // The email outcome, when there was one, is what to act on now, so it leads.
     const parts: string[] = [];
     if (body.notice?.message) parts.push(body.notice.message);
-    if (body.licensed?.length) {
+    const upgrading = (target ?? events.find((candidate) => candidate.id === eventId))?.state === "live";
+    if (body.licensed?.length && upgrading) {
+      parts.push(`Upgraded to ${PLANS[planKey].name}.`);
+    } else if (body.licensed?.length) {
       parts.push(`${body.licensed.length} ${body.licensed.length === 1 ? "event is" : "events are"} now live.`);
     } else if (!isVenue) {
       parts.push("Saved as an unused pass. Their next event uses it.");
@@ -85,7 +94,8 @@ export function GrantControl({
     setReason("");
     setAmount("");
     setStripeRef("");
-    router.refresh();
+    if (settleMs > 0) window.setTimeout(() => router.refresh(), settleMs);
+    else router.refresh();
   }
 
   return (

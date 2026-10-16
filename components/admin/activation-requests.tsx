@@ -57,6 +57,7 @@ export function ActivationRequests({ rows }: { rows: ActivationRequestRow[] }) {
                   userId={row.userId}
                   events={[]}
                   target={{ id: row.eventId, name: row.eventName, state: "draft" }}
+                  settleMs={3000}
                 />
                 <Link href={`/admin/clients/${row.userId}`} className="inline-block text-xs text-muted hover:text-paper">
                   Open {row.ownerName ?? "the client"}&apos;s page

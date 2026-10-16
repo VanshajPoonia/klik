@@ -7,7 +7,8 @@ import { nanoid } from "nanoid";
 import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, Play, Printer, Stamp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
-import { ensureContrast, galleryPalette, readableOn } from "@/lib/color";
+import { ensureContrast, readableOn } from "@/lib/color";
+import { galleryContentTheme } from "@/components/guest/gallery-theme";
 import { LanguageSwitch, useGuestCopy } from "@/components/guest/guest-copy";
 import { formatDuration } from "@/lib/video-poster";
 import { uploadToGallery } from "@/lib/upload-client";
@@ -98,7 +99,6 @@ interface PendingUpload {
 }
 
 const MAX_FILES_PER_PICK = 20;
-const DEFAULT_BACKGROUND = "#050505";
 const PAGE_SIZE = 60;
 
 // Polling backs off while nothing happens and snaps back the moment something
@@ -744,21 +744,7 @@ export function GuestGallery({
   // wrapper on purpose: they are always dark, so they only take the accent.
   // TRS-3: every colour held to WCAG AA against the chosen background, the
   // accent included where it is a link, an icon or a button (lib/color.ts).
-  const customBackground = event.backgroundColor.toLowerCase() !== DEFAULT_BACKGROUND;
-  const palette = galleryPalette(event.accentColor, event.backgroundColor);
-  const blendToward = palette.light ? "black" : "white";
-  const contentTheme = {
-    ["--color-volt" as string]: palette.volt,
-    ["--color-on-volt" as string]: palette.onVolt,
-    ...(customBackground
-      ? {
-          ["--color-paper" as string]: palette.paper,
-          ["--color-muted" as string]: palette.muted,
-          ["--color-canvas-raised" as string]: `color-mix(in srgb, ${event.backgroundColor} 94%, ${blendToward})`,
-          ["--color-canvas-line" as string]: `color-mix(in srgb, ${event.backgroundColor} 84%, ${blendToward})`,
-        }
-      : {}),
-  };
+  const contentTheme = galleryContentTheme(event.accentColor, event.backgroundColor);
   // The camera and the viewer are always near black, outside the content.
   const darkVolt = ensureContrast(event.accentColor, "#050505", 3);
 

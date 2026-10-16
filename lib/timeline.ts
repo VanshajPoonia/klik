@@ -278,7 +278,7 @@ function accessEmailStep(account: ChainInput, activated: boolean): ChainStep {
     state: "action",
     at: null,
     note: account.email
-      ? "Activated but never notified. Send it from the control above."
+      ? "Activated but never notified. Send it from Account, below."
       : "No email address on file. Call them instead.",
   };
 }

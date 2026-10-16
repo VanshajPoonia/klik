@@ -851,7 +851,9 @@ export function EventDashboard({
               )}
               {searching && shownApproved.length === 0 ? null : approved.length === 0 ? (
                 <Card className="text-center text-sm text-muted">
-                  No approved photos or videos yet. Share the QR code to get started.
+                  {license.state === "draft"
+                    ? "Nothing here yet. Guests can add photos once the event is live."
+                    : "No approved photos or videos yet. Share the QR code to get started."}
                 </Card>
               ) : shownApproved.length === 0 ? (
                 <Card className="text-center text-sm text-muted">
