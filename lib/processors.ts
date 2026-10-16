@@ -14,6 +14,12 @@ export interface OptionalProcessor {
   name: string;
   job: string;
   active: boolean;
+  /**
+   * Left out of the policy entirely while off, rather than shown as "not in
+   * use yet": prints are not something Klik sells, and listing their printer
+   * read as a promise that it will.
+   */
+  onlyWhenActive?: boolean;
 }
 
 export function optionalProcessors(): OptionalProcessor[] {
@@ -37,11 +43,12 @@ export function optionalProcessors(): OptionalProcessor[] {
       name: "Prodigi",
       job: "prints and posts the prints a guest orders. It receives the photos ordered and the name and address to ship to.",
       active: isPrintsAvailable(),
+      onlyWhenActive: true,
     },
     {
       name: "Sentry",
       job: "records errors so we can fix them: what failed and where in our code. Never a photo, a name or an email address.",
       active: Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN),
     },
-  ];
+  ].filter((processor) => processor.active || !processor.onlyWhenActive);
 }
