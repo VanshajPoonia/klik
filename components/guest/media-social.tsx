@@ -266,7 +266,7 @@ export function CommentsSheet({
       // viewer underneath and change the photo.
       onTouchStart={(event) => event.stopPropagation()}
       onTouchEnd={(event) => event.stopPropagation()}
-      className="absolute inset-x-0 bottom-0 z-20 mx-auto flex max-h-[78%] w-full max-w-lg flex-col rounded-t-2xl border border-white/10 bg-black/90 backdrop-blur sm:bottom-3 sm:rounded-2xl"
+      className="klik-sheet-up absolute inset-x-0 bottom-0 z-20 mx-auto flex max-h-[78%] w-full max-w-lg flex-col rounded-t-2xl border border-white/10 bg-black/90 backdrop-blur sm:bottom-3 sm:rounded-2xl"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 py-1 pl-4 pr-1">
         <p className="text-sm font-medium text-paper">Comments</p>

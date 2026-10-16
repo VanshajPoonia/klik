@@ -180,7 +180,7 @@ export function MediaSharePanel({
         ref={panelRef}
         role="dialog"
         aria-label={t.share.storyDialog}
-        className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[calc(100%-1.5rem)] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+        className="klik-sheet-up absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[calc(100%-1.5rem)] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
       >
         <div className="flex items-center gap-2">
           <button
@@ -237,7 +237,7 @@ export function MediaSharePanel({
       ref={panelRef}
       role="dialog"
       aria-label={t.share.title(noun)}
-      className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[calc(100%-1.5rem)] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+      className="klik-sheet-up absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[calc(100%-1.5rem)] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
     >
       <p ref={headingRef} tabIndex={-1} className="text-sm font-medium text-paper outline-none">
         {t.share.title(noun)}

@@ -750,7 +750,8 @@ export function GuestGallery({
 
   return (
     <div
-      className="min-h-screen px-6 py-10 md:px-10"
+      // Fades in over the entry sheet it replaces, in the same colours.
+      className="klik-fade-in min-h-screen px-6 py-10 md:px-10"
       style={{
         backgroundColor: event.backgroundColor,
         // The viewer and camera are always dark, so out here the accent is
@@ -1102,7 +1103,7 @@ export function GuestGallery({
                 key={item.id}
                 onClick={() => setLightboxId(item.id)}
                 aria-label={item.kind === "video" ? t.gallery.openVideo : t.gallery.openPhoto}
-                className={`relative aspect-square overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
+                className={`relative aspect-square overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised transition-transform duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
                   settledIds.has(item.id) ? "" : "klik-frame"
                 }`}
               >

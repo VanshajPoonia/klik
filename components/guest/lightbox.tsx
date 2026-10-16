@@ -117,6 +117,20 @@ export interface LightboxSocial {
 const DOUBLE_TAP_MS = 300;
 
 const SWIPE_THRESHOLD = 50;
+/** Past this share of the screen, or this flick speed in px/ms, a drag commits. */
+const COMMIT_SHARE = 0.18;
+const COMMIT_SPEED = 0.45;
+/** A downward drag this far, or this fast, closes the viewer. */
+const DISMISS_DISTANCE = 110;
+const DISMISS_SPEED = 0.6;
+const SETTLE = "transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease-out";
+const LEAVE_MS = 170;
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+type Gesture = { x: number; y: number; t: number; axis: "x" | "y" | null; dx: number; dy: number };
 
 type ReportReason =
   | "child_safety"
@@ -184,6 +198,8 @@ export function Lightbox({
   // TRS-3: the guest's language; the dashboard, outside any provider, gets English.
   const { t } = useGuestCopy();
   const touchStartX = useRef<number | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const gesture = useRef<Gesture | null>(null);
   const lastTap = useRef(0);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [slideshowPlaying, setSlideshowPlaying] = useState(false);
@@ -260,13 +276,26 @@ export function Lightbox({
     };
   }, [enhanced, item, photoUrl]);
 
+  // How the photo on screen arrived, which decides how it animates in: the
+  // first one opens, the rest slide in from the side they came from.
+  const [enter, setEnter] = useState<"open" | "next" | "prev" | "fade">("open");
   const go = useCallback(
     (delta: number) => {
       const next = index + delta;
-      if (next >= 0 && next < items.length) onIndexChange(next);
+      if (next < 0 || next >= items.length) return;
+      setEnter(delta > 0 ? "next" : "prev");
+      onIndexChange(next);
     },
     [index, items.length, onIndexChange],
   );
+
+  // A short fade on the way out, so closing reads as putting the photo down.
+  const [closing, setClosing] = useState(false);
+  const requestClose = useCallback(() => {
+    if (prefersReducedMotion()) return onClose();
+    setClosing(true);
+    window.setTimeout(onClose, LEAVE_MS);
+  }, [onClose]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -276,7 +305,7 @@ export function Lightbox({
       if (e.key === "Escape") {
         if (sharingOpen) setSharingFor(null);
         else if (commentsOpen) setCommentsFor(null);
-        else onClose();
+        else requestClose();
         return;
       }
       // Typing a comment or a report note must not change the photo.
@@ -291,12 +320,14 @@ export function Lightbox({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canSlideshow, commentsOpen, editing, go, items.length, onClose, sharingOpen]);
+  }, [canSlideshow, commentsOpen, editing, go, items.length, requestClose, sharingOpen]);
 
   useEffect(() => {
     if (!slideshowPlaying || commentsOpen || sharingOpen || items.length < 2 || !item) return;
     const delay = item.kind === "video" ? 12_000 : 6_000;
     const timer = window.setTimeout(() => {
+      // A slideshow crossfades; sliding every six seconds would be restless.
+      setEnter("fade");
       onIndexChange((index + 1) % items.length);
     }, delay);
     return () => window.clearTimeout(timer);
@@ -352,21 +383,113 @@ export function Lightbox({
   };
   const showSocialBar = Boolean(social && (social.reactions || social.comments));
 
+  // The photo follows the finger. Sideways it is pulled along and either
+  // carried off to the next one or let go back to centre; downwards it shrinks
+  // away and the viewer closes. Styles are written straight to the stage, so a
+  // drag never re-renders the viewer. Panels over the photo take their own
+  // touches, so none of this runs while one is open.
+  const panelOpen =
+    commentsOpen ||
+    sharingOpen ||
+    Boolean(editing) ||
+    confirmingDelete === item.id ||
+    reportingId === item.id ||
+    sharpenFor === item.id ||
+    printFor === item.id;
+  const settleStage = (animate: boolean) => {
+    const stage = stageRef.current;
+    const root = viewerRef.current;
+    if (stage) {
+      stage.style.transition = animate ? SETTLE : "none";
+      stage.style.transform = "";
+      stage.style.opacity = "";
+    }
+    if (root) {
+      root.style.transition = animate ? "background-color 260ms ease-out" : "none";
+      root.style.backgroundColor = "";
+    }
+  };
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    gesture.current =
+      e.touches.length === 1 && !panelOpen
+        ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: e.timeStamp, axis: null, dx: 0, dy: 0 }
+        : null;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const g = gesture.current;
+    const stage = stageRef.current;
+    if (!g || !stage || e.touches.length !== 1) return;
+    g.dx = e.touches[0].clientX - g.x;
+    g.dy = e.touches[0].clientY - g.y;
+    if (!g.axis) {
+      if (Math.max(Math.abs(g.dx), Math.abs(g.dy)) < 10) return;
+      g.axis = Math.abs(g.dx) > Math.abs(g.dy) ? "x" : g.dy > 0 ? "y" : null;
+      if (!g.axis) {
+        gesture.current = null;
+        return;
+      }
+    }
+    stage.style.transition = "none";
+    if (g.axis === "x") {
+      // Resists past the first and last photo, so the end is felt, not hit.
+      const atEdge = (g.dx > 0 && index === 0) || (g.dx < 0 && index === items.length - 1);
+      stage.style.transform = `translate3d(${atEdge ? g.dx * 0.3 : g.dx}px, 0, 0)`;
+    } else {
+      const dy = Math.max(0, g.dy);
+      stage.style.transform = `translate3d(0, ${dy}px, 0) scale(${1 - Math.min(dy / 1600, 0.12)})`;
+      const root = viewerRef.current;
+      if (root) {
+        root.style.transition = "none";
+        root.style.backgroundColor = `rgba(0, 0, 0, ${1 - Math.min(dy / 450, 0.75)})`;
+      }
+    }
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const g = gesture.current;
+    gesture.current = null;
+    const stage = stageRef.current;
+    if (!g?.axis || !stage) return;
+    const reduce = prefersReducedMotion();
+    const speed = (g.axis === "x" ? Math.abs(g.dx) : g.dy) / Math.max(1, e.timeStamp - g.t);
+    if (g.axis === "x") {
+      const delta = g.dx < 0 ? 1 : -1;
+      const target = index + delta;
+      const far = Math.abs(g.dx) > Math.max(SWIPE_THRESHOLD, window.innerWidth * COMMIT_SHARE);
+      if (target < 0 || target >= items.length || !(far || speed > COMMIT_SPEED)) return settleStage(!reduce);
+      if (reduce) {
+        settleStage(false);
+        return go(delta);
+      }
+      stage.style.transition = `transform ${LEAVE_MS}ms cubic-bezier(0.4, 0, 1, 1), opacity ${LEAVE_MS}ms ease-in`;
+      stage.style.transform = `translate3d(${delta > 0 ? "-100%" : "100%"}, 0, 0)`;
+      stage.style.opacity = "0.3";
+      window.setTimeout(() => go(delta), LEAVE_MS);
+      return;
+    }
+    if (g.dy > DISMISS_DISTANCE || speed > DISMISS_SPEED) {
+      if (reduce) return onClose();
+      stage.style.transition = `transform ${LEAVE_MS}ms ease-in, opacity ${LEAVE_MS}ms ease-in`;
+      stage.style.transform = `translate3d(0, ${Math.max(g.dy, 0) + 160}px, 0) scale(0.9)`;
+      stage.style.opacity = "0";
+      return requestClose();
+    }
+    settleStage(!reduce);
+  };
+
   return (
     <div
       ref={viewerRef}
       role="dialog"
       aria-modal="true"
       aria-label={t.viewer.label}
-      className="fixed inset-0 z-[110] flex flex-col bg-black/95"
-      onTouchStart={(e) => {
-        touchStartX.current = e.touches[0].clientX;
-      }}
-      onTouchEnd={(e) => {
-        if (touchStartX.current === null) return;
-        const delta = e.changedTouches[0].clientX - touchStartX.current;
-        if (Math.abs(delta) > SWIPE_THRESHOLD) go(delta > 0 ? -1 : 1);
-        touchStartX.current = null;
+      className={`fixed inset-0 z-[110] flex flex-col bg-black ${closing ? "klik-viewer-out" : "klik-viewer-in"}`}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={() => {
+        gesture.current = null;
+        settleStage(true);
       }}
     >
       <div className="flex shrink-0 items-center justify-between px-4 py-4">
@@ -525,7 +648,7 @@ export function Lightbox({
           )}
           <button
             ref={closeRef}
-            onClick={onClose}
+            onClick={requestClose}
             aria-label={t.common.close}
             className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-paper transition-transform active:scale-90"
           >
@@ -535,52 +658,70 @@ export function Lightbox({
       </div>
 
       <div className="relative flex-1 overflow-hidden">
-        {item.kind === "video" ? (
-          <StreamVideo
-            key={item.id}
-            src={item.blobUrl}
-            stream={Boolean(item.stream)}
-            poster={item.posterSrc ?? item.posterUrl ?? undefined}
-            label={t.viewer.position("video", index + 1, items.length)}
-            className="h-full w-full object-contain"
-            autoPlay
-          />
-        ) : (
-          <Image
-            key={item.id}
-            onDoubleClick={heartFromPhoto}
-            onTouchEnd={(e) => {
-              // A second tap in the same spot, quickly. A swipe moves too far
-              // to count, so changing photos never hearts one by accident.
-              const start = touchStartX.current;
-              const moved = start === null ? 0 : Math.abs(e.changedTouches[0].clientX - start);
-              if (moved > 10) return;
-              const now = e.timeStamp;
-              if (now - lastTap.current < DOUBLE_TAP_MS) {
-                lastTap.current = 0;
-                heartFromPhoto();
-              } else {
-                lastTap.current = now;
-              }
-            }}
-            src={enhancedUrl ?? photoUrl ?? item.blobUrl}
-            onError={() => {
-              if (item.src && !expiredIds.has(item.id)) {
-                setExpiredIds((current) => new Set(current).add(item.id));
-              }
-            }}
-            alt={t.viewer.position("photo", index + 1, items.length)}
-            fill
-            unoptimized
-            sizes="100vw"
-            className="touch-manipulation object-contain"
-            priority
-          />
-        )}
+        {/* The stage carries the photo through a drag, and is keyed by it so
+            each new photo mounts fresh and plays its way in. */}
+        <div
+          ref={stageRef}
+          key={`stage-${item.id}`}
+          className={`absolute inset-0 ${
+            enter === "open"
+              ? "klik-photo-open"
+              : enter === "next"
+                ? "klik-photo-next"
+                : enter === "prev"
+                  ? "klik-photo-prev"
+                  : "klik-fade-in"
+          }`}
+        >
+          {item.kind === "video" ? (
+            <StreamVideo
+              key={`media-${item.id}`}
+              src={item.blobUrl}
+              stream={Boolean(item.stream)}
+              poster={item.posterSrc ?? item.posterUrl ?? undefined}
+              label={t.viewer.position("video", index + 1, items.length)}
+              className="h-full w-full object-contain"
+              autoPlay
+            />
+          ) : (
+            // Keyed apart from the sheets below, which share this parent: one key
+            // for all of them made React remount the photo when a sheet opened.
+            <Image
+              key={`media-${item.id}`}
+              onDoubleClick={heartFromPhoto}
+              onTouchEnd={(e) => {
+                // A second tap in the same spot, quickly. A swipe moves too far
+                // to count, so changing photos never hearts one by accident.
+                const start = touchStartX.current;
+                const moved = start === null ? 0 : Math.abs(e.changedTouches[0].clientX - start);
+                if (moved > 10) return;
+                const now = e.timeStamp;
+                if (now - lastTap.current < DOUBLE_TAP_MS) {
+                  lastTap.current = 0;
+                  heartFromPhoto();
+                } else {
+                  lastTap.current = now;
+                }
+              }}
+              src={enhancedUrl ?? photoUrl ?? item.blobUrl}
+              onError={() => {
+                if (item.src && !expiredIds.has(item.id)) {
+                  setExpiredIds((current) => new Set(current).add(item.id));
+                }
+              }}
+              alt={t.viewer.position("photo", index + 1, items.length)}
+              fill
+              unoptimized
+              sizes="100vw"
+              className="touch-manipulation object-contain"
+              priority
+            />
+          )}
+        </div>
 
         {/* MED-10. Not for the photographer looking at their own, clean. */}
         {item.kind === "photo" && slug && (item.proof === true || item.proof === "locked") && !commentsOpen && !sharingOpen && reportingId !== item.id && (
-          <ProofNote key={item.id} slug={slug} mediaId={item.id} />
+          <ProofNote key={`proof-${item.id}`} slug={slug} mediaId={item.id} />
         )}
 
         {burst?.id === item.id && (
@@ -595,7 +736,7 @@ export function Lightbox({
 
         {social?.comments && commentsOpen && (
           <CommentsSheet
-            key={item.id}
+            key={`comments-${item.id}`}
             slug={social.slug}
             mediaId={item.id}
             kind={item.kind}
@@ -609,7 +750,7 @@ export function Lightbox({
 
         {share && sharingOpen && (
           <MediaSharePanel
-            key={item.id}
+            key={`share-${item.id}`}
             item={item}
             slug={slug ?? ""}
             eventName={share.eventName}
@@ -634,7 +775,7 @@ export function Lightbox({
           <div
             role="dialog"
             aria-label={t.viewer.reportDialog}
-            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[80%] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+            className="klik-sheet-up absolute inset-x-3 bottom-3 z-10 mx-auto max-h-[80%] max-w-md space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
           >
             {reportState === "sent" ? (
               <>
@@ -724,7 +865,7 @@ export function Lightbox({
           <div
             role="alertdialog"
             aria-label={t.viewer.deleteDialog}
-            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+            className="klik-sheet-up absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
           >
             <p className="text-sm text-paper">
               {t.viewer.deleteConfirm(item.kind)}
@@ -764,7 +905,7 @@ export function Lightbox({
           <div
             role="dialog"
             aria-label={t.prints.order}
-            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+            className="klik-sheet-up absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
           >
             {printAdded !== null ? (
               <p className="text-sm text-paper" role="status">
@@ -847,7 +988,7 @@ export function Lightbox({
           <div
             role="dialog"
             aria-label={t.viewer.sharpen}
-            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+            className="klik-sheet-up absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
           >
             <p className="text-sm text-paper" role="status">
               {sharpenMessage ?? (sharpen.left > 0 ? t.viewer.sharpenBody(sharpen.left) : t.viewer.sharpenNoneLeft)}
@@ -883,7 +1024,7 @@ export function Lightbox({
         {editNote && (
           <div
             role="status"
-            className="absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
+            className="klik-sheet-up absolute inset-x-3 bottom-3 z-10 mx-auto max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/85 p-4 backdrop-blur"
           >
             <p className="text-sm text-paper">{editNote.message}</p>
             <div className="flex flex-wrap gap-2">
