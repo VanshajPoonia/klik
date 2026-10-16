@@ -22,7 +22,7 @@ export function Hero() {
           </CtaLink>
         </div>
       </Container>
-      <div className="mt-8 sm:mt-10">
+      <div className="mt-6">
         <FilmReel />
       </div>
     </section>
