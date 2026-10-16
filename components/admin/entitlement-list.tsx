@@ -206,8 +206,12 @@ function EntitlementItem({ row }: { row: EntitlementRow }) {
                 type="button"
                 size="sm"
                 className="whitespace-nowrap"
-                disabled={busy || reason.trim().length < 3}
-                onClick={() => void saveEnd(endsOn || null)}
+                disabled={busy}
+                onClick={() =>
+                  reason.trim().length < 3
+                    ? setError("Say why the date changed, so it is on the record.")
+                    : void saveEnd(endsOn || null)
+                }
               >
                 {busy ? "Saving…" : endsOn ? "Save end date" : "Save with no end"}
               </Button>
@@ -247,8 +251,10 @@ function EntitlementItem({ row }: { row: EntitlementRow }) {
                 type="button"
                 variant="danger"
                 size="sm"
-                disabled={busy || reason.trim().length < 3}
-                onClick={() => void revoke()}
+                disabled={busy}
+                onClick={() =>
+                  reason.trim().length < 3 ? setError("Say why it is being taken back, so it is on the record.") : void revoke()
+                }
               >
                 {busy ? "Revoking…" : "Revoke"}
               </Button>

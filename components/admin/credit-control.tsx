@@ -35,6 +35,10 @@ export function CreditControl({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!amount || reason.trim().length < 3) {
+      setMessage({ tone: "error", text: "Enter the amount and say what it was for." });
+      return;
+    }
     const cents = Math.round(Number(amount) * 100);
     setBusy(true);
     setMessage(null);
@@ -98,9 +102,8 @@ export function CreditControl({
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             maxLength={300}
-            required
           />
-          <Button type="submit" size="sm" disabled={busy || !amount || reason.trim().length < 3}>
+          <Button type="submit" size="sm" disabled={busy}>
             Record
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>

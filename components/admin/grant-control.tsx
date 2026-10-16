@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { PLANS, type PlanKey } from "@/lib/plans";
 import { inputClass, selectClass } from "@/components/ui/field";
@@ -54,9 +54,20 @@ export function GrantControl({
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
   const isVenue = planKey === "venue";
+  const reasonsRef = useRef<HTMLDivElement>(null);
+  const missingReason = reason.trim().length < 3;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    // The button stays pressable without a reason and says what is missing.
+    // Disabled, it looked ready and did nothing, and the grey example in the
+    // box read as an answer already given.
+    if (missingReason) {
+      setOutcome(null);
+      setError("Pick a reason above, or type one, so the grant is on the record.");
+      reasonsRef.current?.querySelector("button")?.focus();
+      return;
+    }
     setSaving(true);
     setError(null);
     setOutcome(null);
@@ -175,13 +186,17 @@ export function GrantControl({
           />
         )}
       </fieldset>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick reasons">
+      <p className="text-xs text-muted">
+        Why <span className="text-paper">(required)</span>
+      </p>
+      <div ref={reasonsRef} className="-mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Quick reasons">
         {QUICK_REASONS.map((quick) => (
           <button
             key={quick}
             type="button"
             onClick={() => {
               setReason(quick);
+              setError(null);
               if (quick === "Comp" || quick === "Pilot client") setPayment("comp");
               else if (quick.startsWith("Paid")) setPayment("paid");
             }}
@@ -195,17 +210,19 @@ export function GrantControl({
       </div>
       <input
         aria-label="Reason"
-        className={inputClass}
-        placeholder="Why: paid by card on 8 Oct, comp for the pilot, refund replacement"
+        aria-invalid={Boolean(error) && missingReason}
+        className={`${inputClass} ${error && missingReason ? "border-red-400/60" : ""}`}
+        placeholder="Or type your own, like a Stripe receipt date"
         value={reason}
-        onChange={(event) => setReason(event.target.value)}
+        onChange={(event) => {
+          setReason(event.target.value);
+          if (event.target.value.trim().length >= 3) setError(null);
+        }}
         maxLength={300}
-        required
-        minLength={3}
         disabled={saving}
       />
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" size="sm" disabled={saving || reason.trim().length < 3}>
+        <Button type="submit" size="sm" disabled={saving}>
           {saving ? "Granting…" : target?.state === "draft" || target?.state === "lapsed" ? "Go live" : "Grant"}
         </Button>
         <p
