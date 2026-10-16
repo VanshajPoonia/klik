@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const actor = await requireEventCapability(event.id, event.ownerId, "albums.manage");
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canUseAlbums(eventPlan(event).key)) {
-    return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
+    return NextResponse.json({ error: "Folders are not available on this plan" }, { status: 403 });
   }
 
   const parsed = reorderSchema.safeParse(await request.json().catch(() => null));

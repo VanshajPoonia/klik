@@ -90,7 +90,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     case "move": {
       if (input.albumId) {
         if (!canUseAlbums(eventPlan(event).key)) {
-          return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
+          return NextResponse.json({ error: "Folders are not available on this plan" }, { status: 403 });
         }
         const [album] = await db
           .select({ id: albums.id })

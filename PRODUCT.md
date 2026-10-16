@@ -28,6 +28,7 @@ A browser-only guest flow (scan, optional first name, upload) feeding a live sha
 - At the event: printed QR signs (print studio with templates), a live full-screen slideshow on a venue screen, an optional kiosk tablet, an in-app camera with looks, hearts and comments on photos, photo challenges.
 - After: download-all ZIP, highlights, a morning-after recap email.
 - Klik sells nothing physical. Photo prints are built and switched off (`PRINTS_ENABLED`, see BILLING.md), and nothing on the site offers or promises them.
+- Folders, and moving photos between them, are on every plan (2026-10-17).
 
 ## Capabilities and Constraints
 

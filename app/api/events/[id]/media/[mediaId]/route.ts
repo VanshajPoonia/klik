@@ -67,7 +67,7 @@ export async function PATCH(
     const plan = eventPlan(event!);
     if (!canUseAlbums(plan.key)) {
       return NextResponse.json(
-        { error: "Folders are part of Klik Premium" },
+        { error: "Folders are not available on this plan" },
         { status: 403 },
       );
     }

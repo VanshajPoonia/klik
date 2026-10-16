@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const plan = eventPlan(event);
   if (!canUseAlbums(plan.key)) {
-    return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
+    return NextResponse.json({ error: "Folders are not available on this plan" }, { status: 403 });
   }
 
   const parsed = createSchema.safeParse(await request.json().catch(() => null));

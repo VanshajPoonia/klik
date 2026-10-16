@@ -41,7 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canUseAlbums(eventPlan(event).key)) {
-    return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
+    return NextResponse.json({ error: "Folders are not available on this plan" }, { status: 403 });
   }
 
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
@@ -70,7 +70,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canUseAlbums(eventPlan(event).key)) {
-    return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
+    return NextResponse.json({ error: "Folders are not available on this plan" }, { status: 403 });
   }
 
   const deleted = await deleteFolder(id, albumId);

@@ -73,7 +73,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxCoHosts: 0,
     maxStorageBytesPerEvent: 25 * GB,
     photoHeadline: 1000,
-    maxAlbums: 0,
+    maxAlbums: 50,
     aiEnhancementsPerEvent: 25,
     features: [
       "Unlimited guests",
@@ -83,6 +83,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "Host moderation",
       "Guest download controls",
       "Download-all ZIP",
+      "Folders, nested three deep, with photos moved between them",
       "30-day upload window",
       "6-month gallery access",
       "Room for about 1,000 photos (25 GB)",
@@ -114,7 +115,6 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "Everything in Klik Event",
       "12-month upload window",
       "Room for about 5,000 photos (100 GB)",
-      "Folders within an event, nested three deep",
       "Multiple organizers or co-hosts",
       "Custom gallery colors and cover",
       "Custom QR sign templates",
@@ -143,13 +143,14 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     maxCoHosts: 10,
     maxStorageBytesPerEvent: 100 * GB,
     photoHeadline: 5000,
-    maxAlbums: 0,
+    maxAlbums: 50,
     aiEnhancementsPerEvent: 100,
     features: [
       "Up to 5 active events per month",
       "Central venue dashboard",
       "Reusable venue QR code",
       "Client and event management",
+      "Folders in every event",
       "Downloadable event QR signs",
       "12-month event storage",
       "100 GB per event",
@@ -183,8 +184,9 @@ export function canUseKiosk(planKey: PlanKey): boolean {
   return planKey === "premium" || planKey === "venue";
 }
 
+/** Folders, and moving photos between them, on every plan since 2026-10-17. */
 export function canUseAlbums(planKey: PlanKey): boolean {
-  return planKey === "premium";
+  return getPlan(planKey).maxAlbums > 0;
 }
 
 /**

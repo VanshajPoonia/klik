@@ -342,7 +342,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   if (input.albumId) {
     if (!canUseAlbums(plan.key)) {
-      return NextResponse.json({ error: "Folders are part of Klik Premium" }, { status: 403 });
+      return NextResponse.json({ error: "Folders are not available on this plan" }, { status: 403 });
     }
     // Live folders only: one in the trash would take the photo with it, out of
     // sight, the moment it landed.

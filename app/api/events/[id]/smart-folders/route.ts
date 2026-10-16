@@ -25,7 +25,7 @@ async function managed(id: string) {
 
 /**
  * AI-4: a smart folder is a saved search or scene. It holds a question, not
- * photos, so it is on every plan (folders that hold photos are Premium) and a
+ * photos, so it is on every plan (as folders that hold photos now are too) and a
  * photo can be in any number of them.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
