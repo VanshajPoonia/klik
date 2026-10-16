@@ -83,7 +83,7 @@ export default async function AdminSearchPage({ searchParams }: { searchParams: 
           <div className="space-y-6">
             <Section title="Accounts" empty={accountRows.length === 0}>
               {accountRows.map((account) => (
-                <Link key={account.id} href={`/admin#client-${account.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-paper/5">
+                <Link key={account.id} href={`/admin/clients/${account.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-paper/5">
                   <div className="min-w-0">
                     <p className="truncate text-sm text-paper">{account.name ?? "Unnamed"}</p>
                     <p className="truncate text-xs text-muted">

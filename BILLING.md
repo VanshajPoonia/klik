@@ -161,16 +161,16 @@ with a username and no address, and the panel says so rather than implying a
 mail went out.
 
 Re-sending is `POST /api/admin/clients/[userId]/activation-email`, surfaced as
-"Send again" on the client card. It refuses an account that is not active yet,
+"Send again" on the client's page (`/admin/clients/[userId]`). It refuses an account that is not active yet,
 because the mail says their access is open. It is rate limited per recipient, not
 per admin: the thing being protected is one person's inbox against a
 double-click, and the route already demands a superadmin.
 
 ### The chain, and the history behind it
 
-Every client card on `/admin` carries seven steps, always in the same order and
-including the ones already done, so a page of accounts can be scanned for the one
-that is stuck:
+Every client's page (`/admin/clients/[userId]`) opens with seven steps, always in
+the same order and including the ones already done, so the account that is stuck
+shows where:
 
 ```
 1. Account created      users.created_at
@@ -306,10 +306,14 @@ A Payment Link grants nothing on its own. Nothing does: see below.
 ## The grant is manual, on purpose
 
 **The webhook never writes an entitlement.** A payment is recorded and then waits
-for a superadmin, who grants a pass or Venue with the control on each client's card on
-`/admin`, with a required reason. `POST /api/admin/clients/[userId]/entitlements`
-does the grant; `POST /api/admin/entitlements/[id]/revoke` takes one back, also with a
-reason, lapsing what it licensed and deleting nothing. Confirmed on 2026-10-08: payments
+for a superadmin, who grants a pass or Venue with a required reason: with **Go live** on
+the event's row in "Waiting to go live", with **Grant** on the account's row in "Signed up,
+not activated", or on the client's own page. All three are the same form and the same
+`POST /api/admin/clients/[userId]/entitlements`, which since 2026-10-16 accepts any
+account, a superadmin's own included. `POST /api/admin/entitlements/[entitlementId]/revoke`
+takes one back, also with a reason, lapsing what it licensed and deleting nothing.
+`PATCH /api/admin/entitlements/[entitlementId]` moves a Venue plan's end date (renewed,
+paid ahead, cancelled from the period's end), refused while a failed payment's grace runs. Confirmed on 2026-10-08: payments
 keep human approval. Automating it would be one handler writing `source = 'stripe'`
 rows, and nothing else would change.
 

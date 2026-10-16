@@ -23,11 +23,23 @@ interface GrantTarget {
  * because most grants follow a payment and the event usually does not exist
  * yet or is waiting as a draft.
  */
-export function GrantControl({ userId, events }: { userId: string; events: GrantTarget[] }) {
+/** The usual reasons, one tap each. Typing one of your own still works. */
+const QUICK_REASONS = ["Paid by card", "Paid by bank transfer", "Comp", "Pilot client", "Upgrade"] as const;
+
+export function GrantControl({
+  userId,
+  events,
+  target,
+}: {
+  userId: string;
+  events: GrantTarget[];
+  /** One event this form puts live, with no picker: the "Go live" form beside a waiting event. */
+  target?: GrantTarget;
+}) {
   const router = useRouter();
   const [planKey, setPlanKey] = useState<PlanKey>("event");
   const [reason, setReason] = useState("");
-  const [eventId, setEventId] = useState("");
+  const [eventId, setEventId] = useState(target?.id ?? "");
   // PAY-5, ADM-2: what was paid. The list price unless it was a comp or a deal.
   const [payment, setPayment] = useState<"paid" | "comp">("paid");
   const [amount, setAmount] = useState("");
@@ -78,7 +90,9 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
 
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border border-canvas-line p-4">
-      <p className="text-xs font-medium tracking-wide text-muted uppercase">Grant a plan</p>
+      <p className="text-xs font-medium tracking-wide text-muted uppercase">
+        {target ? (target.state === "live" ? `Upgrade ${target.name}` : `Put ${target.name} live`) : "Grant a plan"}
+      </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <select
           aria-label="Plan"
@@ -87,13 +101,18 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
           onChange={(event) => setPlanKey(event.target.value as PlanKey)}
           disabled={saving}
         >
-          {Object.values(PLANS).map((plan) => (
+          {/* A Venue grant covers every draft, so it is granted from the account, not one event. */}
+          {Object.values(PLANS).filter((plan) => !target || plan.key !== "venue").map((plan) => (
             <option key={plan.key} value={plan.key}>
               {plan.key === "venue" ? `${plan.name}, account` : `${plan.name} pass, one event`}
             </option>
           ))}
         </select>
-        {isVenue ? (
+        {target ? (
+          <p className="self-center text-xs text-muted">
+            {target.state === "draft" ? "Licenses this event and puts it live." : "Moves this event onto the new pass."}
+          </p>
+        ) : isVenue ? (
           <p className="self-center text-xs text-muted">
             Covers up to {PLANS.venue.maxActiveEvents} live events, including any waiting drafts.
           </p>
@@ -117,7 +136,7 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
       </div>
       <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-paper">
         <legend className="sr-only">Payment</legend>
-        <label className="flex min-h-10 items-center gap-2">
+        <label className="flex min-h-10 items-center gap-2 whitespace-nowrap">
           <input type="radio" name={`payment-${userId}`} checked={payment === "paid"} onChange={() => setPayment("paid")} disabled={saving} />
           Paid $
           <input
@@ -130,14 +149,14 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
             disabled={saving || payment !== "paid"}
           />
         </label>
-        <label className="flex min-h-10 items-center gap-2">
+        <label className="flex min-h-10 items-center gap-2 whitespace-nowrap">
           <input type="radio" name={`payment-${userId}`} checked={payment === "comp"} onChange={() => setPayment("comp")} disabled={saving} />
           Comp, nothing paid
         </label>
         {payment === "paid" && (
           <input
             aria-label="Stripe payment reference, optional"
-            className={`${inputClass} min-w-0 flex-1`}
+            className={`${inputClass} min-w-0 sm:w-auto sm:flex-1`}
             placeholder="Stripe payment or receipt number (optional)"
             value={stripeRef}
             onChange={(event) => setStripeRef(event.target.value)}
@@ -146,6 +165,24 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
           />
         )}
       </fieldset>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick reasons">
+        {QUICK_REASONS.map((quick) => (
+          <button
+            key={quick}
+            type="button"
+            onClick={() => {
+              setReason(quick);
+              if (quick === "Comp" || quick === "Pilot client") setPayment("comp");
+              else if (quick.startsWith("Paid")) setPayment("paid");
+            }}
+            disabled={saving}
+            aria-pressed={reason === quick}
+            className="min-h-8 rounded-full border border-canvas-line px-3 text-xs text-muted transition-colors hover:border-paper/40 hover:text-paper aria-pressed:border-volt aria-pressed:text-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+          >
+            {quick}
+          </button>
+        ))}
+      </div>
       <input
         aria-label="Reason"
         className={inputClass}
@@ -159,7 +196,7 @@ export function GrantControl({ userId, events }: { userId: string; events: Grant
       />
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" size="sm" disabled={saving || reason.trim().length < 3}>
-          {saving ? "Granting…" : "Grant"}
+          {saving ? "Granting…" : target?.state === "draft" || target?.state === "lapsed" ? "Go live" : "Grant"}
         </Button>
         <p
           className={`text-xs ${error ? "text-red-400" : "text-muted"}`}

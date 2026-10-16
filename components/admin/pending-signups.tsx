@@ -1,18 +1,15 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { GrantControl } from "@/components/admin/grant-control";
 import type { getPendingSignups } from "@/lib/billing-admin";
 
 /**
- * Who has an account and nothing to use it with.
- *
- * Read-only on purpose, the same way `PendingActivations` is: granting happens
- * through the plan control further down the page, so there is one way to do it
- * rather than two that can disagree.
+ * Who has an account and nothing to use it with, each with a grant form.
  *
  * The email is the point of this panel. A Payment Link payment lands in the
- * Stripe Dashboard with an email and nothing else, and matching it to an account
- * by hand is impossible if the account is not listed anywhere, which is exactly
- * what a signup with no event and no plan used to be.
+ * Stripe Dashboard with an email and nothing else, so it is shown in full and
+ * as a mailto, ready to paste into Stripe's search.
  */
 export function PendingSignups({
   signups,
@@ -28,37 +25,42 @@ export function PendingSignups({
         <Badge>{signups.length}</Badge>
       </div>
 
-      <ul className="space-y-2">
+      <ul className="divide-y divide-canvas-line rounded-xl border border-canvas-line">
         {signups.map((signup) => (
-          <li
-            key={signup.userId}
-            className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-canvas-line pt-2 text-sm"
-          >
-            <span className="min-w-0">
-              <span className="text-paper">{signup.name ?? signup.username ?? signup.userId}</span>
-              {signup.email && (
-                // Selectable, and a mailto, because the next thing done with
-                // this value is pasting it into Stripe's search box or writing
-                // to the person.
-                <a
-                  href={`mailto:${signup.email}`}
-                  className="ml-2 break-all text-xs text-muted hover:text-volt"
-                >
-                  {signup.email}
-                </a>
-              )}
-            </span>
-            <span className="shrink-0 text-xs text-muted">
-              signed up {signup.createdAt.toLocaleDateString("en-GB")}
-            </span>
+          <li key={signup.userId}>
+            <details className="group">
+              <summary className="flex min-h-14 cursor-pointer list-none flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 text-sm transition-colors hover:bg-paper/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-volt [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0">
+                  <span className="text-paper">{signup.name ?? signup.username ?? signup.userId}</span>
+                  {signup.email && <span className="ml-2 break-all text-xs text-muted">{signup.email}</span>}
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
+                  signed up {signup.createdAt.toLocaleDateString("en-GB")}
+                  <span className="rounded-full bg-volt px-3 py-1 font-medium text-on-volt group-open:hidden">Grant</span>
+                  <span className="hidden group-open:inline">Close</span>
+                </span>
+              </summary>
+              <div className="space-y-3 px-4 pb-4">
+                <GrantControl userId={signup.userId} events={[]} />
+                <div className="flex flex-wrap gap-4 text-xs">
+                  <Link href={`/admin/clients/${signup.userId}`} className="text-muted hover:text-paper">
+                    Open their page
+                  </Link>
+                  {signup.email && (
+                    <a href={`mailto:${signup.email}`} className="text-muted hover:text-volt">
+                      Email {signup.email}
+                    </a>
+                  )}
+                </div>
+              </div>
+            </details>
           </li>
         ))}
       </ul>
 
       <p className="text-xs leading-relaxed text-muted">
-        These accounts can sign in and cannot create an event. Find their payment in Stripe by
-        email, then assign the plan below. That activates them and emails them the link to their
-        dashboard, so assigning the plan is the only step: there is nothing to send by hand.
+        They can sign in and set up drafts, and nothing goes live. Find their payment in Stripe by email, then grant
+        the plan here. That activates them, puts their waiting draft live, and emails them the link to their dashboard.
       </p>
     </Card>
   );

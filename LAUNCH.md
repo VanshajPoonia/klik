@@ -413,7 +413,7 @@ cookie line in the Privacy Policy first: both are new today. Then:
   plan as you normally would. Both accounts now show **$10** of credit, and your first
   account gets a "You earned $10" email.
 - **How to honour credit:** when a customer with credit pays, refund that much of their
-  payment in the Stripe Dashboard, then press **Use credit** on their card on `/admin` and
+  payment in the Stripe Dashboard, then press **Use credit** on their page under `/admin` and
   record it, for example "Refunded $10 of their Premium payment". Nothing else is automatic.
 - On a branded gallery (Klik Event plan), the line at the bottom now reads "Shared with klik ·
   Make a gallery for your own event", and links with the host's code.
@@ -431,7 +431,7 @@ And **"download my data"**, which answers the requests you would otherwise handl
 - As a guest on a phone, at the bottom of a gallery you added photos to, press **Download
   everything I added**: a ZIP with your photos and a `data.json`.
 - **When someone emails asking to be deleted:** for an organizer, use **Erase this account**
-  at the bottom of their card on `/admin`, with a reason. For a whole event, delete it, then
+  on their page under `/admin` (find them in the Clients list), with a reason. For a whole event, delete it, then
   **Erase now** under "Recently deleted" on your dashboard.
 
 The **Privacy Policy** now says guests and organizers can download their data themselves.

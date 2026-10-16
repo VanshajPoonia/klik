@@ -28,9 +28,11 @@ vi.mock("next/server", async (importOriginal) => ({
 
 const { POST: grant } = await import("@/app/api/admin/clients/[userId]/entitlements/route");
 const { POST: revoke } = await import("@/app/api/admin/entitlements/[entitlementId]/revoke/route");
+const { PATCH: setEnd } = await import("@/app/api/admin/entitlements/[entitlementId]/route");
 const { PATCH: editClient } = await import("@/app/api/admin/clients/[userId]/route");
+const { listClientSummaries } = await import("@/lib/admin-clients");
 const { eventLicenseState } = await import("@/lib/license");
-const { accountTimeline, events, users } = await import("@/lib/schema");
+const { accountTimeline, entitlements, events, users } = await import("@/lib/schema");
 const { closeDatabase, makeEvent, makeUser, resetDatabase, testDb } = await import("./harness");
 
 beforeEach(async () => {
@@ -145,3 +147,41 @@ describe("editing an account", () => {
   });
 });
 
+describe("a Venue plan's end date", () => {
+  const end = (id: string, body: unknown) =>
+    setEnd(post(`/api/admin/entitlements/${id}`, body, "PATCH"), { params: Promise.resolve({ entitlementId: id }) });
+
+  it("renews to a later date, and back to no end", async () => {
+    const { body } = await grantTo(await makeUser(), { planKey: "venue" });
+    const next = new Date(Date.now() + 90 * 86_400_000);
+    expect((await end(body.entitlement.id, { endsAt: next.toISOString(), reason: "Renewed for 3 months" })).status).toBe(200);
+    let [row] = await testDb.select().from(entitlements).where(eq(entitlements.id, body.entitlement.id));
+    expect(row.endsAt?.toISOString()).toBe(next.toISOString());
+    expect((await end(body.entitlement.id, { endsAt: null, reason: "Annual, rolling" })).status).toBe(200);
+    [row] = await testDb.select().from(entitlements).where(eq(entitlements.id, body.entitlement.id));
+    expect(row.endsAt).toBeNull();
+  });
+
+  it("refuses a pass, a date already gone, and a plan in a failed payment's grace", async () => {
+    const pass = (await grantTo(await makeUser(), { planKey: "event" })).body.entitlement.id;
+    expect((await end(pass, { endsAt: null, reason: "No" })).status).toBe(400);
+    const venue = (await grantTo(await makeUser(), { planKey: "venue" })).body.entitlement.id;
+    expect((await end(venue, { endsAt: "2020-01-01", reason: "Past" })).status).toBe(400);
+    await testDb.update(entitlements).set({ graceStartedAt: new Date() }).where(eq(entitlements.id, venue));
+    expect((await end(venue, { endsAt: null, reason: "During grace" })).status).toBe(409);
+  });
+});
+
+describe("the client list", () => {
+  it("tells customers from guests, lists Klik only with events, and counts each state", async () => {
+    const customer = await makeUser({ name: "Customer", organizerIntentAt: new Date(), activatedAt: null });
+    await makeEvent(customer, { activationRequestedAt: new Date() });
+    await makeUser({ name: "Guest", organizerIntentAt: null, activatedAt: null });
+    await makeEvent(admin.user.id);
+    const rows = await listClientSummaries();
+    const byName = (name: string) => rows.find((row) => row.name === name);
+    expect(byName("Customer")).toMatchObject({ kind: "customer", drafts: 1, requested: 1, live: 0, plan: "No plan" });
+    expect(byName("Guest")).toMatchObject({ kind: "guest" });
+    expect(rows.filter((row) => row.kind === "admin")).toHaveLength(1);
+  });
+});
