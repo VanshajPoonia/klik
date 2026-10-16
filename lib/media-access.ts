@@ -109,13 +109,19 @@ export function mediaVisibilityFilter(
 
   const { guestId } = viewer;
 
+  // MED-8: a video still having its location taken out is its uploader's
+  // alone, as videoHeldBack says below. The file routes already refused it;
+  // listing it as well put a tile in the grid that opened onto a dead player.
+  // It joins everyone's gallery, through the sync, once it is clean.
+  const notHeldBack = sql`NOT (${media.kind} = 'video' AND coalesce(${media.metadataState}, '') IN ('pending', 'failed') AND ${media.guestId} IS DISTINCT FROM ${guestId ?? null})`;
+
   // Public gallery media, approved.
   const galleryApproved = and(eq(media.visibility, "gallery"), eq(media.status, "approved"))!;
 
   if (!guestId) {
     // A visitor with no guest session owns nothing, so every ownership-based
     // branch below collapses and this is the whole rule.
-    return galleryApproved;
+    return and(galleryApproved, notHeldBack);
   }
 
   const ownPending = and(
@@ -133,7 +139,7 @@ export function mediaVisibilityFilter(
     branches.push(and(eq(media.visibility, "private"), eq(media.guestId, guestId))!);
   }
 
-  return or(...branches)!;
+  return and(or(...branches)!, notHeldBack);
 }
 
 /** Visibilities an organizer may set from the UI, with the copy for each. */

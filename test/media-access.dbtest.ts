@@ -140,6 +140,23 @@ describe("what a guest actually sees", () => {
     expect(seen).not.toContain(theirs);
   });
 
+  it("lists a video still having its location removed only for its uploader", async () => {
+    const { eventId, guest, other } = await setup();
+    const video = { kind: "video" as const, mimeType: "video/mp4" };
+    const pending = await makeMedia(eventId, { ...video, metadataState: "pending", guestId: other });
+    const failed = await makeMedia(eventId, { ...video, metadataState: "failed", guestId: other });
+    const clean = await makeMedia(eventId, { ...video, metadataState: "clean", guestId: other });
+
+    const seen = await visibleTo(eventId, guest);
+    expect(seen).not.toContain(pending);
+    expect(seen).not.toContain(failed);
+    expect(seen).toContain(clean);
+    expect(await visibleTo(eventId, null)).not.toContain(pending);
+    const theirs = await visibleTo(eventId, other);
+    expect(theirs).toContain(pending);
+    expect(theirs).toContain(failed);
+  });
+
   it("shows a signed-out visitor only approved gallery media", async () => {
     const { eventId, guest } = await setup();
     const open = await makeMedia(eventId);
