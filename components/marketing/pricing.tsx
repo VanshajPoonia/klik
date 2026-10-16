@@ -55,7 +55,7 @@ function PlanCard({
 
   return (
     <article
-      className={`flex min-w-0 flex-col overflow-hidden rounded-[18px] border ${
+      className={`card-in flex min-w-0 flex-col overflow-hidden rounded-[18px] border transition-[translate,box-shadow] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1.5 hover:shadow-[0_24px_48px_-16px_rgba(5,5,5,0.35)] ${
         inverted
           ? "border-canvas bg-canvas text-paper"
           : isFeatured
@@ -200,7 +200,7 @@ export function Pricing() {
           </p>
         </div>
 
-        <div className="mt-12 grid items-stretch gap-4 lg:grid-cols-3">
+        <div className="stagger mt-12 grid items-stretch gap-4 lg:grid-cols-3">
           <PlanCard plan={eventPlan} icon={Users} cta="Start with Event" />
           <PlanCard plan={premiumPlan} icon={Sparkles} cta="Choose Premium" inverted />
           <PlanCard plan={venuePlan} icon={Building2} cta="Choose Venue" />
