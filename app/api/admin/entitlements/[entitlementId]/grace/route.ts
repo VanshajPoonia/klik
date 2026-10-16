@@ -12,10 +12,10 @@ const schema = z.object({ action: z.enum(["start", "clear"]) });
  * PAY-8: a superadmin starts a failed payment's 7-day grace on a Venue grant,
  * or clears it when the payment comes in. Nothing here charges or refunds.
  */
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ entitlementId: string }> }) {
   const session = await requireSuperadmin();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { id } = await params;
+  const { entitlementId: id } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 

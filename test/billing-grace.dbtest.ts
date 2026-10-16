@@ -26,7 +26,7 @@ vi.mock("next/server", async (importOriginal) => ({
 }));
 
 const { POST: grant } = await import("@/app/api/admin/clients/[userId]/entitlements/route");
-const { POST: grace } = await import("@/app/api/admin/entitlements/[id]/grace/route");
+const { POST: grace } = await import("@/app/api/admin/entitlements/[entitlementId]/grace/route");
 const { sendGraceNotice, graceMessage } = await import("@/lib/billing-grace");
 const { creditOwedTotals } = await import("@/lib/referrals");
 const { accountCredits, entitlements, jobs } = await import("@/lib/schema");
@@ -51,7 +51,7 @@ async function grantTo(userId: string, body: Record<string, unknown>) {
 }
 
 const graceAction = (id: string, action: "start" | "clear") =>
-  grace(post(`/api/admin/entitlements/${id}/grace`, { action }), { params: Promise.resolve({ id }) });
+  grace(post(`/api/admin/entitlements/${id}/grace`, { action }), { params: Promise.resolve({ entitlementId: id }) });
 
 describe("PAY-5 a grant records what was paid", () => {
   it("keeps the amount and Stripe's reference, and 0 for a comp", async () => {
