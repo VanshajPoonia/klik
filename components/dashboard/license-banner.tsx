@@ -78,7 +78,7 @@ export function LicenseBanner({ eventId, license }: { eventId: string; license: 
           </Button>
         ) : (
           <Link href="/#pricing" className={buttonClassName({})}>
-            {draft ? "Add a pass" : "See the plans"}
+            {draft ? "Choose a plan" : "See the plans"}
           </Link>
         )}
         <a href={SUPPORT_PHONE_HREF} className={buttonClassName({ variant: "ghost" })}>

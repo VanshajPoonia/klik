@@ -21,7 +21,7 @@ export function AwaitingActivation({ activated = false }: { activated?: boolean 
     <Card className="space-y-5 border-volt/30">
       <div>
         <p className="text-xs font-semibold tracking-[0.14em] text-volt uppercase">
-          {activated ? "Every pass is in use" : "Account created"}
+          {activated ? "Every plan is in use" : "Account created"}
         </p>
         <h2 className="mt-2 font-display text-xl leading-tight text-paper">
           {activated
@@ -37,7 +37,7 @@ export function AwaitingActivation({ activated = false }: { activated?: boolean 
 
       <div className="flex flex-wrap items-center gap-3">
         <Link href="/#pricing" className={buttonClassName({})}>
-          {activated ? "Add a pass" : "See the plans"}
+          {activated ? "Choose another plan" : "See the plans"}
         </Link>
         <a href={SUPPORT_PHONE_HREF} className={buttonClassName({ variant: "ghost" })}>
           Call {SUPPORT_PHONE}

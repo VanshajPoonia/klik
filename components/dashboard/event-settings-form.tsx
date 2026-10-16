@@ -559,9 +559,9 @@ export function EventSettingsForm({
         <Checkbox
           checked={disposableMode}
           onChange={(change) => setDisposableMode(change.target.checked)}
-          hint="Each guest gets a roll of shots and nobody sees anything until it develops. People compose instead of spraying, and the reveal becomes a moment."
+          hint="Turns each guest's own phone into a disposable camera inside Klik. No physical cameras are sent. Everyone gets a set number of shots and nobody sees anything until the roll develops, so people compose instead of spraying and the reveal becomes a moment."
         >
-          Disposable camera
+          Disposable camera mode
         </Checkbox>
         {disposableMode && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -187,7 +187,7 @@ export default async function DashboardPage() {
               </>
             ) : activated ? (
               <>
-                <p className="text-xs font-medium text-volt">Every pass is in use</p>
+                <p className="text-xs font-medium text-volt">Every plan is in use</p>
                 <p className="mt-1 text-sm text-paper">A new event saves as a draft</p>
                 <p className="mt-1 text-xs text-muted">It goes live once a pass is added</p>
               </>
