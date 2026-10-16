@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { events, venueClients, EVENT_VISIBILITIES } from "@/lib/schema";
 import { createEvent, toOrganizerEvent } from "@/lib/events";
 import { hasVenueGrant, licenseWithAvailableGrant } from "@/lib/entitlements";
+import { TEMPLATE_KEYS, templateByKey } from "@/lib/gallery-templates";
 import { getPlan } from "@/lib/plans";
 import { SUPPORT_PHONE } from "@/lib/support";
 import { recordAccountEvent } from "@/lib/timeline";
@@ -21,6 +22,8 @@ const createEventSchema = z.object({
   password: z.string().min(4).max(72).optional(),
   moderation: z.boolean().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
+  /** The look picked on the create form. Any plan, see lib/gallery-templates.ts. */
+  template: z.enum(TEMPLATE_KEYS).optional(),
 });
 
 export async function GET() {
@@ -72,6 +75,7 @@ export async function POST(request: Request) {
     moderation,
     expiresAt,
   } = parsed.data;
+  const template = templateByKey(parsed.data.template);
   if (visibility === "password" && !password) {
     return NextResponse.json(
       { error: "Password required for password-protected events" },
@@ -151,6 +155,9 @@ export async function POST(request: Request) {
     moderation,
     expiresAt,
     retentionDays: null,
+    ...(template && template.key !== "plain"
+      ? { accentColor: template.accent, backgroundColor: template.background }
+      : {}),
   });
 
   // Live straight away when the account has something to spend: a Venue grant

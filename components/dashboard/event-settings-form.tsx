@@ -14,6 +14,8 @@ import type { OrganizerEvent } from "@/lib/events";
 import type { Media, VenueClient } from "@/lib/schema";
 import { galleryPalette } from "@/lib/color";
 import { canUseProofs } from "@/lib/plans";
+import { matchTemplate } from "@/lib/gallery-templates";
+import { TemplatePicker } from "@/components/dashboard/template-picker";
 
 const COVER_CHOICES = 30;
 
@@ -207,8 +209,9 @@ export function EventSettingsForm({
           clientEmail: canManageClients ? clientEmail || null : undefined,
           clientPhone: canManageClients ? clientPhone || null : undefined,
           coverMediaId: canCustomizeGallery ? coverMediaId || null : undefined,
-          accentColor: canCustomizeGallery ? accentColor : undefined,
-          backgroundColor: canCustomizeGallery ? backgroundColor : undefined,
+          // A template's colours on any plan, anything else on Premium.
+          accentColor: canCustomizeGallery || matchTemplate(accentColor, backgroundColor) ? accentColor : undefined,
+          backgroundColor: canCustomizeGallery || matchTemplate(accentColor, backgroundColor) ? backgroundColor : undefined,
           qrTemplate: canCustomizeQr ? qrTemplate : undefined,
           venueFeatured: canUseVenueHub ? venueFeatured : undefined,
           slug: addressing && slug.trim() !== event.slug ? slug.trim() : undefined,
@@ -365,32 +368,48 @@ export function EventSettingsForm({
         </fieldset>
       )}
 
-      {canCustomizeGallery && (
-        <fieldset className="space-y-4 rounded-xl border border-canvas-line p-4">
-          <legend className="px-1 text-sm font-medium text-paper">Gallery appearance</legend>
-          <CoverPicker photos={approvedPhotos} value={coverMediaId} onChange={setCoverMediaId} />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Accent color">
-              <input
-                type="color"
-                className={`${inputClass} h-11 p-1`}
-                value={accentColor}
-                onChange={(event) => setAccentColor(event.target.value)}
-              />
-            </Field>
-            <Field label="Background color">
-              <input
-                type="color"
-                className={`${inputClass} h-11 p-1`}
-                value={backgroundColor}
-                onChange={(event) => setBackgroundColor(event.target.value)}
-              />
-            </Field>
-          </div>
-          {/* TRS-3: the gallery's own palette, so what is seen here is what guests get. */}
-          <GalleryColorPreview accent={accentColor} background={backgroundColor} />
-        </fieldset>
-      )}
+      <fieldset className="space-y-4 rounded-xl border border-canvas-line p-4">
+        <legend className="px-1 text-sm font-medium text-paper">Gallery appearance</legend>
+        <TemplatePicker
+          occasion={null}
+          legend="Template"
+          value={matchTemplate(accentColor, backgroundColor)?.key ?? (canCustomizeGallery ? null : "plain")}
+          onChange={(template) => {
+            setAccentColor(template.accent);
+            setBackgroundColor(template.background);
+          }}
+          hint={
+            canCustomizeGallery
+              ? "Start from a template, or set your own colors below."
+              : "Templates come with every plan. Your own colors and a cover photo come with Klik Premium."
+          }
+        />
+        {canCustomizeGallery && (
+          <>
+            <CoverPicker photos={approvedPhotos} value={coverMediaId} onChange={setCoverMediaId} />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Accent color">
+                <input
+                  type="color"
+                  className={`${inputClass} h-11 p-1`}
+                  value={accentColor}
+                  onChange={(event) => setAccentColor(event.target.value)}
+                />
+              </Field>
+              <Field label="Background color">
+                <input
+                  type="color"
+                  className={`${inputClass} h-11 p-1`}
+                  value={backgroundColor}
+                  onChange={(event) => setBackgroundColor(event.target.value)}
+                />
+              </Field>
+            </div>
+            {/* TRS-3: the gallery's own palette, so what is seen here is what guests get. */}
+            <GalleryColorPreview accent={accentColor} background={backgroundColor} />
+          </>
+        )}
+      </fieldset>
 
       {canCustomizeQr && (
         <Field label="QR sign template">

@@ -18,6 +18,7 @@ import { requireEventCapability, requireEventManagerSession, requireOwnerSession
 import type { EventCapability } from "@/lib/permissions";
 import { describeLicenseRefusal, eventPlan } from "@/lib/license";
 import { changeEventSlug, validateCustomSlug } from "@/lib/slugs";
+import { matchTemplate } from "@/lib/gallery-templates";
 import {
   canCustomizeGallery,
   canCustomizeQr,
@@ -140,10 +141,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       );
     }
   }
+  // Any plan may switch between templates; colours of one's own, and a cover,
+  // stay Premium.
+  const colorsRequested = "accentColor" in parsed.data || "backgroundColor" in parsed.data;
+  const templateColors = Boolean(matchTemplate(parsed.data.accentColor, parsed.data.backgroundColor));
   const galleryCustomizationRequested =
-    "coverMediaId" in parsed.data ||
-    "accentColor" in parsed.data ||
-    "backgroundColor" in parsed.data;
+    "coverMediaId" in parsed.data || (colorsRequested && !templateColors);
   if (galleryCustomizationRequested && !canCustomizeGallery(plan.key)) {
     return NextResponse.json(
       { error: "Gallery customization is available on the Klik Premium plan" },

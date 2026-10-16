@@ -8,6 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { VisibilityField, type Visibility } from "@/components/dashboard/visibility-field";
+import { OccasionPicker, TemplatePicker } from "@/components/dashboard/template-picker";
+import { OCCASIONS, type OccasionKey } from "@/lib/gallery-templates";
 import type { VenueClient } from "@/lib/schema";
 
 export function CreateEventForm({
@@ -23,6 +25,8 @@ export function CreateEventForm({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [occasion, setOccasion] = useState<OccasionKey | null>(null);
+  const [template, setTemplate] = useState("plain");
   const [name, setName] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [clientName, setClientName] = useState("");
@@ -54,6 +58,7 @@ export function CreateEventForm({
           visibility,
           password: visibility === "password" ? password : undefined,
           moderation,
+          template,
         }),
       });
 
@@ -87,13 +92,29 @@ export function CreateEventForm({
 
   return (
     <Card>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <OccasionPicker
+          value={occasion}
+          onChange={(next) => {
+            setOccasion(next);
+            // A look made for the last kind of event may not be offered for this one.
+            setTemplate("plain");
+          }}
+        />
+        {occasion && (
+          <TemplatePicker
+            occasion={occasion}
+            value={template}
+            onChange={(next) => setTemplate(next.key)}
+            hint="This is what guests see when they open the gallery. You can change it later in Settings."
+          />
+        )}
         <Field label="Event name">
           <input
             className={inputClass}
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Anita & Raj's wedding"
+            placeholder={OCCASIONS.find((option) => option.key === occasion)?.namePlaceholder ?? "Anita & Raj's wedding"}
             required
           />
         </Field>

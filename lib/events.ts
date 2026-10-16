@@ -48,6 +48,9 @@ export interface CreateEventInput {
   password?: string | null;
   moderation?: boolean;
   expiresAt?: Date | null;
+  /** A template's colours (lib/gallery-templates.ts). Left out, the column defaults stand. */
+  accentColor?: string;
+  backgroundColor?: string;
   /**
    * Gallery retention for this event, in days. Null for a draft, which has no
    * plan yet: licensing it sets the deadline (lib/entitlements.ts), and the
@@ -87,6 +90,9 @@ export async function prepareEventInsert(input: CreateEventInput) {
       passwordHash,
       moderation: input.moderation ?? false,
       expiresAt: input.expiresAt ?? null,
+      ...(input.accentColor && input.backgroundColor
+        ? { accentColor: input.accentColor, backgroundColor: input.backgroundColor }
+        : {}),
       retentionUntil:
         input.retentionDays === null
           ? null

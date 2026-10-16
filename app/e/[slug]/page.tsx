@@ -43,6 +43,7 @@ import { challengeBoard } from "@/lib/challenges";
 import { getWatermark } from "@/lib/proofs";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { isRecapAvailable } from "@/lib/recap";
+import { eventColors } from "@/lib/gallery-templates";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 import { GuestCopyProvider } from "@/components/guest/guest-copy";
 import { GUEST_COPY } from "@/lib/i18n/guest";
@@ -251,11 +252,13 @@ export default async function GuestEventPage({
         developed: !rollUndeveloped(event),
       }
     : null;
+  // Premium shows the host's own colours; any plan shows a template's.
+  const colors = eventColors(event, canCustomizeGallery(plan.key));
   const publicEvent = toPublicEvent({
     ...event,
     coverMediaId: canCustomizeGallery(plan.key) ? event.coverMediaId : null,
-    accentColor: canCustomizeGallery(plan.key) ? event.accentColor : "#edee00",
-    backgroundColor: canCustomizeGallery(plan.key) ? event.backgroundColor : "#050505",
+    accentColor: colors.accent,
+    backgroundColor: colors.background,
     // PAY-7: a full gallery offers no upload button at all, rather than one
     // that fails. The banner below says why.
     uploadsEnabled: canUpload(event) && !galleryFull,
