@@ -13,6 +13,9 @@ export function galleryContentTheme(accent: string, background: string): CSSProp
   const custom = background.toLowerCase() !== KLIK_COLORS.background;
   const blendToward = palette.light ? "black" : "white";
   return {
+    // Native controls (a checkbox, a date picker) drawn for the background they
+    // sit on: on a white gallery, an unticked dark box reads as ticked.
+    colorScheme: palette.light ? "light" : "dark",
     ["--color-volt" as string]: palette.volt,
     ["--color-on-volt" as string]: palette.onVolt,
     ...(custom

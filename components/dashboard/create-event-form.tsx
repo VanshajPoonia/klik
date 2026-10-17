@@ -8,8 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, inputClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { VisibilityField, type Visibility } from "@/components/dashboard/visibility-field";
-import { OccasionPicker, TemplatePicker } from "@/components/dashboard/template-picker";
-import { OCCASIONS, type OccasionKey } from "@/lib/gallery-templates";
+import { ColorwayPicker, OccasionPicker, TemplatePicker } from "@/components/dashboard/template-picker";
+import { LookFields, lookFieldsPayload } from "@/components/dashboard/look-fields";
+import { OCCASIONS, templateByKey, templatesFor, type OccasionKey, type TemplateFields } from "@/lib/gallery-templates";
 import type { VenueClient } from "@/lib/schema";
 
 export function CreateEventForm({
@@ -27,6 +28,10 @@ export function CreateEventForm({
   const [open, setOpen] = useState(false);
   const [occasion, setOccasion] = useState<OccasionKey | null>(null);
   const [template, setTemplate] = useState("plain");
+  const [colorway, setColorway] = useState<string | null>(null);
+  // TPL-1: the couple's names and the like, kept across a change of look.
+  const [lookFields, setLookFields] = useState<TemplateFields>({});
+  const chosen = templateByKey(template);
   const [name, setName] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [clientName, setClientName] = useState("");
@@ -59,6 +64,8 @@ export function CreateEventForm({
           password: visibility === "password" ? password : undefined,
           moderation,
           template,
+          colorway: colorway ?? undefined,
+          templateFields: lookFieldsPayload(lookFields),
         }),
       });
 
@@ -97,17 +104,35 @@ export function CreateEventForm({
           value={occasion}
           onChange={(next) => {
             setOccasion(next);
-            // A look made for the last kind of event may not be offered for this one.
-            setTemplate("plain");
+            // A look made for the last kind of event may not be offered for
+            // this one, so start on the first look made for this one.
+            setTemplate(templatesFor(next)[0]?.key ?? "plain");
+            setColorway(null);
           }}
         />
         {occasion && (
           <TemplatePicker
             occasion={occasion}
             value={template}
-            onChange={(next) => setTemplate(next.key)}
-            hint="This is what guests see when they open the gallery. You can change it later in Settings."
+            onChange={(next) => {
+              setTemplate(next.key);
+              setColorway(null);
+            }}
+            colorwayFor={(option) =>
+              option.key === template ? (option.colorways.find((item) => item.key === colorway) ?? null) : null
+            }
+            hint="This is what guests see when they open the gallery. You can change it later on the Look tab."
           />
+        )}
+        {occasion && chosen && (
+          <ColorwayPicker
+            template={chosen}
+            value={colorway ?? chosen.colorways[0].key}
+            onChange={(next) => setColorway(next.key)}
+          />
+        )}
+        {occasion && chosen && chosen.fields.length > 0 && (
+          <LookFields template={chosen} value={lookFields} onChange={setLookFields} showDateToggle={false} idPrefix="new-look" />
         )}
         <Field label="Event name">
           <input

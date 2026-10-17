@@ -22,7 +22,7 @@
 - Rate limiting in `lib/ratelimit.ts`: Postgres counters incremented inside a single upsert, wired into credential login and into the signup route per IP and per email.
 - Transactional email through Resend in `lib/email.ts`, used by the signup welcome mail (`lib/emails/onboarding.ts`). Absent configuration is a normal state that reports itself rather than throwing, so a failed send never costs the account that was just created.
 - **A daily email cap, 2026-10-14.** `sendEmail` counts every send in `rate_limits` (key `email:day:<UTC date>`) and stops at 80 a day, under Resend's free 100, which resets at midnight UTC. Morning-after recaps are sent as bulk and stop at 60, so the last 20 are kept for sign-in codes and other one-to-one mail; refused recaps wait for the next UTC day without counting as failures. The first refusal at each limit each day is reported once. Raise or remove the cap when Resend is upgraded to Pro.
-- **Gallery templates, 2026-10-16.** New event asks what kind of event it is, then offers Plain plus curated looks for it (`lib/gallery-templates.ts`, `components/dashboard/template-picker.tsx`); Settings offers them all. A template is only an accent and a background written to the event's own colour columns, so there is no migration and no template column. **Templates are on every plan:** `eventColors` shows a non-Premium gallery in its colours only when they are exactly one template's pair, and `PATCH /api/events/[id]` accepts such a pair on any plan, so colours of one's own and a cover stay Premium. Only the guest gallery takes them; the kiosk, print studio, reel and QR keep Premium's rule, since they draw the accent on their own dark surfaces. The occasion is not stored.
+- **Gallery looks, 2026-10-17 (TPL-1), replacing the colour templates of 2026-10-16.** A template is now a whole look: Black tie and White lace for weddings, Party, Diploma, Modern for any event, and Plain. Each has its own typeface, header, ornament and photo tiles, a few colourways, and asks the host for a few words (a couple's names, whose birthday and the age, the graduate and class year, a line under it) plus the date. Stored as `events.template_key` and `events.template_fields` (`drizzle/0053_gallery_looks.sql`); a null key means "the look these colours belong to", so every event made with one of yesterday's eleven colour templates now wears that template's whole look, in the same colours. Edited on the event's **Look** tab (with a phone-width preview), and on New event and `/admin/new`. Settings no longer touches colours or the cover. **Looks are on every plan**; colours of one's own and a cover stay Premium, through `eventColors` as before. The guest gallery and the entry sheet wear the look; the kiosk, live display, print studio and QR do not.
 - **Admin client pages, 2026-10-16.** `/admin` is the queues and a searchable client list (Customers, Needs a decision, Live, Guests, All); guest-only accounts no longer sit among customers. Each account has `/admin/clients/[userId]`: edit name, email and handle (`PATCH /api/admin/clients/[userId]`, written to the history and audit log), grant, revoke, payment failed or received, a Venue end date (`PATCH /api/admin/entitlements/[entitlementId]`), put any one event live, credit, access email, password reset, erase, and recent history. "Waiting to go live" and "Signed up, not activated" carry the grant form on each row. **Fixed:** the grant route refused any account that was not `organizer`, so a superadmin's own draft could never go live and had no card to grant from (`test/admin-grants.dbtest.ts`).
 - **End-to-end pass and fixes, 2026-10-17.** Signup, a draft, Go live from the queue, guest join, upload, the in-app camera (photo and video), hearts, comments, sharing, folders, share links, trash and the live display, all run against a local copy. Fixed on the way: `hasVenueGrant` compared Postgres microseconds with a JavaScript millisecond and called a grant from the same millisecond not started; a video still having its location removed was listed to everyone (its file was refused, so the tile opened onto a dead player); the viewer gave the photo and its sheets one React key; its backdrop let a light gallery show through. The viewer now follows a finger (swipe to change, drag down to close), photos slide in, sheets rise, and the join screen wears the gallery's colours. A video's location scrub needs 90 seconds of runway, which only the production job routes give it; a preview deployment's inline drain never runs one.
 - Two test suites: Vitest with no database and no network, plus `npm run test:db` against a throwaway local Postgres cluster.
@@ -57,6 +57,15 @@
 - Error tracking (F-9 shipped structured logging and email alerts; Sentry is built and sends nothing until `NEXT_PUBLIC_SENTRY_DSN` is set, 2026-10-11). The background job runner **is** built as of 2026-10-08 (F-5), with SEC-2's orphan reaper as its first job.
 
 
+**The brief of 2026-10-17.** The user described the whole product flow in one message. Checked against the code the same day, most of it was already built (guest join with or without an account, guest passes kept a year, uploads into folders, per-photo privacy, bulk actions, share links for photos, folders and selections, co-hosts with roles, QR, admin provisioning with generated credentials, grants, password resets). What was missing became these tasks, built in this order, each shipped on its own:
+- **TPL-1** gallery looks per kind of event, weddings first. **Done 2026-10-17.**
+- **ADM-6** signup records which plan button was clicked, and the admin queue shows it.
+- **ACC-7** the entry sheet and a shared link offer "sign in or create an account" beside "continue as a guest".
+- **MSG-1** messages between an organizer and Klik, one conversation per organizer, read on `/admin`.
+- **ADM-7** every event on `/admin`, moving an event to another account, a new event for an existing account, and an account without an event.
+- **MED-11** guests manage their own uploads: hide or show, move to a folder, make a share link, hide all of theirs. "Private" means the guest and the event's team, decided 2026-10-17.
+- **MED-12** private folders the host can hide from guests.
+
 ## Contents
 
 **This file is the whole plan.** Everything is here: phases, tasks, decisions, findings and build order. There is no second document.
@@ -80,6 +89,7 @@
 | Phase OPS | Transcoding, resumable uploads, the US bucket move |
 | Phase TRS | Trust, safety, compliance, accessibility |
 | Phase ADM | Admin console |
+| Phase TPL | Gallery looks per kind of event |
 | Phase LAW | US compliance: terms, DMCA, COPPA, consent scope |
 | Section B | Proposals, all accepted and promoted |
 | Section C | Every decision made, with reasoning |
@@ -1177,6 +1187,16 @@ Table `audit_log` (id, actor_user_id, action, target_type, target_id, metadata j
 **Size:** M. **Depends on:** AI-6, NEW-9.
 Guest-reported media and AI-flagged media in one queue, with actions to hide, delete, notify the organizer, or suspend an event.
 
+
+## Phase TPL: Gallery looks
+
+### TPL-1. A look per kind of event
+**DONE 2026-10-17** (`lib/gallery-templates.ts`, `lib/look-fonts.ts`, `components/guest/look-hero.tsx`, `.look` and `.look-hero` in `app/globals.css`, `components/dashboard/look-editor.tsx`, `drizzle/0053_gallery_looks.sql`). Asked for as "a black wedding one and a white wedding one that look elegant, a birthday one, a graduation one and a generic one, weddings first, semi-customizable with their names and the date".
+- **Black tie:** the couple's names in Bodoni capitals with a gold italic ampersand, an Art Deco fan above, a ruled date, candlelight from above, hairline-framed photos; on the entry sheet it is an invitation card in a double gold frame. Colourways Champagne, Midnight, Silver, Rose gold.
+- **White lace:** the names in Pinyon Script, stacked on a phone and on one line on a wide screen, a sprig of leaves, the date in Cormorant capitals, photos resting on paper with a soft shadow. White and gold, Ivory, Sage, Dusty blue.
+- **Party:** Fredoka, the age as a giant numeral, confetti, tilted rounded photos. **Diploma:** Cinzel in a double rule, the class year in laurels, the school. **Modern:** a tight Space Grotesk headline and an accent bar, for any event. **Plain** is the header every gallery had.
+- Decisions: a look only decides type, composition, ornament and tiles; colour stays the gallery's own tokens, so every colourway and Premium's own colours stay WCAG-held. Sizes follow the hero's container (`cqi`), so the picker's 170px cards are the real markup. The six faces are declared on the root and never preloaded, so a page downloads only the face it sets. Every field is optional and a look with nothing filled in is headed with the event's name. Existing events were not migrated: their colours name their look.
+- **Not built:** a superadmin designing new looks from `/admin`. Looks are code, like the print templates; a new one is a definition in `lib/gallery-templates.ts` and a block of CSS.
 ---
 
 # SECTION B: proposals (all accepted 2026-09-30)

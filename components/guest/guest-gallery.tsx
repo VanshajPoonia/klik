@@ -15,6 +15,8 @@ import { uploadToGallery } from "@/lib/upload-client";
 import { UploadTray } from "@/components/upload/upload-tray";
 import { useUploadQueue } from "@/components/upload/use-upload-queue";
 import { AddToHomeScreen } from "@/components/guest/add-to-home-screen";
+import { LookHero } from "@/components/guest/look-hero";
+import { eventTemplate } from "@/lib/gallery-templates";
 import type { PendingUploads } from "@/components/guest/media-share-panel";
 import type { AddedEvent } from "@/lib/upload-queue/page-queue";
 import {
@@ -761,13 +763,18 @@ export function GuestGallery({
   // TRS-3: every colour held to WCAG AA against the chosen background, the
   // accent included where it is a link, an icon or a button (lib/color.ts).
   const contentTheme = galleryContentTheme(event.accentColor, event.backgroundColor);
+  // TPL-1: the look the host chose, already resolved by the page. Plain keeps
+  // the header every gallery had; the others are headed by LookHero.
+  const look = eventTemplate({ templateKey: event.templateKey, accentColor: event.accentColor, backgroundColor: event.backgroundColor });
+  const lookCentered = look.key === "black-tie" || look.key === "white-lace" || look.key === "diploma";
   // The camera and the viewer are always near black, outside the content.
   const darkVolt = ensureContrast(event.accentColor, "#050505", 3);
 
   return (
     <div
       // Fades in over the entry sheet it replaces, in the same colours.
-      className="klik-fade-in min-h-screen px-6 py-10 md:px-10"
+      className="look-page klik-fade-in min-h-screen px-6 py-10 md:px-10"
+      data-look={look.key}
       style={{
         backgroundColor: event.backgroundColor,
         // The viewer and camera are always dark, so out here the accent is
@@ -778,7 +785,7 @@ export function GuestGallery({
         ["--color-canvas" as string]: event.backgroundColor,
       }}
     >
-      <div className="mx-auto max-w-5xl" style={contentTheme}>
+      <div className="look mx-auto max-w-5xl" data-look={look.key} style={contentTheme}>
         {coverUrl && (
           <div className="relative mb-8 aspect-[16/6] overflow-hidden rounded-2xl border border-white/10">
             <Image
@@ -793,26 +800,54 @@ export function GuestGallery({
             <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
           </div>
         )}
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div>
+        <header
+          className={
+            look.key === "plain"
+              ? "mb-8 flex flex-wrap items-center justify-between gap-4"
+              : `mb-10 flex flex-col gap-7 ${lookCentered ? "items-stretch" : "items-stretch md:flex-row md:items-end md:justify-between"}`
+          }
+        >
+          <div className={look.key === "plain" ? undefined : "min-w-0 flex-1"}>
             {/* Back to every gallery this guest is in, when there is more than this one. */}
             {!isOwner && (signedIn || otherGalleries > 0) && (
               <a
                 href="/me"
-                className="mb-1 inline-flex min-h-8 items-center gap-1 text-xs text-muted transition-colors hover:text-paper"
+                className={`mb-1 inline-flex min-h-8 items-center gap-1 text-xs text-muted transition-colors hover:text-paper ${look.key === "plain" ? "" : "mb-5"}`}
               >
                 <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
                 {t.gallery.yourGalleries}
               </a>
             )}
-            <h1 className="font-display text-2xl text-paper">{event.name}</h1>
-            <p className="mt-1 text-sm text-muted">
-              {t.gallery.itemsShared(items.length, hasMore)}
-              {isOwner && t.gallery.viewingAsOrganizer}
-            </p>
+            {look.key === "plain" ? (
+              <>
+                <h1 className="font-display text-2xl text-paper">{event.name}</h1>
+                <p className="mt-1 text-sm text-muted">
+                  {t.gallery.itemsShared(items.length, hasMore)}
+                  {isOwner && t.gallery.viewingAsOrganizer}
+                </p>
+              </>
+            ) : (
+              <LookHero
+                templateKey={look.key}
+                fields={event.templateFields ?? {}}
+                eventName={event.name}
+                eventDate={event.eventDate}
+                locale={locale}
+                size="page"
+              >
+                <p className="look-count mt-5 text-sm text-muted">
+                  {t.gallery.itemsShared(items.length, hasMore)}
+                  {isOwner && t.gallery.viewingAsOrganizer}
+                </p>
+              </LookHero>
+            )}
           </div>
           {event.uploadsEnabled && (
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div
+              className={`flex flex-wrap items-center gap-2 ${
+                look.key === "plain" ? "justify-end" : lookCentered ? "justify-center" : "justify-start md:justify-end"
+              }`}
+            >
               {/* MED-10: for a photographer on the team. */}
               {proofs &&
                 (proofs.label ? (
@@ -1125,13 +1160,13 @@ export function GuestGallery({
                 : t.gallery.emptyFolder}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          <div className="look-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
             {gridItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setLightboxId(item.id)}
                 aria-label={item.kind === "video" ? t.gallery.openVideo : t.gallery.openPhoto}
-                className={`relative aspect-square overflow-hidden rounded-xl border border-canvas-line bg-canvas-raised transition-transform duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
+                className={`look-tile relative aspect-square overflow-hidden bg-canvas-raised transition-transform duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
                   settledIds.has(item.id) ? "" : "klik-frame"
                 }`}
               >

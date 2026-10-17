@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MediaGrid, type DashboardMedia } from "@/components/dashboard/media-grid";
 import { EventSettingsForm } from "@/components/dashboard/event-settings-form";
+import { LookEditor } from "@/components/dashboard/look-editor";
 import { QrPanel } from "@/components/dashboard/qr-panel";
 import { LicenseBanner, type EventLicenseSummary } from "@/components/dashboard/license-banner";
 import {
@@ -51,7 +52,7 @@ import { nanoid } from "nanoid";
 import { SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 import { uploadToGallery } from "@/lib/upload-client";
 
-type Tab = "gallery" | "highlights" | "insights" | "links" | "settings" | "qr" | "trash";
+type Tab = "gallery" | "highlights" | "insights" | "links" | "look" | "settings" | "qr" | "trash";
 
 /** AI-2, AI-4: the dashboard is in English, like the rest of it. */
 const SEARCH_COPY: SearchCopy = {
@@ -670,6 +671,7 @@ export function EventDashboard({
               "highlights",
               ...(license.state !== "draft" ? ["insights"] : []),
               ...(canManageShares ? ["links"] : []),
+              "look",
               "settings",
               "qr",
               ...(canManageTrash ? ["trash"] : []),
@@ -916,6 +918,10 @@ export function EventDashboard({
           <ShareLinksPanel eventId={event.id} slug={event.slug} />
         )}
 
+        {tab === "look" && (
+          <LookEditor event={event} canCustomizeGallery={canCustomizeGallery} approvedMedia={approved} />
+        )}
+
         {tab === "settings" && (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.75fr)]">
             <EventSettingsForm
@@ -923,11 +929,9 @@ export function EventDashboard({
               offerScenes={visionEnabled}
               offerPrints={printsAvailable}
               canManageClients={canManageClients}
-              canCustomizeGallery={canCustomizeGallery}
               canCustomizeQr={canCustomizeQr}
               canUseVenueHub={canUseVenueHub}
               canDeleteEvent={canDeleteEvent}
-              approvedMedia={approved}
               clients={clients}
               addressing={addressing}
               profile={profile}

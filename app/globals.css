@@ -738,6 +738,403 @@ body::before {
   animation: klik-sheet-up 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
+/* ---------------------------------------------------------------------------
+   TPL-1: gallery looks. The key is lib/gallery-templates.ts's template key,
+   set as data-look on the gallery and on each hero (components/guest/
+   look-hero.tsx). Colour stays the gallery's own tokens (volt, paper, muted,
+   canvas), already held to WCAG AA for whatever colourway or Premium colours
+   the host chose, so a look only decides type, composition, ornament and how
+   the photos sit.
+
+   Sizes follow the width the hero sits in (cqi), not the screen, so the same
+   markup is a phone's first screen and a 170px card in the picker. `--s`
+   scales the floor and ceiling of each clamp, and every size is written twice:
+   the vw line is for phones too old for container units, which ignore the cqi
+   line after it.
+   --------------------------------------------------------------------------- */
+
+.look-stage {
+  container-type: inline-size;
+}
+
+.look-hero {
+  --s: 1;
+  position: relative;
+  color: var(--color-paper);
+}
+.look-hero[data-size="sheet"] {
+  --s: 1.06;
+}
+.look-hero[data-size="card"] {
+  --s: 0.3;
+}
+/* In the picker every block is a span (a radio label holds only phrasing
+   content). Declared before the looks, which set flex where they need it. */
+.look-stage:is(span),
+.look-hero:is(span),
+.look-hero[data-size="card"] :is(.look-title, .look-date, .look-message, .look-class, .look-school, .look-frame, .look-party, .look-party-words) {
+  display: block;
+}
+
+.look-hero .look-title {
+  margin: 0;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.look-hero .look-date,
+.look-hero .look-message {
+  margin: 0;
+  color: var(--color-muted);
+}
+.look-hero .look-ornament {
+  display: block;
+  color: var(--color-volt);
+}
+
+/* One authored moment: the names arrive out of soft focus the first time the
+   look is seen, on the entry sheet and over the gallery. Never in the picker,
+   where twelve cards doing it at once would be noise. */
+@keyframes look-arrive {
+  from {
+    opacity: 0.15;
+    filter: blur(10px);
+    translate: 0 0.35em;
+  }
+}
+@keyframes look-follow {
+  from {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
+}
+.look-hero:not([data-size="card"]) .look-title {
+  animation: look-arrive 1100ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.look-hero:not([data-size="card"])
+  :is(.look-date, .look-message, .look-class, .look-school, .look-rule, .look-count, .look-fan, .look-sprig) {
+  animation: look-follow 700ms cubic-bezier(0.16, 1, 0.3, 1) 320ms backwards;
+}
+
+/* Black tie: Bodoni capitals, generously tracked, a hairline gold fan above
+   and a ruled date below. An invitation card on the entry sheet. */
+.look-hero[data-look="black-tie"] {
+  text-align: center;
+}
+.look-hero[data-look="black-tie"] .look-fan {
+  width: calc(var(--s) * 5.5rem);
+  margin: 0 auto calc(var(--s) * 1.4rem);
+}
+.look-hero[data-look="black-tie"] .look-title {
+  font-family: var(--font-bodoni), "Bodoni 72", Didot, serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  /* Tracking adds space after the last letter too; this puts it back, so the
+     names sit on the centre line. */
+  margin-inline-end: -0.14em;
+  line-height: 1.12;
+  font-size: calc(var(--s) * clamp(2rem, 8vw, 4.25rem));
+  font-size: clamp(calc(var(--s) * 1.9rem), 8.2cqi, calc(var(--s) * 4.5rem));
+}
+.look-hero[data-look="black-tie"] .look-amp {
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-volt);
+  font-size: 1.15em;
+  line-height: 0;
+}
+.look-hero[data-look="black-tie"] .look-date {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1em;
+  margin-top: calc(var(--s) * 1.6rem);
+  font-family: var(--font-bodoni), Didot, serif;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-size: calc(var(--s) * 0.72rem);
+}
+.look-hero[data-look="black-tie"] .look-date::before,
+.look-hero[data-look="black-tie"] .look-date::after {
+  content: "";
+  flex: 0 0 auto;
+  height: 1px;
+  width: calc(var(--s) * 2.75rem);
+  background: color-mix(in srgb, var(--color-volt) 65%, transparent);
+}
+.look-hero[data-look="black-tie"] .look-message {
+  margin-top: calc(var(--s) * 1rem);
+  font-family: var(--font-bodoni), Didot, serif;
+  font-style: italic;
+  font-size: calc(var(--s) * 1.1rem);
+}
+.look-hero[data-look="black-tie"][data-size="sheet"] {
+  padding: 2.75rem 1.5rem 2.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-volt) 45%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-volt) 22%, transparent);
+  outline-offset: 5px;
+}
+
+/* White lace: the names in calligraphy, stacked as an invitation sets them,
+   a sprig between the names and the date. Light and airy, no frame. */
+.look-hero[data-look="white-lace"] {
+  text-align: center;
+}
+.look-hero[data-look="white-lace"] .look-title {
+  font-family: var(--font-pinyon), "Snell Roundhand", cursive;
+  font-weight: 400;
+  line-height: 1.08;
+  font-size: calc(var(--s) * clamp(2.75rem, 13vw, 5.5rem));
+  font-size: clamp(calc(var(--s) * 2.6rem), 12.5cqi, calc(var(--s) * 5.75rem));
+}
+.look-hero[data-look="white-lace"] .look-name {
+  display: block;
+}
+.look-hero[data-look="white-lace"] .look-amp {
+  display: block;
+  margin-block: 0.06em 0;
+  font-family: var(--font-cormorant), Georgia, serif;
+  font-style: italic;
+  font-size: 0.5em;
+  line-height: 1;
+  color: var(--color-volt);
+}
+/* Stacked on a phone, where an invitation would stack them; on one line where
+   there is room, so the photos are not pushed below the fold. */
+@container (min-width: 40rem) {
+  .look-hero[data-look="white-lace"][data-size="page"] :is(.look-name, .look-amp) {
+    display: inline;
+  }
+  .look-hero[data-look="white-lace"][data-size="page"] .look-amp {
+    margin-inline: 0.2em;
+    vertical-align: 0.12em;
+  }
+}
+.look-hero[data-look="white-lace"] .look-sprig {
+  width: calc(var(--s) * 7.5rem);
+  margin: calc(var(--s) * 1.25rem) auto calc(var(--s) * 1rem);
+}
+.look-hero[data-look="white-lace"] .look-date {
+  font-family: var(--font-cormorant), Georgia, serif;
+  font-variant-numeric: lining-nums;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  margin-inline-end: -0.28em;
+  font-size: calc(var(--s) * 0.8rem);
+}
+.look-hero[data-look="white-lace"] .look-message {
+  margin-top: calc(var(--s) * 0.6rem);
+  font-family: var(--font-cormorant), Georgia, serif;
+  font-style: italic;
+  font-size: calc(var(--s) * 1.25rem);
+}
+
+/* Party: big round letters, the age as a numeral you could stand on, and
+   confetti thrown over the top corner. */
+.look-hero[data-look="party"] .look-confetti {
+  position: absolute;
+  top: calc(var(--s) * -1.25rem);
+  right: calc(var(--s) * -0.5rem);
+  width: min(62%, calc(var(--s) * 24rem));
+  pointer-events: none;
+}
+.look-hero[data-look="party"] .look-party {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0 calc(var(--s) * 0.9rem);
+}
+.look-hero[data-look="party"] .look-age {
+  font-family: var(--font-fredoka), ui-rounded, sans-serif;
+  font-weight: 700;
+  color: var(--color-volt);
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  font-variant-numeric: lining-nums;
+  font-size: calc(var(--s) * clamp(5rem, 26vw, 9.5rem));
+  font-size: clamp(calc(var(--s) * 4.75rem), 24cqi, calc(var(--s) * 10rem));
+}
+.look-hero[data-look="party"] .look-party-words {
+  min-width: 0;
+  padding-bottom: calc(var(--s) * 0.35rem);
+}
+.look-hero[data-look="party"] .look-title {
+  font-family: var(--font-fredoka), ui-rounded, sans-serif;
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  font-size: calc(var(--s) * clamp(2.5rem, 11vw, 4.75rem));
+  font-size: clamp(calc(var(--s) * 2.4rem), 10.5cqi, calc(var(--s) * 5rem));
+}
+.look-hero[data-look="party"] .look-date,
+.look-hero[data-look="party"] .look-message {
+  font-family: var(--font-fredoka), ui-rounded, sans-serif;
+  font-weight: 500;
+  font-size: calc(var(--s) * 1.05rem);
+}
+.look-hero[data-look="party"] .look-date {
+  margin-top: calc(var(--s) * 0.5rem);
+}
+.look-hero[data-look="party"] .look-message {
+  position: relative;
+  margin-top: calc(var(--s) * 0.9rem);
+}
+
+/* Diploma: Roman capitals inside a double rule, the class year between two
+   laurel branches. */
+.look-hero[data-look="diploma"] {
+  text-align: center;
+}
+.look-hero[data-look="diploma"] .look-frame {
+  padding: calc(var(--s) * 2.25rem) calc(var(--s) * 1.25rem) calc(var(--s) * 2rem);
+  border: calc(var(--s) * 4px + 1px) double color-mix(in srgb, var(--color-volt) 70%, transparent);
+}
+.look-hero[data-look="diploma"] .look-title {
+  font-family: var(--font-cinzel), "Trajan Pro", serif;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin-inline-end: -0.08em;
+  line-height: 1.12;
+  font-size: calc(var(--s) * clamp(1.9rem, 7.5vw, 3.75rem));
+  font-size: clamp(calc(var(--s) * 1.8rem), 7.2cqi, calc(var(--s) * 3.9rem));
+}
+.look-hero[data-look="diploma"] .look-class {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8em;
+  margin: calc(var(--s) * 1.1rem) 0 0;
+  font-family: var(--font-cinzel), serif;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  color: var(--color-volt);
+  font-size: calc(var(--s) * 0.85rem);
+}
+.look-hero[data-look="diploma"] .look-laurel {
+  width: 1.9em;
+  flex: 0 0 auto;
+}
+.look-hero[data-look="diploma"] .look-school {
+  margin: calc(var(--s) * 0.7rem) 0 0;
+  font-family: var(--font-cinzel), serif;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--color-paper);
+  font-size: calc(var(--s) * 0.75rem);
+}
+.look-hero[data-look="diploma"] .look-date {
+  margin-top: calc(var(--s) * 0.5rem);
+  font-size: calc(var(--s) * 0.85rem);
+}
+.look-hero[data-look="diploma"] .look-message {
+  margin-top: calc(var(--s) * 1rem);
+  font-size: calc(var(--s) * 0.95rem);
+}
+
+/* Modern: one big, tight headline and a bar of the accent. Any event. */
+.look-hero[data-look="modern"] .look-title {
+  font-family: var(--font-space-grotesk), var(--font-geist-sans), sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  font-size: calc(var(--s) * clamp(2.5rem, 10vw, 5rem));
+  font-size: clamp(calc(var(--s) * 2.4rem), 9.5cqi, calc(var(--s) * 5.25rem));
+}
+.look-hero[data-look="modern"] .look-rule {
+  display: block;
+  width: calc(var(--s) * 3.5rem);
+  height: calc(var(--s) * 6px);
+  margin: calc(var(--s) * 1.1rem) 0 calc(var(--s) * 0.9rem);
+  background: var(--color-volt);
+}
+.look-hero[data-look="modern"] .look-date {
+  font-family: var(--font-space-grotesk), sans-serif;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: calc(var(--s) * 0.8rem);
+}
+.look-hero[data-look="modern"] .look-message {
+  margin-top: calc(var(--s) * 0.4rem);
+  font-family: var(--font-space-grotesk), sans-serif;
+  font-size: calc(var(--s) * 1.1rem);
+}
+
+/* How the photos sit, per look. `.look-tile` replaces the tile's own radius
+   and border; Plain keeps exactly what every gallery had. */
+.look-grid {
+  gap: var(--look-gap, 0.75rem);
+}
+.look-tile {
+  border-radius: var(--look-radius, 0.75rem);
+  border: 1px solid var(--color-canvas-line);
+}
+.look[data-look="black-tie"] {
+  --look-gap: 0.625rem;
+  --look-radius: 1px;
+}
+.look[data-look="black-tie"] .look-tile {
+  border-color: color-mix(in srgb, var(--color-volt) 26%, transparent);
+}
+.look[data-look="white-lace"] {
+  --look-gap: 1rem;
+  --look-radius: 2px;
+}
+/* A photo resting on paper. Not while focused, where the focus ring (also a
+   box shadow) has to win. */
+.look[data-look="white-lace"] .look-tile {
+  border-color: transparent;
+}
+.look[data-look="white-lace"] .look-tile:not(:focus-visible) {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.06),
+    0 14px 28px -18px rgb(0 0 0 / 0.38);
+}
+.look[data-look="party"] {
+  --look-gap: 0.75rem;
+  --look-radius: 1.25rem;
+}
+.look[data-look="party"] .look-tile:nth-child(4n + 1) {
+  rotate: -1deg;
+}
+.look[data-look="party"] .look-tile:nth-child(4n + 2) {
+  rotate: 0.7deg;
+}
+.look[data-look="party"] .look-tile:nth-child(4n + 3) {
+  rotate: -0.4deg;
+}
+.look[data-look="party"] .look-tile:nth-child(4n) {
+  rotate: 1.1deg;
+}
+.look[data-look="diploma"] {
+  --look-gap: 0.5rem;
+  --look-radius: 0;
+}
+.look[data-look="diploma"] .look-tile {
+  border-color: color-mix(in srgb, var(--color-volt) 32%, transparent);
+}
+.look[data-look="modern"] {
+  --look-gap: 0.375rem;
+  --look-radius: 0.375rem;
+}
+.look[data-look="modern"] .look-tile {
+  border-color: transparent;
+}
+
+/* Black tie's one piece of atmosphere: candlelight from above the names. */
+.look-page[data-look="black-tie"] {
+  background-image: radial-gradient(
+    ellipse 90% 42rem at 50% -8rem,
+    color-mix(in srgb, var(--event-accent) 11%, transparent),
+    transparent 72%
+  );
+}
+
 /* TRS-3: motion a person has asked their device not to show. Whatever moves
    arrives at once instead, smooth scrolling jumps, and spinners stand still
    (the icon still says something is working). Fades are kept where they say
@@ -762,5 +1159,12 @@ body::before {
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before {
     display: none;
+  }
+  /* TPL-1: candlelight and tilted photos are atmosphere too. */
+  .look-page[data-look] {
+    background-image: none;
+  }
+  .look[data-look] .look-tile {
+    rotate: none;
   }
 }

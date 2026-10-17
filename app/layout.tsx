@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Fraunces } from "next/font/google";
+import { LOOK_FONT_VARIABLES } from "@/lib/look-fonts";
 import { SessionProvider } from "next-auth/react";
 import { ErrorReporting } from "@/components/error-reporting";
 import "./globals.css";
@@ -38,7 +39,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${LOOK_FONT_VARIABLES} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-canvas text-paper">
         <SessionProvider>{children}</SessionProvider>

@@ -16,6 +16,7 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { PlanKey } from "./plans";
+import type { TemplateFields } from "./gallery-templates";
 import { sql } from "drizzle-orm";
 
 // --- Auth.js tables (organizers only, guests never get a row here) ---
@@ -271,6 +272,10 @@ export const events = pgTable(
     coverMediaId: text("cover_media_id"),
     accentColor: text("accent_color").notNull().default("#e8f000"),
     backgroundColor: text("background_color").notNull().default("#090a08"),
+    // TPL-1: the look (lib/gallery-templates.ts) and the host's words for it.
+    // Null means the look the colours belong to; see drizzle/0053.
+    templateKey: text("template_key"),
+    templateFields: jsonb("template_fields").$type<TemplateFields>(),
     qrTemplate: text("qr_template").$type<QrTemplate>().notNull().default("classic"),
     venueFeatured: boolean("venue_featured").notNull().default(false),
     visibility: text("visibility").$type<EventVisibility>().notNull().default("public"),

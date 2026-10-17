@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,88 +10,16 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { VisibilityField, type Visibility } from "@/components/dashboard/visibility-field";
 import { endOfDayIso, toDateInputValue } from "@/lib/dates";
 import type { OrganizerEvent } from "@/lib/events";
-import type { Media, VenueClient } from "@/lib/schema";
-import { galleryPalette } from "@/lib/color";
+import type { VenueClient } from "@/lib/schema";
 import { canUseProofs } from "@/lib/plans";
-import { matchTemplate } from "@/lib/gallery-templates";
-import { TemplatePicker } from "@/components/dashboard/template-picker";
-
-const COVER_CHOICES = 30;
-
-function CoverPicker({
-  photos,
-  value,
-  onChange,
-}: {
-  photos: Array<Media & { thumbSrc?: string | null }>;
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  const selected = photos.find((photo) => photo.id === value);
-  const choices = photos.slice(0, COVER_CHOICES);
-  if (selected && !choices.some((photo) => photo.id === selected.id)) {
-    choices.unshift(selected);
-  }
-
-  return (
-    <fieldset>
-      <legend className="mb-1.5 block text-xs font-medium tracking-wide text-muted uppercase">
-        Cover photo
-      </legend>
-      {choices.length === 0 ? (
-        <p className="text-sm text-muted">
-          Approved photos show up here as guests add them, and you can pick one as the cover.
-        </p>
-      ) : (
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-          <button
-            type="button"
-            onClick={() => onChange("")}
-            aria-pressed={value === ""}
-            className={`flex aspect-square items-center justify-center rounded-lg border-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
-              value === ""
-                ? "border-volt text-paper"
-                : "border-canvas-line text-muted hover:text-paper"
-            }`}
-          >
-            None
-          </button>
-          {choices.map((photo, index) => (
-            <button
-              key={photo.id}
-              type="button"
-              onClick={() => onChange(photo.id)}
-              aria-pressed={value === photo.id}
-              aria-label={`Use photo ${index + 1} as the cover`}
-              className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
-                value === photo.id ? "border-volt" : "border-transparent hover:border-paper/40"
-              }`}
-            >
-              <Image
-                src={photo.thumbSrc ?? `${photo.blobUrl}?thumb=1`}
-                alt=""
-                fill
-                unoptimized
-                sizes="96px"
-                className="object-cover"
-              />
-            </button>
-          ))}
-        </div>
-      )}
-    </fieldset>
-  );
-}
 
 export function EventSettingsForm({
   event,
   canManageClients = false,
-  canCustomizeGallery = false,
   canCustomizeQr = false,
   canUseVenueHub = false,
   canDeleteEvent = false,
   profile = null,
-  approvedMedia = [],
   clients = [],
   addressing = null,
   offerScenes = false,
@@ -106,13 +33,11 @@ export function EventSettingsForm({
   /** QR-1: present when the plan allows a custom address. */
   addressing?: { origin: string; formerSlugs: string[] } | null;
   canManageClients?: boolean;
-  canCustomizeGallery?: boolean;
   canCustomizeQr?: boolean;
   canUseVenueHub?: boolean;
   canDeleteEvent?: boolean;
   /** GRW-4: set only for the owner, whose profile this event may be listed on. */
   profile?: { isPublic: boolean; username: string } | null;
-  approvedMedia?: Media[];
   clients?: VenueClient[];
 }) {
   const router = useRouter();
@@ -138,9 +63,6 @@ export function EventSettingsForm({
   const [clientEmail, setClientEmail] = useState(event.clientEmail ?? "");
   const [clientPhone, setClientPhone] = useState(event.clientPhone ?? "");
   const [clientId, setClientId] = useState(event.clientId ?? "");
-  const [coverMediaId, setCoverMediaId] = useState(event.coverMediaId ?? "");
-  const [accentColor, setAccentColor] = useState(event.accentColor);
-  const [backgroundColor, setBackgroundColor] = useState(event.backgroundColor);
   const [qrTemplate, setQrTemplate] = useState(event.qrTemplate);
   const [venueFeatured, setVenueFeatured] = useState(event.venueFeatured);
   // CAM-4. The develop time is edited in the browser's own time zone, which is
@@ -156,7 +78,6 @@ export function EventSettingsForm({
   const [saved, setSaved] = useState(false);
   const needsNewGalleryPassword =
     visibility === "password" && event.visibility !== "password";
-  const approvedPhotos = approvedMedia.filter((item) => item.kind === "photo");
 
   /** Develops the roll now: the same setting, set to this moment. */
   async function developNow() {
@@ -208,10 +129,6 @@ export function EventSettingsForm({
           clientName: canManageClients ? clientName || null : undefined,
           clientEmail: canManageClients ? clientEmail || null : undefined,
           clientPhone: canManageClients ? clientPhone || null : undefined,
-          coverMediaId: canCustomizeGallery ? coverMediaId || null : undefined,
-          // A template's colours on any plan, anything else on Premium.
-          accentColor: canCustomizeGallery || matchTemplate(accentColor, backgroundColor) ? accentColor : undefined,
-          backgroundColor: canCustomizeGallery || matchTemplate(accentColor, backgroundColor) ? backgroundColor : undefined,
           qrTemplate: canCustomizeQr ? qrTemplate : undefined,
           venueFeatured: canUseVenueHub ? venueFeatured : undefined,
           slug: addressing && slug.trim() !== event.slug ? slug.trim() : undefined,
@@ -368,48 +285,9 @@ export function EventSettingsForm({
         </fieldset>
       )}
 
-      <fieldset className="space-y-4 rounded-xl border border-canvas-line p-4">
-        <legend className="px-1 text-sm font-medium text-paper">Gallery appearance</legend>
-        <TemplatePicker
-          occasion={null}
-          legend="Template"
-          value={matchTemplate(accentColor, backgroundColor)?.key ?? (canCustomizeGallery ? null : "plain")}
-          onChange={(template) => {
-            setAccentColor(template.accent);
-            setBackgroundColor(template.background);
-          }}
-          hint={
-            canCustomizeGallery
-              ? "Start from a template, or set your own colors below."
-              : "Templates come with every plan. Your own colors and a cover photo come with Klik Premium."
-          }
-        />
-        {canCustomizeGallery && (
-          <>
-            <CoverPicker photos={approvedPhotos} value={coverMediaId} onChange={setCoverMediaId} />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Accent color">
-                <input
-                  type="color"
-                  className={`${inputClass} h-11 p-1`}
-                  value={accentColor}
-                  onChange={(event) => setAccentColor(event.target.value)}
-                />
-              </Field>
-              <Field label="Background color">
-                <input
-                  type="color"
-                  className={`${inputClass} h-11 p-1`}
-                  value={backgroundColor}
-                  onChange={(event) => setBackgroundColor(event.target.value)}
-                />
-              </Field>
-            </div>
-            {/* TRS-3: the gallery's own palette, so what is seen here is what guests get. */}
-            <GalleryColorPreview accent={accentColor} background={backgroundColor} />
-          </>
-        )}
-      </fieldset>
+      <p className="rounded-xl border border-canvas-line px-4 py-3 text-sm text-muted">
+        The gallery&apos;s look, its colours and your names for it are on the <span className="text-paper">Look</span> tab.
+      </p>
 
       {canCustomizeQr && (
         <Field label="QR sign template">
@@ -689,33 +567,4 @@ function toDateTimeLocalValue(value: Date | string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** TRS-3: a small gallery in the chosen colours, held to WCAG as the real one is. */
-function GalleryColorPreview({ accent, background }: { accent: string; background: string }) {
-  const palette = galleryPalette(accent, background);
-  return (
-    <div className="space-y-2">
-      <div className="rounded-xl border border-canvas-line p-4" style={{ backgroundColor: background }} aria-hidden="true">
-        <p className="font-display text-lg" style={{ color: palette.paper }}>
-          Ana and Bo&apos;s wedding
-        </p>
-        <p className="mt-0.5 text-xs" style={{ color: palette.muted }}>
-          128 items shared
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <span className="rounded-full px-4 py-2 text-sm font-medium" style={{ backgroundColor: palette.volt, color: palette.onVolt }}>
-            Camera
-          </span>
-          <span className="text-sm font-medium underline" style={{ color: palette.volt }}>
-            Add media
-          </span>
-        </div>
-      </div>
-      <p className="text-xs text-muted">
-        {palette.accentAdjusted
-          ? "Your accent is a little darker or lighter on this background, where it is a button or a link, so everyone can read it. The camera and photo viewer keep it as chosen."
-          : "Text and buttons are checked to stay readable for everyone."}
-      </p>
-    </div>
-  );
-}
 

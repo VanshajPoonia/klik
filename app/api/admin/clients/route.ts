@@ -11,6 +11,8 @@ import { generateUsername, generatePassword, hashPassword } from "@/lib/credenti
 import { prepareEventInsert, toPublicEvent, type CreateEventInput } from "@/lib/events";
 import { createVenueSlug } from "@/lib/venue";
 import { isUniqueViolation, raisedBy } from "@/lib/db-errors";
+import { fieldsForTemplate, resolveTemplateChoice } from "@/lib/gallery-templates";
+import { templateChoiceSchema, templateFieldsSchema } from "@/lib/template-fields";
 
 const createClientSchema = z.object({
   contactName: z.string().trim().min(1).max(120),
@@ -21,6 +23,10 @@ const createClientSchema = z.object({
   visibility: z.enum(EVENT_VISIBILITIES).optional(),
   galleryPassword: z.string().min(4).max(72).optional(),
   planKey: z.enum(PLAN_KEYS).default("event"),
+  // TPL-1: the look, its colourway and the host's words, as on New event.
+  template: templateChoiceSchema.optional(),
+  colorway: z.string().max(40).optional(),
+  templateFields: templateFieldsSchema.optional(),
 });
 
 export async function GET() {
@@ -124,6 +130,7 @@ export async function POST(request: Request) {
     galleryPassword,
     planKey,
   } = parsed.data;
+  const choice = parsed.data.template ? resolveTemplateChoice(parsed.data.template, parsed.data.colorway) : null;
 
   if (visibility === "password" && !galleryPassword) {
     return NextResponse.json(
@@ -142,6 +149,11 @@ export async function POST(request: Request) {
       moderation,
       visibility,
       password: galleryPassword,
+      ...(choice && choice.template.key !== "plain"
+        ? { accentColor: choice.colorway.accent, backgroundColor: choice.colorway.background }
+        : {}),
+      templateKey: choice?.template.key ?? null,
+      templateFields: choice ? fieldsForTemplate(choice.template, parsed.data.templateFields ?? null) : null,
     },
   );
 

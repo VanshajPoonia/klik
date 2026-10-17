@@ -43,7 +43,7 @@ import { challengeBoard } from "@/lib/challenges";
 import { getWatermark } from "@/lib/proofs";
 import { EntrySheet } from "@/components/guest/entry-sheet";
 import { isRecapAvailable } from "@/lib/recap";
-import { eventColors } from "@/lib/gallery-templates";
+import { eventColors, eventTemplate, fieldsForTemplate } from "@/lib/gallery-templates";
 import { GuestGallery } from "@/components/guest/guest-gallery";
 import { GuestCopyProvider } from "@/components/guest/guest-copy";
 import { GUEST_COPY } from "@/lib/i18n/guest";
@@ -131,7 +131,15 @@ export default async function GuestEventPage({
   const offerRecap = event.recapEnabled && isRecapAvailable();
   // Premium shows the host's own colours; any plan shows a template's.
   const colors = eventColors(event, canCustomizeGallery(plan.key));
-  const sheetColors = { accentColor: colors.accent, backgroundColor: colors.background };
+  // TPL-1: the look and the host's words, on every plan. Resolved here so the
+  // gallery and the sheet in front of it never disagree about which it is.
+  const look = eventTemplate(event);
+  const lookFields = fieldsForTemplate(look, event.templateFields);
+  const sheetColors = {
+    accentColor: colors.accent,
+    backgroundColor: colors.background,
+    look: { templateKey: look.key, fields: lookFields, eventDate: event.eventDate?.toISOString() ?? null },
+  };
 
   if (!access.allowed) {
     if (access.reason === "password_required") {
@@ -271,6 +279,8 @@ export default async function GuestEventPage({
     coverMediaId: canCustomizeGallery(plan.key) ? event.coverMediaId : null,
     accentColor: colors.accent,
     backgroundColor: colors.background,
+    templateKey: look.key,
+    templateFields: lookFields,
     // PAY-7: a full gallery offers no upload button at all, rather than one
     // that fails. The banner below says why.
     uploadsEnabled: canUpload(event) && !galleryFull,

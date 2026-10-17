@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { events, type Event, type EventVisibility } from "./schema";
 import { PLANS, getPlanDeadline } from "./plans";
+import type { TemplateFields } from "./gallery-templates";
 
 const slugSuffix = customAlphabet("23456789abcdefghjkmnpqrstuvwxyz", 6);
 
@@ -51,6 +52,9 @@ export interface CreateEventInput {
   /** A template's colours (lib/gallery-templates.ts). Left out, the column defaults stand. */
   accentColor?: string;
   backgroundColor?: string;
+  /** TPL-1: the look and the host's words for it. */
+  templateKey?: string | null;
+  templateFields?: TemplateFields | null;
   /**
    * Gallery retention for this event, in days. Null for a draft, which has no
    * plan yet: licensing it sets the deadline (lib/entitlements.ts), and the
@@ -93,6 +97,8 @@ export async function prepareEventInsert(input: CreateEventInput) {
       ...(input.accentColor && input.backgroundColor
         ? { accentColor: input.accentColor, backgroundColor: input.backgroundColor }
         : {}),
+      templateKey: input.templateKey ?? null,
+      templateFields: input.templateFields ?? null,
       retentionUntil:
         input.retentionDays === null
           ? null
@@ -142,6 +148,10 @@ export function toPublicEvent(event: Event) {
     coverMediaId: event.coverMediaId,
     accentColor: event.accentColor,
     backgroundColor: event.backgroundColor,
+    // TPL-1: the look, and the host's own words for it (a couple's names, a
+    // class year). Written to be shown to guests; see lib/gallery-templates.ts.
+    templateKey: event.templateKey,
+    templateFields: event.templateFields,
     qrTemplate: event.qrTemplate,
     visibility: event.visibility,
     moderation: event.moderation,

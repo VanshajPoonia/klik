@@ -10,7 +10,8 @@ import { CURRENT_CONSENT, consentText } from "@/lib/consent";
 import { LanguageSwitch, useGuestCopy } from "@/components/guest/guest-copy";
 import { refusalText } from "@/lib/i18n/guest";
 import { galleryContentTheme } from "@/components/guest/gallery-theme";
-import { KLIK_COLORS } from "@/lib/gallery-templates";
+import { KLIK_COLORS, type TemplateFields, type TemplateKey } from "@/lib/gallery-templates";
+import { LookHero } from "@/components/guest/look-hero";
 
 export function EntrySheet({
   slug,
@@ -19,10 +20,13 @@ export function EntrySheet({
   offerRecap = false,
   accentColor = KLIK_COLORS.accent,
   backgroundColor = KLIK_COLORS.background,
+  look,
 }: {
   slug: string;
   eventName: string;
   requiresPassword: boolean;
+  /** TPL-1: the gallery's look, so the first screen after scanning already wears it. */
+  look?: { templateKey: TemplateKey; fields: TemplateFields; eventDate: string | null };
   /** The gallery's own colours, so the sheet in front of it already wears them. */
   accentColor?: string;
   backgroundColor?: string;
@@ -86,9 +90,23 @@ export function EntrySheet({
         ...galleryContentTheme(accentColor, backgroundColor),
       }}
     >
+      {look && look.templateKey !== "plain" && (
+        <div className="look mb-10 w-full max-w-lg" data-look={look.templateKey}>
+          <LookHero
+            templateKey={look.templateKey}
+            fields={look.fields}
+            eventName={eventName}
+            eventDate={look.eventDate}
+            locale={locale}
+            size="sheet"
+          />
+        </div>
+      )}
       <div className="w-full max-w-sm">
-        <h1 className="text-center font-display text-2xl text-paper">{eventName}</h1>
-        <p className="mt-2 text-center text-sm text-muted">
+        {!look || look.templateKey === "plain" ? (
+          <h1 className="text-center font-display text-2xl text-paper">{eventName}</h1>
+        ) : null}
+        <p className={`text-center text-sm text-muted ${!look || look.templateKey === "plain" ? "mt-2" : ""}`}>
           {requiresPassword ? t.entry.enterPassword : t.entry.join}
         </p>
 

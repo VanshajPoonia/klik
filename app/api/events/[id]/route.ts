@@ -18,7 +18,8 @@ import { requireEventCapability, requireEventManagerSession, requireOwnerSession
 import type { EventCapability } from "@/lib/permissions";
 import { describeLicenseRefusal, eventPlan } from "@/lib/license";
 import { changeEventSlug, validateCustomSlug } from "@/lib/slugs";
-import { matchTemplate } from "@/lib/gallery-templates";
+import { eventTemplate, fieldsForTemplate, matchTemplate, templateByKey } from "@/lib/gallery-templates";
+import { lookKeySchema, templateFieldsSchema } from "@/lib/template-fields";
 import {
   canCustomizeGallery,
   canCustomizeQr,
@@ -40,6 +41,9 @@ const patchSchema = z.object({
   coverMediaId: z.string().min(10).max(64).nullable().optional(),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  // TPL-1. Any plan: the look, and the host's words for it.
+  templateKey: lookKeySchema.optional(),
+  templateFields: templateFieldsSchema.nullable().optional(),
   qrTemplate: z.enum(QR_TEMPLATES).optional(),
   venueFeatured: z.boolean().optional(),
   visibility: z.enum(EVENT_VISIBILITIES).optional(),
@@ -236,7 +240,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
   }
 
-  const { password, ...restInput } = withoutSlug;
+  const { password, ...unshapedInput } = withoutSlug;
+  // TPL-1: only the words the look asks for, trimmed, the look being the one
+  // this request sets or else the one the event already wears.
+  const restInput =
+    unshapedInput.templateFields === undefined
+      ? unshapedInput
+      : {
+          ...unshapedInput,
+          templateFields:
+            unshapedInput.templateFields === null
+              ? null
+              : fieldsForTemplate(
+                  templateByKey(unshapedInput.templateKey) ?? eventTemplate(event),
+                  unshapedInput.templateFields,
+                ),
+        };
   const rest = selectedClient
     ? {
         ...restInput,

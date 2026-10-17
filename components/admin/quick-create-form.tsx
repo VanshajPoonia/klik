@@ -11,6 +11,9 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { VisibilityField, type Visibility } from "@/components/dashboard/visibility-field";
 import { endOfDayIso } from "@/lib/dates";
 import { PLANS, type PlanKey } from "@/lib/plans";
+import { ColorwayPicker, OccasionPicker, TemplatePicker } from "@/components/dashboard/template-picker";
+import { LookFields, lookFieldsPayload } from "@/components/dashboard/look-fields";
+import { templateByKey, templatesFor, type OccasionKey, type TemplateFields } from "@/lib/gallery-templates";
 
 interface Result {
   username: string;
@@ -35,6 +38,12 @@ export function QuickCreateForm() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [copied, setCopied] = useState(false);
+  // TPL-1: the look, as on New event, so a provisioned wedding opens dressed.
+  const [occasion, setOccasion] = useState<OccasionKey | null>(null);
+  const [template, setTemplate] = useState("plain");
+  const [colorway, setColorway] = useState<string | null>(null);
+  const [lookFields, setLookFields] = useState<TemplateFields>({});
+  const chosen = templateByKey(template);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -54,6 +63,9 @@ export function QuickCreateForm() {
           visibility: form.visibility,
           galleryPassword: form.visibility === "password" ? form.galleryPassword : undefined,
           planKey: form.planKey,
+          template,
+          colorway: colorway ?? undefined,
+          templateFields: lookFieldsPayload(lookFields),
         }),
       });
 
@@ -168,6 +180,10 @@ export function QuickCreateForm() {
             onClick={() => {
               setResult(null);
               setForm(initialForm);
+              setOccasion(null);
+              setTemplate("plain");
+              setColorway(null);
+              setLookFields({});
               setError(null);
               setCopied(false);
             }}
@@ -191,6 +207,37 @@ export function QuickCreateForm() {
             placeholder="Grand Palace Banquets"
           />
         </Field>
+        <OccasionPicker
+          value={occasion}
+          onChange={(next) => {
+            setOccasion(next);
+            setTemplate(templatesFor(next)[0]?.key ?? "plain");
+            setColorway(null);
+          }}
+        />
+        {occasion && (
+          <TemplatePicker
+            occasion={occasion}
+            value={template}
+            onChange={(next) => {
+              setTemplate(next.key);
+              setColorway(null);
+            }}
+            colorwayFor={(option) =>
+              option.key === template ? (option.colorways.find((item) => item.key === colorway) ?? null) : null
+            }
+          />
+        )}
+        {occasion && chosen && (
+          <ColorwayPicker
+            template={chosen}
+            value={colorway ?? chosen.colorways[0].key}
+            onChange={(next) => setColorway(next.key)}
+          />
+        )}
+        {occasion && chosen && chosen.fields.length > 0 && (
+          <LookFields template={chosen} value={lookFields} onChange={setLookFields} showDateToggle={false} idPrefix="admin-look" />
+        )}
         <Field label="Event name">
           <input
             className={inputClass}

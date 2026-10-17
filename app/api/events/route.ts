@@ -6,7 +6,8 @@ import { db } from "@/lib/db";
 import { events, venueClients, EVENT_VISIBILITIES } from "@/lib/schema";
 import { createEvent, toOrganizerEvent } from "@/lib/events";
 import { hasVenueGrant, licenseWithAvailableGrant } from "@/lib/entitlements";
-import { TEMPLATE_KEYS, templateByKey } from "@/lib/gallery-templates";
+import { fieldsForTemplate, resolveTemplateChoice } from "@/lib/gallery-templates";
+import { templateChoiceSchema, templateFieldsSchema } from "@/lib/template-fields";
 import { getPlan } from "@/lib/plans";
 import { SUPPORT_PHONE } from "@/lib/support";
 import { recordAccountEvent } from "@/lib/timeline";
@@ -22,8 +23,11 @@ const createEventSchema = z.object({
   password: z.string().min(4).max(72).optional(),
   moderation: z.boolean().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
-  /** The look picked on the create form. Any plan, see lib/gallery-templates.ts. */
-  template: z.enum(TEMPLATE_KEYS).optional(),
+  /** The look picked on the create form, and its colourway. Any plan, see lib/gallery-templates.ts. */
+  template: templateChoiceSchema.optional(),
+  colorway: z.string().max(40).optional(),
+  /** TPL-1: the host's words for it, a couple's names for instance. */
+  templateFields: templateFieldsSchema.optional(),
 });
 
 export async function GET() {
@@ -75,7 +79,10 @@ export async function POST(request: Request) {
     moderation,
     expiresAt,
   } = parsed.data;
-  const template = templateByKey(parsed.data.template);
+  const choice = parsed.data.template ? resolveTemplateChoice(parsed.data.template, parsed.data.colorway) : null;
+  if (parsed.data.template && !choice) {
+    return NextResponse.json({ error: "That look is not available. Refresh and pick another." }, { status: 400 });
+  }
   if (visibility === "password" && !password) {
     return NextResponse.json(
       { error: "Password required for password-protected events" },
@@ -155,9 +162,11 @@ export async function POST(request: Request) {
     moderation,
     expiresAt,
     retentionDays: null,
-    ...(template && template.key !== "plain"
-      ? { accentColor: template.accent, backgroundColor: template.background }
+    ...(choice && choice.template.key !== "plain"
+      ? { accentColor: choice.colorway.accent, backgroundColor: choice.colorway.background }
       : {}),
+    templateKey: choice?.template.key ?? null,
+    templateFields: choice ? fieldsForTemplate(choice.template, parsed.data.templateFields ?? null) : null,
   });
 
   // Live straight away when the account has something to spend: a Venue grant

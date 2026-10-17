@@ -22,6 +22,8 @@ const row: Event = {
   coverMediaId: "med_1",
   accentColor: "#ffffff",
   backgroundColor: "#000000",
+  templateKey: null,
+  templateFields: null,
   qrTemplate: "classic",
   venueFeatured: true,
   visibility: "password",
@@ -80,6 +82,9 @@ const PUBLISHED = [
   "coverMediaId",
   "accentColor",
   "backgroundColor",
+  // TPL-1: the look and the words the host wrote to be shown to guests.
+  "templateKey",
+  "templateFields",
   "qrTemplate",
   "visibility",
   "moderation",
