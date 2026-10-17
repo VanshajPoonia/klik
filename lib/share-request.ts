@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { shareCookieName, verifyShareViewer, type ShareViewerState } from "./guest";
 import { evaluateShare, type ShareDenial } from "./share-access";
 import { loadShareByToken, shareTargetExists } from "./shares";
+import { inviteAccess } from "./share-invites";
 import type { Album, Event, Media, MediaShare } from "./schema";
 
 /**
@@ -44,7 +45,12 @@ export type ShareRequest =
     }
   | { ok: false; reason: ShareDenial; share: MediaShare | null };
 
-export async function resolveShareRequest(token: string): Promise<ShareRequest> {
+/**
+ * `inviteCode` is the code in an invite email's link (MED-14), which the page
+ * passes on the visit from that email. The routes behind the page do not need
+ * it: by then the invite is bound to the account.
+ */
+export async function resolveShareRequest(token: string, options: { inviteCode?: string | null } = {}): Promise<ShareRequest> {
   const resolved = await loadShare(token);
   if (!resolved) return { ok: false, reason: "not_found", share: null };
 
@@ -64,6 +70,13 @@ export async function resolveShareRequest(token: string): Promise<ShareRequest> 
   };
 
   const gate = evaluateShare(share, viewer);
+  // A link turned off or run out says so to anyone. One for particular people
+  // asks who this is before it asks for any password it also has.
+  if (!gate.ok && gate.reason !== "password") return { ok: false, reason: gate.reason, share };
+  if (share.inviteOnly) {
+    const access = await inviteAccess(share, event, options.inviteCode);
+    if (!access.allowed) return { ok: false, reason: access.reason, share };
+  }
   if (!gate.ok) return { ok: false, reason: gate.reason, share };
 
   if (share.scope === "media" && item) return { ok: true, share, event, item, folder: null, viewer };

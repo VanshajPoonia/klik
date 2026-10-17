@@ -49,12 +49,14 @@ export default async function LoginPage({
         <span className="text-xl font-semibold tracking-tight text-paper">klik</span>
       </Link>
       <h1 className="mt-10 max-w-md font-display text-3xl leading-tight tracking-tight text-paper sm:text-4xl">
-        Sign in to your dashboard
+        {next?.startsWith("/s/") ? "Sign in to see the photos" : "Sign in to your dashboard"}
       </h1>
       <p className="mt-3 max-w-sm text-sm text-muted">
-        {next?.startsWith("/e/") || next === "/me"
-          ? "Keep the galleries you join in one place. Optional: you never need an account to share photos."
-          : "Organizers, venues and guests with an account sign in here. Guests never need one to share photos."}
+        {next?.startsWith("/s/")
+          ? "Use the email address the photos were sent to. A code by email signs you in, and makes you an account if you do not have one."
+          : next?.startsWith("/e/") || next === "/me"
+            ? "Keep the galleries you join in one place. Optional: you never need an account to share photos."
+            : "Organizers, venues and guests with an account sign in here. Guests never need one to share photos."}
       </p>
       <div className="mt-9 flex justify-center">
         <LoginForm

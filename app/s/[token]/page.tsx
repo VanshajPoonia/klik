@@ -17,7 +17,7 @@ import { ShareCollection } from "@/components/share/share-collection";
 import { SharePasswordGate } from "@/components/share/share-password-gate";
 import { ShareAccountPrompt } from "@/components/share/share-account-prompt";
 import { after } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, signOut } from "@/lib/auth";
 import { rememberShare } from "@/lib/share-saves";
 
 /**
@@ -40,12 +40,22 @@ async function isCollection(token: string): Promise<boolean> {
   return loaded ? isCollectionScope(loaded.share.scope) : false;
 }
 
+/** MED-14: the code an invite email's link carries, on the visit from it. */
+type ShareSearchParams = Promise<{ invite?: string | string[] }>;
+
+function inviteCodeFrom(search: Awaited<ShareSearchParams>): string | null {
+  return typeof search.invite === "string" && search.invite.length <= 64 ? search.invite : null;
+}
+
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: ShareSearchParams;
 }): Promise<Metadata> {
   const { token } = await params;
+  const inviteCode = inviteCodeFrom(await searchParams);
 
   /**
    * The same gate the page body uses, cookie and all, so the tab title cannot
@@ -57,9 +67,10 @@ export async function generateMetadata({
    * now falls out of the rule rather than being a second hand-written copy of
    * it. Which is the whole reason a password-protected link previews as a locked
    * message with no image: the photo must not appear as a thumbnail to a group
-   * chat when the password is what was meant to limit who sees it.
+   * chat when the password is what was meant to limit who sees it. A link for
+   * particular people (MED-14) previews the same way, for the same reason.
    */
-  const resolved = await resolveShareRequest(token);
+  const resolved = await resolveShareRequest(token, { inviteCode });
 
   // Never indexed, in any state. A share link that turns up in a search result
   // has stopped being a share link.
@@ -108,14 +119,15 @@ export async function generateMetadata({
   };
 }
 
-function Refusal({ title, detail }: { title: string; detail: string }) {
+function Refusal({ title, detail, children }: { title: string; detail: string; children?: React.ReactNode }) {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
       <h1 className="font-display text-2xl text-paper">{title}</h1>
       <p className="mt-3 max-w-sm text-sm text-muted">{detail}</p>
+      {children}
       <Link
         href="/"
-        className="mt-8 inline-flex min-h-11 items-center rounded-full border border-canvas-line px-5 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt"
+        className={`${children ? "mt-4" : "mt-8"} inline-flex min-h-11 items-center rounded-full border border-canvas-line px-5 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt`}
       >
         What is Klik?
       </Link>
@@ -123,14 +135,54 @@ function Refusal({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-export default async function SharePage({ params }: { params: Promise<{ token: string }> }) {
+export default async function SharePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: ShareSearchParams;
+}) {
   const { token } = await params;
-  const resolved = await resolveShareRequest(token);
+  const inviteCode = inviteCodeFrom(await searchParams);
+  const resolved = await resolveShareRequest(token, { inviteCode });
 
   if (!resolved.ok) {
     const collection = await isCollection(token);
     if (resolved.reason === "password") {
       return <SharePasswordGate token={token} collection={collection} />;
+    }
+    // MED-14: round the sign-in page and back, with the email's code kept.
+    const here = `/s/${token}${inviteCode ? `?invite=${encodeURIComponent(inviteCode)}` : ""}`;
+    if (resolved.reason === "sign_in") {
+      const copy = denialCopy("sign_in", collection);
+      return (
+        <Refusal title={copy.title} detail={copy.detail}>
+          <Link
+            href={`/login?next=${encodeURIComponent(here)}`}
+            className="mt-8 inline-flex min-h-11 items-center rounded-full bg-volt px-6 text-sm font-medium text-on-volt transition-transform active:scale-95"
+          >
+            Sign in to open it
+          </Link>
+        </Refusal>
+      );
+    }
+    if (resolved.reason === "not_invited") {
+      const copy = denialCopy("not_invited", collection);
+      const signedInAs = (await auth())?.user?.email ?? null;
+      return (
+        <Refusal title={copy.title} detail={signedInAs ? `${copy.detail} You are signed in as ${signedInAs}.` : copy.detail}>
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: `/login?next=${encodeURIComponent(here)}` });
+            }}
+          >
+            <button className="mt-8 inline-flex min-h-11 items-center rounded-full bg-volt px-6 text-sm font-medium text-on-volt transition-transform active:scale-95">
+              Sign in with another address
+            </button>
+          </form>
+        </Refusal>
+      );
     }
     /**
      * Deliberately a 200 with an explanation rather than a 404. A Server

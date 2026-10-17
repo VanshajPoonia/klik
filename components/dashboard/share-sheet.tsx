@@ -9,6 +9,7 @@ import { selectClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { ShareLinkRow } from "@/components/dashboard/share-link-row";
 import { ShareSettingsEditor } from "@/components/dashboard/share-settings-editor";
+import { ShareInvites } from "@/components/dashboard/share-invites";
 import { useShareLinks } from "@/components/dashboard/use-share-links";
 import { EXPIRY_OPTIONS, MAX_SELECTION_SHARE_ITEMS, VIEW_LIMIT_OPTIONS, shareState } from "@/lib/share-access";
 
@@ -58,7 +59,7 @@ export function ShareSheet({
   target: ShareTarget;
   onClose: () => void;
 }) {
-  const { shares, loading, error, busyIds, create, revoke, update } = useShareLinks(
+  const { shares, loading, error, busyIds, create, revoke, update, replace } = useShareLinks(
     eventId,
     target.scope === "media"
       ? { mediaId: target.mediaId }
@@ -75,6 +76,9 @@ export function ShareSheet({
   const [usePassword, setUsePassword] = useState(false);
   const [password, setPassword] = useState("");
   const [creating, setCreating] = useState(false);
+  // MED-14: a new link for particular people opens on its invite form.
+  const [forPeople, setForPeople] = useState(false);
+  const [inviteFirst, setInviteFirst] = useState<string | null>(null);
 
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -102,11 +106,13 @@ export function ShareSheet({
       expiresInDays,
       maxViews,
       password: usePassword && password.length >= 4 ? password : null,
+      inviteOnly: forPeople,
     });
     setCreating(false);
     if (created) {
       setPassword("");
       setUsePassword(false);
+      setInviteFirst(forPeople ? created.id : null);
     }
   }
 
@@ -156,6 +162,33 @@ export function ShareSheet({
 
         <section className="space-y-2.5 rounded-xl border border-canvas-line bg-canvas p-3">
           <h3 className="text-xs font-medium tracking-wide text-muted uppercase">New link</h3>
+
+          <fieldset className="flex flex-wrap gap-2">
+            <legend className="sr-only">Who can open it</legend>
+            {([
+              [false, "Anyone with the link"],
+              [true, "Only people I invite"],
+            ] as const).map(([value, label]) => (
+              <label
+                key={String(value)}
+                className="cursor-pointer rounded-full border border-canvas-line px-3 py-2 text-xs text-paper transition-colors hover:border-paper/40 has-[:checked]:border-volt has-[:checked]:bg-volt has-[:checked]:text-on-volt has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-volt"
+              >
+                <input
+                  type="radio"
+                  name="share-audience"
+                  checked={forPeople === value}
+                  onChange={() => setForPeople(value)}
+                  className="sr-only"
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+          {forPeople && (
+            <p className="text-xs text-muted">
+              You type their addresses next. Each opens it signed in as themselves; nobody else holding the link can.
+            </p>
+          )}
 
           <label className="block">
             <span className="sr-only">When the link should stop working</span>
@@ -228,7 +261,7 @@ export function ShareSheet({
             disabled={creating || tooMany || (usePassword && password.length < 4)}
             className="w-full"
           >
-            {creating ? "Creating" : "Create link"}
+            {creating ? "Creating" : forPeople ? "Create, then invite" : "Create link"}
           </Button>
           {tooMany && (
             <p className="text-xs text-muted" role="status">
@@ -249,6 +282,7 @@ export function ShareSheet({
                 busy={busyIds.has(share.id)}
                 onRevoke={(id) => void revoke(id)}
               >
+                <ShareInvites eventId={eventId} share={share} startOpen={inviteFirst === share.id} onChange={replace} />
                 <ShareSettingsEditor
                   share={share}
                   busy={busyIds.has(share.id)}

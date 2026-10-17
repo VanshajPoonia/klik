@@ -42,6 +42,8 @@ const createSchema = z.object({
   expiresInDays: z.number().int().min(1).max(365).nullable().default(null),
   maxViews: z.number().int().min(1).max(MAX_SHARE_VIEWS).nullable().default(null),
   password: z.string().min(4).max(200).nullable().default(null),
+  /** MED-14: for particular people from the start; the invites follow. */
+  inviteOnly: z.boolean().default(false),
 }).refine(
   (input) => [input.mediaId, input.albumId, input.mediaIds].filter((target) => target !== undefined).length === 1,
   { message: "Share one photo, one folder or one selection" },
@@ -106,6 +108,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       : null,
     maxViews: parsed.data.maxViews,
     password: parsed.data.password,
+    inviteOnly: parsed.data.inviteOnly,
   };
 
   if (parsed.data.albumId) {

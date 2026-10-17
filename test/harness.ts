@@ -81,6 +81,7 @@ const TABLES = [
   "print_assets",
   // ACC-7, before `media_shares` and `users`.
   "share_saves",
+  "share_invites",
   // Before `media_shares` and `media`, both of which it references.
   "media_share_items",
   // Before `media`, `albums`, `guests` and `events`, all of which it references.

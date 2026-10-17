@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { findEventBySlug } from "@/lib/slugs";
-import { media, mediaShares, type Event } from "@/lib/schema";
-import { resolveEventViewer } from "@/lib/event-viewer";
+import { media, mediaShares } from "@/lib/schema";
+import { guestFor } from "@/lib/guest-request";
 import { clientIp, consume } from "@/lib/ratelimit";
 import { createCollectionShare, createMediaShare, hashSharePassword, shareUrl } from "@/lib/shares";
 
@@ -31,21 +30,6 @@ const limitSchema = z.object({
   password: z.string().min(4).max(200).nullable(),
 });
 
-type GuestResolution =
-  | { ok: false; response: NextResponse }
-  | { ok: true; event: Event; viewer: Awaited<ReturnType<typeof resolveEventViewer>>; guestId: string };
-
-async function guestFor(slug: string): Promise<GuestResolution> {
-  const event = (await findEventBySlug(slug))?.event;
-  if (!event) return { ok: false, response: NextResponse.json({ error: "Not found" }, { status: 404 }) };
-  const viewer = await resolveEventViewer(event);
-  if (!viewer.guestId) {
-    return { ok: false, response: NextResponse.json({ error: "Join the gallery to share your uploads" }, { status: 401 }) };
-  }
-  if (viewer.kioskId) return { ok: false, response: NextResponse.json({ error: "A kiosk cannot do this." }, { status: 403 }) };
-  return { ok: true, event, viewer, guestId: viewer.guestId };
-}
-
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const resolved = await guestFor((await params).slug);
   if (!resolved.ok) return resolved.response;
@@ -58,6 +42,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
       revokedAt: mediaShares.revokedAt,
       expiresAt: mediaShares.expiresAt,
       locked: sql<boolean>`${mediaShares.passwordHash} IS NOT NULL`,
+      inviteOnly: mediaShares.inviteOnly,
+      invited: sql<number>`(SELECT count(*)::int FROM share_invites WHERE share_id = ${mediaShares.id})`,
       count: sql<number>`CASE WHEN ${mediaShares.scope} = 'selection' THEN (SELECT count(*)::int FROM media_share_items WHERE share_id = ${mediaShares.id}) ELSE 1 END`,
     })
     .from(mediaShares)
@@ -73,6 +59,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
       off: Boolean(row.revokedAt),
       expiresAt: row.expiresAt?.toISOString() ?? null,
       locked: row.locked,
+      inviteOnly: row.inviteOnly,
+      invited: row.invited,
     })),
   });
 }

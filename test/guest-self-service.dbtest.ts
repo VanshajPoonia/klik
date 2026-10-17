@@ -12,10 +12,12 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (name: string) => (jar.has(name) ? { name, value: jar.get(name) } : undefined) }),
 }));
 vi.mock("@/lib/roles", () => ({ requireEventManagerSession: async () => null }));
+vi.mock("@/lib/auth", () => ({ auth: async () => null }));
 
 const { POST: arrange } = await import("@/app/api/e/[slug]/me/media/route");
 const { GET: listLinks, POST: makeLink, PATCH: limitLink, DELETE: turnOff } = await import("@/app/api/e/[slug]/me/shares/route");
 const { evaluateShare } = await import("@/lib/share-access");
+const guestInvites = await import("@/app/api/e/[slug]/me/shares/[shareId]/invites/route");
 const { verifySharePassword } = await import("@/lib/shares");
 const { guestCookieName, signGuestSession } = await import("@/lib/guest");
 const { fetchGalleryMedia } = await import("@/lib/media");
@@ -205,5 +207,33 @@ describe("MED-11 links", () => {
     jar.set(guestCookieName(eventId), await signGuestSession({ guestId: me, eventId }));
     await linkCall(turnOff, slug, { method: "DELETE" }, `?id=${made.id}`);
     expect((await limit({ id: made.id, expiresInDays: 1, password: null })).status).toBe(404);
+  });
+
+  it("sends the guest's own link to particular people, ten at a time, and nobody else's", async () => {
+    const { eventId, slug, me, someone } = await setUp();
+    const a = await makeMedia(eventId, { guestId: me });
+    const made = await (await linkCall(makeLink, slug, { method: "POST", body: JSON.stringify({ ids: [a] }) })).json();
+    const invite = (shareId: string, emails: string) =>
+      guestInvites.POST(
+        new Request(`https://klik.test/api/e/${slug}/me/shares/${shareId}/invites`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.22" },
+          body: JSON.stringify({ emails }),
+        }),
+        { params: Promise.resolve({ slug, shareId }) },
+      );
+
+    const tooMany = await invite(made.id, Array.from({ length: 11 }, (_, index) => `p${index}@example.test`).join(","));
+    expect(tooMany.status).toBe(400);
+    expect((await tooMany.json()).code).toBe("too_many");
+
+    const response = await invite(made.id, "aunt@example.test");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ inviteOnly: true, invites: [expect.objectContaining({ email: "aunt@example.test" })] });
+    const [share] = await testDb.select().from(mediaShares).where(eq(mediaShares.id, made.id));
+    expect(share.inviteOnly).toBe(true);
+
+    jar.set(guestCookieName(eventId), await signGuestSession({ guestId: someone, eventId }));
+    expect((await invite(made.id, "x@example.test")).status).toBe(404);
   });
 });

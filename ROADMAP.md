@@ -70,7 +70,7 @@
 
 What the second check left became these, built in this order on 2026-10-18, each shipped on its own:
 - **MED-13** a guest's own link can carry an end date and a password. **Done 2026-10-18.**
-- **MED-14** access for particular people: an invite by email to a folder or a selection, opened by signing in as that address.
+- **MED-14** access for particular people: a link sent by email to named addresses, opened by signing in as one of them. **Done 2026-10-18.**
 - **MED-15** guests make folders of their own.
 - **MED-16** the host puts the photos in a folder in their own order.
 - **ACC-8** a login made on `/admin` can be sent a link to set its own password, instead of a password passed on by hand.
@@ -776,6 +776,14 @@ Found while building it, and fixed for every upload: the upload id is chosen by 
 
 ### MED-13. Limits on a guest's own link
 **DONE 2026-10-18** (`app/api/e/[slug]/me/shares/route.ts` PATCH, `test/guest-self-service.dbtest.ts`). The sheet that hands a guest their new link has **Limit this link**: it ends never, in a day, a week or a month, and can ask for a password (four characters at least, the host's rule). Set after the link is made, so the one-tap link stays one tap, and it applies wherever the link was already sent. Both limits are the host's existing columns (`expires_at`, `password_hash`), so the share page, its gate (`lib/share-access.ts`) and the host's Links tab needed nothing new. **Your links** says "Ends 25 Oct", "Ended" and "Needs a password". As for the host's links, a browser that typed the password keeps it for seven days even if it changes; turning the link off is the hard stop.
+
+### MED-14. Links for particular people
+**DONE 2026-10-18** (`drizzle/0059_share_invites.sql`, `lib/share-invites.ts`, `components/share/invite-people.tsx`, `test/share-invites.dbtest.ts`). Asked for as "give access to particular people". Any link, a host's or a guest's own, can be **sent to particular people**: type their addresses and each gets an email with the link and a code of its own; from then on the link opens only for the event's team and for the accounts it was sent to. Anyone else holding the URL is asked to sign in, or told it was shared with someone else and offered a way to sign in with another address.
+- **Who it opens for** (`inviteAccess`, called from `resolveShareRequest`, the one gate every share surface uses): an account the invite is bound to; the first account to open it with the email's code while signed in with the invited address, which binds it; or, without the code, an account whose address was verified by a sign-in code. The code proves the inbox and the address proves the account, as for co-host invites, so a forwarded email gets a stranger nothing, and an invite whose email did not go out still reaches its person through an email code. Only the code's hash is stored.
+- On the dashboard: **Only people I invite** when making a link, and **Send it to particular people** / **Who it is for** under every live link, in the share sheet and on the Links tab. In the gallery: the same under the link sheet a guest gets, which **Your links** can now reopen (**Manage**).
+- A host invites up to 20 at a time, a guest 10; 50 a link. Invitations go as bulk mail, so they stop before the last 20 emails of the day, which are kept for sign-in codes. **Let anyone with the link open it again** turns it back; taking someone off deletes their row.
+- A link turned off or run out says so before asking who anyone is. A crawler is never signed in, so an invite-only link previews as a refusal with no photo. Privacy Policy updated (and its date, which last week's changes had not moved).
+- Not built: inviting by phone number, and an invite that expires on its own (the link's own end date covers it).
 
 ---
 

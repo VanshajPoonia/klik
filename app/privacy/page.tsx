@@ -294,7 +294,10 @@ export default function PrivacyPage() {
         that folder when it is opened, including photos added to it later, but never a photo the
         organizer hid. A guest can hide their own uploads too, after which only they and the
         event&rsquo;s organizers see them, and can make a share link to their own photos, which they or
-        the organizer can turn off. Every request is checked against those rules at the moment it is made, so
+        the organizer can turn off. Either can send a link to particular people by email: it then
+        opens only for the organizers and for the accounts it was sent to, signed in with that
+        address. We keep each address with the link, to know who may open it, until the person is
+        taken off it or the link&rsquo;s event is deleted, and send it one email with the link. Every request is checked against those rules at the moment it is made, so
         revoking access stops a link working immediately; a photo already showing on someone&rsquo;s
         screen stays viewable there for a few minutes at most.
       </p>

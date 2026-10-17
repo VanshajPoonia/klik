@@ -9,6 +9,7 @@ import {
   media,
   mediaShareItems,
   mediaShares,
+  shareInvites,
   type Album,
   type Event,
   type Media,
@@ -306,6 +307,8 @@ export interface CreateMediaShareInput {
   expiresAt?: Date | null;
   maxViews?: number | null;
   password?: string | null;
+  /** MED-14: opens only for the team and the people it is sent to. */
+  inviteOnly?: boolean;
 }
 
 export async function createMediaShare(input: CreateMediaShareInput): Promise<MediaShare> {
@@ -323,6 +326,7 @@ export async function createMediaShare(input: CreateMediaShareInput): Promise<Me
       expiresAt: input.expiresAt ?? null,
       maxViews: input.maxViews ?? null,
       passwordHash: input.password ? await hashSharePassword(input.password) : null,
+      inviteOnly: input.inviteOnly ?? false,
     })
     .returning();
 
@@ -341,6 +345,8 @@ export interface CreateCollectionShareInput {
   expiresAt?: Date | null;
   maxViews?: number | null;
   password?: string | null;
+  /** MED-14: opens only for the team and the people it is sent to. */
+  inviteOnly?: boolean;
 }
 
 /**
@@ -365,6 +371,7 @@ export async function createCollectionShare(input: CreateCollectionShareInput): 
       expiresAt: input.expiresAt ?? null,
       maxViews: input.maxViews ?? null,
       passwordHash: input.password ? await hashSharePassword(input.password) : null,
+      inviteOnly: input.inviteOnly ?? false,
     })
     .returning();
 
@@ -391,6 +398,8 @@ export interface ShareListRow {
   itemCount: number | null;
   previewMediaId: string | null;
   previewKind: "photo" | "video" | null;
+  /** MED-14: how many people an invite-only link was sent to. */
+  inviteCount: number;
 }
 
 /**
@@ -434,10 +443,23 @@ export async function shareListRow(share: MediaShare): Promise<ShareListRow> {
   return withDetails;
 }
 
-/** How many photos each selection still holds, and the newest for a thumbnail. */
+/**
+ * How many photos each selection still holds, and the newest for a thumbnail,
+ * and how many people each invite-only link was sent to.
+ */
 async function withSelectionDetails(
   rows: Array<{ share: MediaShare; item: Media | null; albumName: string | null }>,
 ): Promise<ShareListRow[]> {
+  const invitedIds = rows.filter((row) => row.share.inviteOnly).map((row) => row.share.id);
+  const invites = new Map<string, number>();
+  if (invitedIds.length > 0) {
+    const counted = await db
+      .select({ shareId: shareInvites.shareId, count: sql<number>`count(*)`.mapWith(Number) })
+      .from(shareInvites)
+      .where(inArray(shareInvites.shareId, invitedIds))
+      .groupBy(shareInvites.shareId);
+    for (const row of counted) invites.set(row.shareId, row.count);
+  }
   const selectionIds = rows.filter((row) => row.share.scope === "selection").map((row) => row.share.id);
   const details = new Map<string, { count: number; previewId: string | null; previewKind: "photo" | "video" | null }>();
   if (selectionIds.length > 0) {
@@ -464,6 +486,7 @@ async function withSelectionDetails(
       itemCount: selection ? (detail?.count ?? 0) : null,
       previewMediaId: selection ? (detail?.previewId ?? null) : null,
       previewKind: selection ? (detail?.previewKind ?? null) : null,
+      inviteCount: invites.get(row.share.id) ?? 0,
     };
   });
 }
@@ -513,6 +536,8 @@ export function toManagedShare(row: ShareListRow): ManagedShare {
     previewKind: row.previewKind,
     allowDownload: share.allowDownload,
     hasPassword: share.passwordHash != null,
+    inviteOnly: share.inviteOnly,
+    inviteCount: row.inviteCount,
     expiresAt: share.expiresAt?.toISOString() ?? null,
     maxViews: share.maxViews,
     viewCount: share.viewCount,

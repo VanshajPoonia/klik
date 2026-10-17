@@ -291,6 +291,7 @@ describe("toManagedShare", () => {
     createdByGuestId: null,
     allowDownload: true,
     passwordHash: "$2a$10$aVeryRealLookingBcryptHashValue",
+    inviteOnly: false,
     expiresAt: new Date("2026-11-01T00:00:00Z"),
     maxViews: 5,
     viewCount: 2,
@@ -306,6 +307,7 @@ describe("toManagedShare", () => {
     itemCount: null,
     previewMediaId: null,
     previewKind: null,
+    inviteCount: 0,
   });
 
   it("emits exactly the fields the UI needs, and no others", () => {
@@ -318,6 +320,8 @@ describe("toManagedShare", () => {
         "expiresAt",
         "hasPassword",
         "id",
+        "inviteCount",
+        "inviteOnly",
         "itemCount",
         "maxViews",
         "mediaId",

@@ -38,7 +38,11 @@ export type ShareDenial =
   | "expired"
   | "exhausted"
   /** Real and live, but this viewer has not entered the password yet. */
-  | "password";
+  | "password"
+  /** MED-14: for particular people, and nobody is signed in. */
+  | "sign_in"
+  /** MED-14: for particular people, and the account signed in is not one of them. */
+  | "not_invited";
 
 export type ShareGate = { ok: true } | { ok: false; reason: ShareDenial };
 
@@ -114,6 +118,14 @@ export const DENIAL_COPY: Record<ShareDenial, { title: string; detail: string }>
     title: "This photo needs a password.",
     detail: "Whoever sent you the link can give you the password.",
   },
+  sign_in: {
+    title: "This was shared with particular people.",
+    detail: "Sign in with the email address it was sent to and it opens. No account yet? Signing in with an email code makes one.",
+  },
+  not_invited: {
+    title: "This was shared with someone else.",
+    detail: "The account you are signed in with is not one it was sent to. Open the link from the email you were sent, signed in with that address.",
+  },
 };
 
 /**
@@ -147,7 +159,10 @@ export function denialStatus(reason: ShareDenial): number {
     case "not_found":
       return 404;
     case "password":
+    case "sign_in":
       return 401;
+    case "not_invited":
+      return 403;
     case "revoked":
     case "expired":
     case "exhausted":
@@ -249,6 +264,10 @@ export interface ManagedShare {
   allowDownload: boolean;
   /** Whether one is set. Never the hash. */
   hasPassword: boolean;
+  /** MED-14: opens only for the team and the people it was sent to. */
+  inviteOnly: boolean;
+  /** How many people it was sent to. */
+  inviteCount: number;
   expiresAt: string | null;
   maxViews: number | null;
   viewCount: number;

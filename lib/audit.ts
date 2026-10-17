@@ -53,7 +53,9 @@ export type AuditAction =
   // ADM-7: a superadmin making an event on someone else's account.
   | "event.created_for_account"
   | "prints.submitted"
-  | "prints.refunded";
+  | "prints.refunded"
+  // MED-14: someone on the team sending a link to particular people.
+  | "share.invited";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;

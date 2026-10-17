@@ -763,6 +763,9 @@ export const mediaShares = pgTable(
     }),
     allowDownload: boolean("allow_download").notNull().default(false),
     passwordHash: text("password_hash"),
+    // MED-14: opens only for the event's team and the accounts it was sent to
+    // (share_invites), whoever holds the URL. drizzle/0059_share_invites.sql.
+    inviteOnly: boolean("invite_only").notNull().default(false),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     maxViews: integer("max_views"),
     viewCount: integer("view_count").notNull().default(0),
@@ -818,6 +821,37 @@ export const shareSaves = pgTable(
   },
   (table) => [primaryKey({ columns: [table.userId, table.shareId] }), index("share_saves_share_idx").on(table.shareId)],
 );
+
+/**
+ * MED-14: who an invite-only share link was sent to. An address, the hash of
+ * the code its email carries, and, once someone has opened it with that code
+ * signed in with that address, their account. drizzle/0059_share_invites.sql,
+ * lib/share-invites.ts.
+ */
+export const shareInvites = pgTable(
+  "share_invites",
+  {
+    id: text("id").primaryKey(),
+    shareId: text("share_id")
+      .notNull()
+      .references(() => mediaShares.id, { onDelete: "cascade" }),
+    /** Lower-cased and trimmed, by a check in the migration. */
+    email: text("email").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    invitedByUserId: text("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    invitedByGuestId: text("invited_by_guest_id").references(() => guests.id, { onDelete: "set null" }),
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("share_invites_share_email_idx").on(table.shareId, table.email),
+    index("share_invites_user_idx").on(table.userId),
+  ],
+);
+
+export type ShareInvite = typeof shareInvites.$inferSelect;
 
 /**
  * MSG-1: one conversation per account with Klik. drizzle/0056_messages.sql,

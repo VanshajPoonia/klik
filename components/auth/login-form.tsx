@@ -39,7 +39,7 @@ export function LoginForm({
   const [mode, setMode] = useState<Mode>(
     initialEmail
       ? "code"
-      : resendEnabled && (next?.startsWith("/e/") || next === "/me")
+      : resendEnabled && (next?.startsWith("/e/") || next?.startsWith("/s/") || next === "/me")
         ? "email"
         : "password",
   );

@@ -14,6 +14,8 @@ export interface CreateShareFields {
   expiresInDays: number | null;
   maxViews: number | null;
   password: string | null;
+  /** MED-14: for particular people, invited once it exists. */
+  inviteOnly?: boolean;
 }
 
 /**
@@ -156,5 +158,7 @@ export function useShareLinks(eventId: string, scope?: ShareLinksScope) {
     create,
     revoke,
     update,
+    /** MED-14: a link as another route returned it, after its people changed. */
+    replace,
   };
 }

@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { Camera, Check, CheckCircle2, ChevronLeft, Circle, EyeOff, Eye, FolderInput, Heart, ImagePlus, Layers, Link2, MessageCircle, Play, Printer, Stamp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
+import { InvitePeople } from "@/components/share/invite-people";
 import type { PublicEvent } from "@/lib/events";
 import { ensureContrast, readableOn } from "@/lib/color";
 import { galleryContentTheme } from "@/components/guest/gallery-theme";
@@ -704,7 +705,15 @@ export function GuestGallery({
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [arranging, setArranging] = useState(false);
-  const [madeLink, setMadeLink] = useState<{ id: string; url: string; count: number; expiresAt: string | null; locked: boolean } | null>(null);
+  const [madeLink, setMadeLink] = useState<{
+    id: string;
+    url: string;
+    count: number;
+    expiresAt: string | null;
+    locked: boolean;
+    inviteOnly: boolean;
+    invited: number;
+  } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   // The limits on the link just made: an end and a password, set after making it.
   const [limitOpen, setLimitOpen] = useState(false);
@@ -714,7 +723,16 @@ export function GuestGallery({
   const [limitNote, setLimitNote] = useState<{ error: boolean; text: string } | null>(null);
   const [linksOpen, setLinksOpen] = useState(false);
   const [myLinks, setMyLinks] = useState<
-    Array<{ id: string; url: string; count: number; off: boolean; expiresAt: string | null; locked: boolean }> | null
+    Array<{
+      id: string;
+      url: string;
+      count: number;
+      off: boolean;
+      expiresAt: string | null;
+      locked: boolean;
+      inviteOnly: boolean;
+      invited: number;
+    }> | null
   >(null);
   const hasMine = !isOwner && items.some((item) => item.mine);
   const stopSelecting = useCallback(() => {
@@ -773,6 +791,16 @@ export function GuestGallery({
     [event.slug, stopSelecting, t],
   );
 
+  /** The sheet for one of their links: one just made, or one from Your links. */
+  const openLinkSheet = useCallback((link: NonNullable<typeof madeLink>) => {
+    setLinkCopied(false);
+    setLimitOpen(false);
+    setLimitDays(null);
+    setLimitPassword("");
+    setLimitNote(null);
+    setMadeLink(link);
+  }, []);
+
   /** A share link to what they picked, made by them and turned off by them. */
   const makeLink = useCallback(async () => {
     setArranging(true);
@@ -788,12 +816,7 @@ export function GuestGallery({
         setNotice(data.error ?? t.gallery.arrangeFailed);
         return;
       }
-      setLinkCopied(false);
-      setLimitOpen(false);
-      setLimitDays(null);
-      setLimitPassword("");
-      setLimitNote(null);
-      setMadeLink({ id: data.id, url: data.url, count: data.count, expiresAt: null, locked: false });
+      openLinkSheet({ id: data.id, url: data.url, count: data.count, expiresAt: null, locked: false, inviteOnly: false, invited: 0 });
       setMyLinks(null);
       stopSelecting();
     } catch {
@@ -801,7 +824,7 @@ export function GuestGallery({
     } finally {
       setArranging(false);
     }
-  }, [event.slug, selectedIds, stopSelecting, t]);
+  }, [event.slug, openLinkSheet, selectedIds, stopSelecting, t]);
 
   const saveLimits = useCallback(async () => {
     if (!madeLink) return;
@@ -833,10 +856,11 @@ export function GuestGallery({
     }
   }, [event.slug, limitDays, limitPassword, madeLink, t]);
 
-  /** "Ends 25 Oct", "Ended", "Needs a password", for a link's line. */
+  /** "Ends 25 Oct", "Ended", "Needs a password", "For 3 people", for a link's line. */
   const linkLimits = useCallback(
-    (link: { expiresAt: string | null; locked: boolean }) => {
+    (link: { expiresAt: string | null; locked: boolean; inviteOnly?: boolean; invited?: number }) => {
       const parts: string[] = [];
+      if (link.inviteOnly) parts.push(t.gallery.linkForPeople(link.invited ?? 0));
       if (link.expiresAt) {
         const ends = new Date(link.expiresAt);
         parts.push(
@@ -1611,16 +1635,35 @@ export function GuestGallery({
                       </span>
                     </span>
                     {!link.off && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const res = await fetch(`/api/e/${event.slug}/me/shares?id=${encodeURIComponent(link.id)}`, { method: "DELETE" }).catch(() => null);
-                          if (res?.ok) setMyLinks((current) => (current ?? []).map((row) => (row.id === link.id ? { ...row, off: true } : row)));
-                        }}
-                        className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-canvas-line px-3 text-xs text-paper hover:border-paper/40"
-                      >
-                        {t.gallery.turnOff}
-                      </button>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openLinkSheet({
+                              id: link.id,
+                              url: link.url,
+                              count: link.count,
+                              expiresAt: link.expiresAt,
+                              locked: link.locked,
+                              inviteOnly: link.inviteOnly,
+                              invited: link.invited,
+                            })
+                          }
+                          className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-canvas-line px-3 text-xs text-paper hover:border-paper/40"
+                        >
+                          {t.gallery.manageLink}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await fetch(`/api/e/${event.slug}/me/shares?id=${encodeURIComponent(link.id)}`, { method: "DELETE" }).catch(() => null);
+                            if (res?.ok) setMyLinks((current) => (current ?? []).map((row) => (row.id === link.id ? { ...row, off: true } : row)));
+                          }}
+                          className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-canvas-line px-3 text-xs text-paper hover:border-paper/40"
+                        >
+                          {t.gallery.turnOff}
+                        </button>
+                      </span>
                     )}
                   </li>
                 ))}
@@ -1755,7 +1798,7 @@ export function GuestGallery({
             className="mt-3 w-full rounded-xl border border-canvas-line bg-canvas px-3 py-2 text-xs text-paper"
             aria-label={t.gallery.makeLink}
           />
-          <p className="mt-2 text-xs leading-relaxed text-muted">{t.gallery.linkNote}</p>
+          <p className="mt-2 text-xs leading-relaxed text-muted">{madeLink.inviteOnly ? t.gallery.linkNoteInvited : t.gallery.linkNote}</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -1785,7 +1828,7 @@ export function GuestGallery({
               {t.gallery.shareLink}
             </button>
           </div>
-          {(madeLink.expiresAt || madeLink.locked) && (
+          {(madeLink.expiresAt || madeLink.locked || madeLink.inviteOnly) && (
             <p className="mt-3 text-xs text-muted" suppressHydrationWarning>
               {linkLimits(madeLink).join(" · ")}
             </p>
@@ -1856,6 +1899,18 @@ export function GuestGallery({
               </Button>
             </form>
           )}
+          {/* MED-14: the same link, for particular people only. */}
+          <InvitePeople
+            key={madeLink.id}
+            endpoint={`/api/e/${event.slug}/me/shares/${madeLink.id}/invites`}
+            copy={t.gallery.invite}
+            inviteOnly={madeLink.inviteOnly}
+            inviteCount={madeLink.invited}
+            onChange={(data) => {
+              setMadeLink((current) => (current ? { ...current, inviteOnly: data.inviteOnly, invited: data.invites.length } : current));
+              setMyLinks(null);
+            }}
+          />
         </div>
       )}
 

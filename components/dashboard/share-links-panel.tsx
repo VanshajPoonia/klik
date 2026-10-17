@@ -6,6 +6,7 @@ import { Folder } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ShareLinkRow } from "@/components/dashboard/share-link-row";
 import { ShareSettingsEditor } from "@/components/dashboard/share-settings-editor";
+import { ShareInvites } from "@/components/dashboard/share-invites";
 import { useShareLinks } from "@/components/dashboard/use-share-links";
 import { mediaContentPath, mediaPosterPath } from "@/lib/media-delivery";
 import { shareState, type ManagedShare } from "@/lib/share-access";
@@ -33,7 +34,7 @@ function targetLabel(share: ManagedShare): string | null {
  * and the question an organizer arrives with is about a picture, not a URL.
  */
 export function ShareLinksPanel({ eventId, slug }: { eventId: string; slug: string }) {
-  const { shares, loading, error, busyIds, revoke, update } = useShareLinks(eventId);
+  const { shares, loading, error, busyIds, revoke, update, replace } = useShareLinks(eventId);
   const [showAll, setShowAll] = useState(false);
 
   const live = shares.filter((share) => shareState(share) === "live");
@@ -131,6 +132,7 @@ export function ShareLinksPanel({ eventId, slug }: { eventId: string; slug: stri
                     busy={busyIds.has(share.id)}
                     onRevoke={(id) => void revoke(id)}
                   >
+                    <ShareInvites eventId={eventId} share={share} onChange={replace} />
                     <ShareSettingsEditor
                       share={share}
                       busy={busyIds.has(share.id)}
