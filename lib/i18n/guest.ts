@@ -153,6 +153,9 @@ const en = {
       return total < 60 ? `${total} s` : `${Math.ceil(total / 60)} min`;
     },
     preparing: "Getting it ready",
+    // A video made smaller on the phone before it is sent (lib/video-compress.ts).
+    shrinkingPercent: (percent: number) => `Making it smaller, ${percent}%`,
+    shrinkingDetail: "Keep this page open while your video gets smaller. It takes a few seconds, and it pauses if your phone locks.",
     sending: "Sending",
     sendingPercent: (percent: number) => `Sending, ${percent}%`,
     notAdded: "It could not be added",
@@ -598,6 +601,8 @@ const es: GuestCopy = {
       return total < 60 ? `${total} s` : `${Math.ceil(total / 60)} min`;
     },
     preparing: "Preparándola",
+    shrinkingPercent: (percent: number) => `Reduciendo el tamaño, ${percent} %`,
+    shrinkingDetail: "Deja esta página abierta mientras tu video se reduce. Tarda unos segundos y se pausa si el teléfono se bloquea.",
     sending: "Enviando",
     sendingPercent: (percent: number) => `Enviando, ${percent}%`,
     notAdded: "No se pudo añadir",

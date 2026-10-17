@@ -22,6 +22,8 @@
  * and rewriting the object is `lib/job-handlers/video-scrub.ts`.
  */
 
+import { quicktimeWallTime } from "./exif";
+
 export interface Patch {
   /** Absolute byte offset in the file. */
   offset: number;
@@ -118,11 +120,8 @@ function hasXmpLocation(payload: Buffer): boolean {
   return /GPS(Latitude|Longitude|Altitude|Coordinates)|iso6709/i.test(payload.toString("latin1"));
 }
 
-/** `2023-07-15T14:03:12+0200` (or with a colon in the offset) as wall time. */
-export function quicktimeWallTime(value: string): string | null {
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/.exec(value.trim());
-  return match ? `${match[1]}T${match[2]}` : null;
-}
+// In lib/exif.ts, which the browser loads too: this module needs Node's Buffer.
+export { quicktimeWallTime };
 
 /**
  * Walks one metadata box already in memory (`moov`, or a top-level XMP `uuid`)

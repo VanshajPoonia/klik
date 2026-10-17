@@ -24,7 +24,8 @@ function kindOf(items: TrayItem[]): UploadKind {
 function describe(t: GuestCopy, item: TrayItem, online: boolean): string {
   switch (item.status) {
     case "preparing":
-      return t.uploads.preparing;
+      // Only a video being made smaller reports how far it has got.
+      return item.progress === null ? t.uploads.preparing : t.uploads.shrinkingPercent(Math.round(item.progress * 100));
     case "sending":
       return item.progress === null ? t.uploads.sending : t.uploads.sendingPercent(Math.round(item.progress * 100));
     case "refused":
@@ -102,6 +103,9 @@ export function UploadTray({
   } else {
     headline = t.uploads.waitingHeadline(active.length, kindOf(active));
   }
+  // A video being made smaller needs the page open and the phone awake:
+  // locked, it pauses (lib/video-compress.ts).
+  if (preparing.some((item) => item.progress !== null)) detail = t.uploads.shrinkingDetail;
 
   return (
     <section aria-label={t.uploads.region} className="mb-6 rounded-2xl border border-canvas-line bg-canvas-raised p-4">
@@ -166,7 +170,7 @@ export function UploadTray({
                     )
                   ) : null}
                 </span>
-                {item.status === "sending" && (
+                {(item.status === "sending" || (item.status === "preparing" && item.progress !== null)) && (
                   <span className="absolute inset-x-0 bottom-0 h-1 bg-canvas/70">
                     <span
                       className={`block h-full bg-volt transition-[width] duration-300 ${item.progress === null ? "w-1/3 animate-pulse" : ""}`}

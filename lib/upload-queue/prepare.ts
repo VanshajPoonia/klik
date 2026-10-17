@@ -1,6 +1,7 @@
 import { readCaptureTimeFromFile } from "../exif";
 import { compressImageForUpload } from "../image-compress";
 import { makeThumbnail } from "../image-thumbnail";
+import { compressVideoForUpload } from "../video-compress";
 import { formatDuration, probeVideo } from "../video-poster";
 import type { QueuedUpload } from "./record";
 
@@ -15,6 +16,8 @@ import type { QueuedUpload } from "./record";
  */
 export async function prepareUpload(
   item: Pick<QueuedUpload, "file" | "kind" | "mimeType" | "preparedSize" | "capturedAt" | "maxVideoSeconds" | "keepOriginal">,
+  /** How far a video's conversion has got, 0 to 1. Photos are quick enough not to report. */
+  onProgress?: (fraction: number) => void,
 ): Promise<Partial<QueuedUpload>> {
   const { file, preparedSize } = item;
   const isPhoto = item.kind === "photo";
@@ -45,19 +48,31 @@ export async function prepareUpload(
 
   // A still and the duration, pulled out here. The still lets every viewer's
   // grid load an image instead of reaching into a 200 MB file for its moov
-  // atom, and the duration lets a clip nobody wants to stream stop here.
-  const probe = isPhoto ? null : await probeVideo(file);
-  if (probe?.duration && probe.duration > item.maxVideoSeconds) {
+  // atom, and the duration lets a clip nobody wants to stream stop here,
+  // before a minute is spent converting it.
+  const original = isPhoto ? null : await probeVideo(file);
+  if (original?.duration && original.duration > item.maxVideoSeconds) {
     return {
       ready: true,
       refused: {
-        message: `Videos are limited to ${formatDuration(item.maxVideoSeconds)}. This one is ${formatDuration(probe.duration)}.`,
+        message: `Videos are limited to ${formatDuration(item.maxVideoSeconds)}. This one is ${formatDuration(original.duration)}.`,
         status: 413,
         code: "video_too_long",
-        values: { seconds: item.maxVideoSeconds, actual: Math.round(probe.duration) },
+        values: { seconds: item.maxVideoSeconds, actual: Math.round(original.duration) },
       },
     };
   }
+
+  // Made smaller here, and H.264 so every browser plays it, the way photos are
+  // compressed above (lib/video-compress.ts). Null sends the clip as picked;
+  // a conversion the phone interrupted throws, and the queue tries it again.
+  // The still and the size then come from the copy that is actually sent,
+  // which also gives a still to a clip this browser could not draw as filmed.
+  const shrunk = isPhoto ? null : await compressVideoForUpload(file, { onProgress });
+  const shrunkProbe = shrunk ? await probeVideo(shrunk.file) : null;
+  // A copy this browser cannot draw back is not trusted; the clip goes as picked.
+  const sent = shrunk && shrunkProbe?.width ? shrunk.file : null;
+  const probe = sent ? shrunkProbe : original;
 
   // The grid tile, made from pixels this device has already decoded. A photo
   // the browser could not decode has no source, and the server makes its
@@ -67,13 +82,14 @@ export async function prepareUpload(
 
   return {
     ready: true,
-    ...(compressed ? { file: compressed.blob, mimeType: "image/jpeg" } : {}),
+    ...(compressed ? { file: compressed.blob, mimeType: "image/jpeg" } : sent ? { file: sent, mimeType: "video/mp4" } : {}),
     thumb,
     poster: probe?.poster ?? null,
-    width: compressed?.width ?? preparedSize?.width ?? (probe?.width || null),
-    height: compressed?.height ?? preparedSize?.height ?? (probe?.height || null),
+    width: compressed?.width ?? (sent ? probe?.width : preparedSize?.width) ?? (probe?.width || null),
+    height: compressed?.height ?? (sent ? probe?.height : preparedSize?.height) ?? (probe?.height || null),
     durationS: probe?.duration ?? null,
-    capturedAt,
-    clientCompressed: Boolean(compressed) || Boolean(preparedSize),
+    // A converted clip carries no metadata, so its capture time comes from the device.
+    capturedAt: capturedAt ?? (sent ? (shrunk?.capturedAt ?? null) : null),
+    clientCompressed: Boolean(compressed) || Boolean(preparedSize) || Boolean(sent),
   };
 }

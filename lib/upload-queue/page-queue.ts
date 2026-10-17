@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { drainQueue } from "./drain";
 import { prepareUpload } from "./prepare";
+import { ConversionInterrupted } from "../video-compress";
 import {
   QUEUE_MAX_AGE_MS,
   QUEUE_TAG,
@@ -138,6 +139,8 @@ class UploadQueue {
   private opening: Promise<PageQueueStore> | null = null;
   private records: QueuedUpload[] = [];
   private readonly progress = new Map<string, number>();
+  /** How far each video being made smaller on this page has got. */
+  private readonly prepareProgress = new Map<string, number>();
   private readonly local = new Set<string>();
   private readonly remote = new Map<string, { fraction: number; at: number }>();
   private readonly preparing = new Set<string>();
@@ -337,16 +340,25 @@ class UploadQueue {
     for (const item of waiting) this.preparing.add(item.id);
     this.emit();
     void runLimited(waiting, PREPARE_CONCURRENCY, async (item) => {
+      let interrupted = false;
       try {
-        const patch = await prepareUpload(item);
+        const patch = await prepareUpload(item, (fraction) => {
+          this.prepareProgress.set(item.id, fraction);
+          this.emitSoon();
+        });
         await store.update(item.id, () => patch);
-      } catch {
+      } catch (error) {
+        // Paused by the phone rather than beyond it: left unprepared, and
+        // converted again now if the page is already back, or when it is.
+        if (error instanceof ConversionInterrupted) interrupted = true;
         // Send it as picked: the server compresses what the browser could not.
-        await store.update(item.id, () => ({ ready: true })).catch(() => null);
+        else await store.update(item.id, () => ({ ready: true })).catch(() => null);
       } finally {
         this.preparing.delete(item.id);
+        this.prepareProgress.delete(item.id);
         await this.changed();
         this.wake();
+        if (interrupted && document.visibilityState === "visible") this.prepareWaiting();
       }
     });
   }
@@ -461,11 +473,14 @@ class UploadQueue {
         else if (!item.ready || this.preparing.has(item.id)) status = "preparing";
         else if (sendingHere || heldElsewhere) status = "sending";
         else status = "waiting";
-        const progress = sendingHere
-          ? (this.progress.get(item.id) ?? 0)
-          : heldElsewhere && remote && now - remote.at < REMOTE_FRESH_MS
-            ? remote.fraction
-            : null;
+        const progress =
+          status === "preparing"
+            ? (this.prepareProgress.get(item.id) ?? null)
+            : sendingHere
+              ? (this.progress.get(item.id) ?? 0)
+              : heldElsewhere && remote && now - remote.at < REMOTE_FRESH_MS
+                ? remote.fraction
+                : null;
         return {
           id: item.id,
           eventId: item.eventId,

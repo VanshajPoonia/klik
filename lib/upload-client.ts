@@ -1,4 +1,5 @@
 import { prepareUpload } from "./upload-queue/prepare";
+import { ConversionInterrupted } from "./video-compress";
 import { newQueuedUpload, type QueuedUpload } from "./upload-queue/record";
 import { SendFailure, sendUpload } from "./upload-queue/send";
 import { xhrPut } from "./upload-queue/transport";
@@ -63,7 +64,13 @@ export async function uploadToGallery({
     { file, prepared, challengeId, capturedAt },
     { eventId, slug, albumId, maxVideoSeconds },
   );
-  item = { ...item, ...(await prepareUpload(item)) };
+  // Someone is waiting on this one, so a conversion the phone interrupted is
+  // simply run again, once.
+  const ready = await prepareUpload(item).catch((error) => {
+    if (error instanceof ConversionInterrupted) return prepareUpload(item);
+    throw error;
+  });
+  item = { ...item, ...ready };
   if (item.refused) throw new UploadRefused(item.refused.message, { status: item.refused.status });
 
   try {

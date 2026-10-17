@@ -304,3 +304,14 @@ export function isPlausibleCaptureTime(value: string, now: Date = new Date()): b
   const latest = now.getTime() + 2 * 24 * 60 * 60 * 1000;
   return parsed >= earliest && parsed <= latest;
 }
+
+/**
+ * An iPhone video's `com.apple.quicktime.creationdate`, `2023-07-15T14:03:12+0200`
+ * (or with a colon in the offset), as the same zone-less wall time a photo's
+ * capture time is kept in. Read by the server's location scrub and, for a clip
+ * converted on the phone, by the phone before the metadata goes.
+ */
+export function quicktimeWallTime(value: string): string | null {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/.exec(value.trim());
+  return match ? `${match[1]}T${match[2]}` : null;
+}
