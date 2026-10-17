@@ -287,7 +287,8 @@ export default function PrivacyPage() {
       <h2>Who can see a photo</h2>
       <p>
         Access is controlled by the organizer. A gallery can be public to anyone with the link,
-        protected by a password, or private. An organizer can hide an individual photo, and can
+        protected by a password, or private. An organizer can hide an individual photo or a whole
+        folder, and can
         create a share link for one photo, for a folder, or for a selection of photos, that can
         later be revoked, expired, or limited to a number of views. A folder link shows what is in
         that folder when it is opened, including photos added to it later, but never a photo the

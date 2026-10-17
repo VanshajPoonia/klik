@@ -75,6 +75,7 @@ export async function sendRecaps(payload: JobPayload<"recap.send">, context: Job
         kind: media.kind,
         status: media.status,
         visibility: media.visibility,
+        folderHidden: media.folderHidden,
         guestId: media.guestId,
         contentHash: media.contentHash,
         perceptualHash: media.perceptualHash,

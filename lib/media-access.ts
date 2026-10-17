@@ -57,7 +57,7 @@ export function rollUndeveloped(event: MediaAccessEvent, now = new Date()): bool
  * cannot accidentally check visibility while forgetting status.
  */
 export function canViewMedia(
-  item: Pick<Media, "visibility" | "status" | "guestId" | "uploaderHidden">,
+  item: Pick<Media, "visibility" | "status" | "guestId" | "uploaderHidden" | "folderHidden">,
   viewer: MediaViewer,
   event: MediaAccessEvent,
 ): boolean {
@@ -66,6 +66,10 @@ export function canViewMedia(
   if (rollUndeveloped(event)) return false;
 
   const isUploader = viewer.guestId != null && item.guestId === viewer.guestId;
+
+  // MED-12: in a folder the host keeps to the team. Its uploader goes on
+  // seeing it exactly as they would a photo the host hid.
+  if (item.folderHidden && !(isUploader && (event.uploaderSeesOwnPrivate || item.uploaderHidden))) return false;
 
   switch (item.visibility) {
     case "gallery":
@@ -123,8 +127,18 @@ export function mediaVisibilityFilter(
   if (!guestId) {
     // A visitor with no guest session owns nothing, so every ownership-based
     // branch below collapses and this is the whole rule.
-    return and(galleryApproved, notHeldBack);
+    return and(galleryApproved, notHeldBack, eq(media.folderHidden, false));
   }
+
+  // MED-12, as in canViewMedia: out of team-only folders, except the
+  // uploader's own on the same terms as a hidden photo.
+  const notInHiddenFolder = or(
+    eq(media.folderHidden, false),
+    and(
+      eq(media.guestId, guestId),
+      event.uploaderSeesOwnPrivate ? undefined : eq(media.uploaderHidden, true),
+    ),
+  )!;
 
   const ownPending = and(
     eq(media.visibility, "gallery"),
@@ -146,7 +160,7 @@ export function mediaVisibilityFilter(
     )!,
   );
 
-  return and(or(...branches)!, notHeldBack);
+  return and(or(...branches)!, notHeldBack, notInHiddenFolder);
 }
 
 /** Visibilities an organizer may set from the UI, with the copy for each. */

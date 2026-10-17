@@ -2,7 +2,7 @@
 
 import { useState, type DragEvent, type FormEvent } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Folder, FolderPlus, Link2, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Folder, FolderPlus, Link2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
@@ -21,6 +21,8 @@ import {
 /** A folder as the dashboard holds it. */
 export interface DashboardFolder extends FolderNode {
   coverMediaId: string | null;
+  /** MED-12: kept to the event's team, this folder itself. */
+  teamOnly?: boolean;
 }
 
 /** "all", "unfiled", a folder's id, or `moment:` and a moment's id (AI-1). */
@@ -151,7 +153,7 @@ export function FolderBrowser({
     setCreating(false);
   }
 
-  async function update(id: string, changes: Partial<Pick<DashboardFolder, "name" | "parentId" | "coverMediaId">>) {
+  async function update(id: string, changes: Partial<Pick<DashboardFolder, "name" | "parentId" | "coverMediaId" | "teamOnly">>) {
     const body = await call(`/api/events/${eventId}/albums/${id}`, {
       method: "PATCH",
       body: JSON.stringify(changes),
@@ -411,6 +413,23 @@ export function FolderBrowser({
                 <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                 Rename
               </Button>
+              {/* MED-12: out of the guests' gallery, folders beneath it too.
+                  A share link to it still works: the link is the access. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                aria-pressed={Boolean(current.teamOnly)}
+                title={
+                  current.teamOnly
+                    ? "Guests cannot see this folder or anything in it. Share a link to show it to someone."
+                    : "Hide this folder and everything in it from guests."
+                }
+                onClick={() => void update(current.id, { teamOnly: !current.teamOnly })}
+              >
+                {current.teamOnly ? <Eye className="h-3.5 w-3.5" aria-hidden="true" /> : <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />}
+                {current.teamOnly ? "Show to guests" : "Hide from guests"}
+              </Button>
               <label className="flex items-center gap-2 text-sm text-muted">
                 <span className="sr-only">Move this folder</span>
                 <select
@@ -476,7 +495,10 @@ export function FolderBrowser({
                     )}
                   </span>
                   <span className="block px-3 py-2">
-                    <span className="block truncate text-sm font-medium text-paper">{folder.name}</span>
+                    <span className="flex items-center gap-1.5 truncate text-sm font-medium text-paper">
+                      {folder.teamOnly && <EyeOff className="h-3.5 w-3.5 shrink-0 text-muted" aria-label="Hidden from guests" />}
+                      <span className="truncate">{folder.name}</span>
+                    </span>
                     <span className="block text-xs text-muted">
                       {count} {count === 1 ? "item" : "items"}
                       {childrenOf(folders, folder.id).length > 0 &&

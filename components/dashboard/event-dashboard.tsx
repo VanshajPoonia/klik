@@ -204,6 +204,7 @@ export function EventDashboard({
       position: album.position,
       coverMediaId: album.coverMediaId,
       createdAt: album.createdAt,
+      teamOnly: album.teamOnly,
     })),
   );
   const [chosenView, setChosenView] = useState<FolderView>("all");

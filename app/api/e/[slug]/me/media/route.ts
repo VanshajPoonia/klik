@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq, inArray, isNull, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { findEventBySlug } from "@/lib/slugs";
 import { albums, media } from "@/lib/schema";
@@ -87,7 +87,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const [folder] = await db
         .select({ id: albums.id })
         .from(albums)
-        .where(and(eq(albums.id, albumId), eq(albums.eventId, event.id), eq(albums.kind, "manual"), isNull(albums.deletedAt)))
+        .where(
+          and(
+            eq(albums.id, albumId),
+            eq(albums.eventId, event.id),
+            eq(albums.kind, "manual"),
+            isNull(albums.deletedAt),
+            // MED-12: a team-only folder is not offered to guests, so not taken from them either.
+            sql`NOT album_hidden(${albums.id})`,
+          ),
+        )
         .limit(1);
       if (!folder) return NextResponse.json({ error: "That folder is not in this gallery" }, { status: 404 });
     }

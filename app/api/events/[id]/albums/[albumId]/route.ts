@@ -15,6 +15,8 @@ const patchSchema = z
     parentId: z.string().min(1).max(64).nullable().optional(),
     // The host's choice of cover. Null goes back to the newest photo in it.
     coverMediaId: z.string().min(1).max(64).nullable().optional(),
+    // MED-12: kept to the event's team.
+    teamOnly: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, "Nothing to change");
 

@@ -39,6 +39,8 @@ function translate(error: unknown): never {
 export interface FolderRow extends FolderNode {
   createdAt: Date;
   coverMediaId: string | null;
+  /** MED-12: kept to the event's team, this folder itself. */
+  teamOnly: boolean;
 }
 
 const folderColumns = {
@@ -48,6 +50,7 @@ const folderColumns = {
   position: albums.position,
   coverMediaId: albums.coverMediaId,
   createdAt: albums.createdAt,
+  teamOnly: albums.teamOnly,
 };
 
 /** Every live manual folder in an event. Small: a plan allows dozens. */
@@ -112,7 +115,7 @@ export async function createFolder({
 export async function updateFolder(
   eventId: string,
   id: string,
-  changes: { name?: string; parentId?: string | null; coverMediaId?: string | null },
+  changes: { name?: string; parentId?: string | null; coverMediaId?: string | null; teamOnly?: boolean },
 ): Promise<FolderRow> {
   const folder = await liveFolder(eventId, id);
   if (!folder) throw new FolderError("not_found");
@@ -120,7 +123,9 @@ export async function updateFolder(
   if (folder.kind === "smart") {
     // AI-1: a moment is named by the host and placed by time. Its name is
     // marked as theirs, so the next refresh keeps it.
-    if (changes.parentId !== undefined || changes.coverMediaId !== undefined) throw new FolderError("parent_invalid");
+    if (changes.parentId !== undefined || changes.coverMediaId !== undefined || changes.teamOnly !== undefined) {
+      throw new FolderError("parent_invalid");
+    }
     if (changes.name === undefined) throw new FolderError("not_found");
     const [row] = await db
       .update(albums)
@@ -130,6 +135,8 @@ export async function updateFolder(
     return row;
   }
   if (changes.name !== undefined) set.name = changes.name;
+  // MED-12. What it hides follows by trigger (drizzle/0058).
+  if (changes.teamOnly !== undefined) set.teamOnly = changes.teamOnly;
   if (changes.parentId !== undefined) {
     if (changes.parentId && !(await liveFolder(eventId, changes.parentId))) throw new FolderError("parent_invalid");
     set.parentId = changes.parentId;
@@ -280,6 +287,8 @@ export async function galleryFolders(eventId: string): Promise<Array<FolderRow &
         isNull(media.deletedAt),
         eq(media.status, "approved"),
         eq(media.visibility, "gallery"),
+        // MED-12: a team-only folder's photos fill nothing for guests.
+        eq(media.folderHidden, false),
         isNotNull(media.albumId),
       ),
     );
@@ -298,17 +307,46 @@ export interface GalleryFolder {
   position: number;
   createdAt: string;
   filled: boolean;
+  /** MED-12: sent to the team only; guests are never sent a team-only folder. */
+  teamOnly?: boolean;
 }
 
+/**
+ * MED-12: guests are not sent a team-only folder, or any folder beneath one,
+ * at all: not as a tab and not in the upload picker. The team gets every
+ * folder with which ones are kept to them.
+ */
 export async function galleryFolderPayload(eventId: string, { isManager }: { isManager: boolean }): Promise<GalleryFolder[]> {
-  return (await galleryFolders(eventId)).map((folder) => ({
-    id: folder.id,
-    name: folder.name,
-    parentId: folder.parentId,
-    position: folder.position,
-    createdAt: folder.createdAt.toISOString(),
-    filled: isManager || folder.filled,
-  }));
+  const folders = await galleryFolders(eventId);
+  const hidden = teamOnlyFolderIds(folders);
+  return folders
+    .filter((folder) => isManager || !hidden.has(folder.id))
+    .map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      parentId: folder.parentId,
+      position: folder.position,
+      createdAt: folder.createdAt.toISOString(),
+      filled: isManager || folder.filled,
+      ...(isManager ? { teamOnly: hidden.has(folder.id) } : {}),
+    }));
+}
+
+/** Folders that are team-only themselves or sit beneath one. */
+export function teamOnlyFolderIds(folders: Array<{ id: string; parentId: string | null; teamOnly: boolean }>): Set<string> {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const hidden = new Set<string>();
+  for (const folder of folders) {
+    let at: (typeof folders)[number] | undefined = folder;
+    for (let depth = 0; at && depth < 10; depth += 1) {
+      if (at.teamOnly) {
+        hidden.add(folder.id);
+        break;
+      }
+      at = at.parentId ? byId.get(at.parentId) : undefined;
+    }
+  }
+  return hidden;
 }
 
 export interface GalleryMoment {

@@ -468,6 +468,9 @@ export const albums = pgTable(
     // `smart` is AI-4's saved query; nothing makes one yet.
     kind: text("kind").$type<"manual" | "smart">().notNull().default("manual"),
     query: jsonb("query"),
+    // MED-12: kept to the event's team. Guests do not see the folder or what
+    // is in it, below it included; a folder link still opens it.
+    teamOnly: boolean("team_only").notNull().default(false),
     // Soft delete: media references an album with ON DELETE SET NULL, so a hard
     // delete silently unfiled every photo in it. Sorting 2,000 wedding photos
     // into folders is real work to lose to one mis-tap.
@@ -532,6 +535,9 @@ export const media = pgTable(
     // they may undo it. Cleared by a trigger whenever anyone else changes the
     // visibility (drizzle/0057_uploader_hidden.sql).
     uploaderHidden: boolean("uploader_hidden").notNull().default(false),
+    // MED-12: its folder, or one above it, is team-only. Kept by triggers in
+    // drizzle/0058_team_only_folders.sql, never written by routes.
+    folderHidden: boolean("folder_hidden").notNull().default(false),
     blobUrl: text("blob_url").notNull(),
     blobPathname: text("blob_pathname").notNull(),
     contentHash: text("content_hash"),

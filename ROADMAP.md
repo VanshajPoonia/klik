@@ -64,7 +64,7 @@
 - **MSG-1** messages between an organizer and Klik, one conversation per organizer, read on `/admin`. **Done 2026-10-17.**
 - **ADM-7** every event on `/admin`, moving an event to another account, a new event for an existing account, and an account without an event. **Done 2026-10-17.**
 - **MED-11** guests manage their own uploads: hide or show, move to a folder, make a share link, hide all of theirs. "Private" means the guest and the event's team, decided 2026-10-17. **Done 2026-10-17.**
-- **MED-12** private folders the host can hide from guests.
+- **MED-12** private folders the host can hide from guests. **Done 2026-10-17.**
 
 ## Contents
 
@@ -756,6 +756,13 @@ Found while building it, and fixed for every upload: the upload id is chosen by 
 - Hiding works even when the gallery is closed; showing, filing and links need it open. Not a kiosk.
 - Found on the way: badges over a photo used the gallery's text colour on a dark pill, unreadable on every light look. They are white now.
 - **Not built:** sharing with particular people by name or email. A link can carry a password from the host's side; per-person access would be its own task.
+
+### MED-12. Folders kept to the team
+**DONE 2026-10-17** (`drizzle/0058_team_only_folders.sql`, `test/team-only-folders.dbtest.ts`). Asked for as "manage access of folders" and "private and public folders". A folder's actions on the dashboard have **Hide from guests**: the folder, every folder inside it and everything in them leave the guests' gallery, tabs and upload picker; the team sees them with a crossed eye on the card. **A folder link still opens it**, because the link is the grant: that is how a host shows one folder to particular people and nobody else.
+- `albums.team_only` is the switch; the access rule reads `media.folder_hidden`, kept by triggers (a photo filed in or out, a folder switched, a folder moved under or out from a hidden one), so the rule stays a one-row check and `test/media-access.dbtest.ts` holds the SQL and the boolean to agreement with it as a fifth axis.
+- Its uploader keeps seeing their own photo in a hidden folder, on the same terms as a photo the host hid. A guest cannot file into a folder kept from them.
+- A trashed hidden folder keeps its photos hidden; deleting a folder is never a way to publish its contents.
+- The recap and the highlights treat its photos as not seen by guests.
 
 ---
 

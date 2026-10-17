@@ -191,6 +191,7 @@ export type ReviewedRow = Pick<
   | "kind"
   | "status"
   | "visibility"
+  | "folderHidden"
   | "guestId"
   | "contentHash"
   | "perceptualHash"
@@ -206,7 +207,8 @@ export type ReviewedRow = Pick<
 
 /** What guests can see, which is all a tidy offers to hide or a recap shows. */
 export function seenByGuests<T extends ReviewedRow>(rows: T[]): T[] {
-  return rows.filter((row) => row.status === "approved" && row.visibility === "gallery");
+  // MED-12: a team-only folder's photos are not what guests see.
+  return rows.filter((row) => row.status === "approved" && row.visibility === "gallery" && !row.folderHidden);
 }
 
 /** AI-7: `tidyPlan` over an event's rows, on the same clock as its moments. */

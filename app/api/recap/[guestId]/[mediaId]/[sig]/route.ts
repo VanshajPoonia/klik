@@ -27,6 +27,7 @@ export async function GET(
       status: media.status,
       visibility: media.visibility,
       uploaderHidden: media.uploaderHidden,
+      folderHidden: media.folderHidden,
       guestId: media.guestId,
       blobPathname: media.blobPathname,
       thumbPathname: media.thumbPathname,
