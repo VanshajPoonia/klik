@@ -794,6 +794,14 @@ Photos already uploaded are described by the nightly job, newest first, 500 a ni
 
 ### 7. Videos as streams: `CLOUDFLARE_STREAM_API_TOKEN`
 
+Optional. Videos are already made smaller and converted to H.264, which plays everywhere,
+on the guest's own phone before they upload. A clip goes up as filmed only where the phone's
+browser cannot convert it (an older phone, or HEVC in a browser that cannot decode it), and
+in a browser without HEVC that one shows "This video won't play here" with a download.
+Stream turns those into copies that play everywhere, gives any video without a preview
+picture one, and streams long clips in pieces instead of downloading the whole file, which
+helps on venue wifi.
+
 1. Cloudflare dashboard, search for **Stream** and open it. If it offers plans, choose the
    smallest and complete the purchase. It bills by minutes of video stored and watched.
 2. Open <https://dash.cloudflare.com/profile/api-tokens> (or the profile icon, top right
