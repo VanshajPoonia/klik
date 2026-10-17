@@ -14,7 +14,9 @@ vi.mock("next/headers", () => ({
 vi.mock("@/lib/roles", () => ({ requireEventManagerSession: async () => null }));
 
 const { POST: arrange } = await import("@/app/api/e/[slug]/me/media/route");
-const { GET: listLinks, POST: makeLink, DELETE: turnOff } = await import("@/app/api/e/[slug]/me/shares/route");
+const { GET: listLinks, POST: makeLink, PATCH: limitLink, DELETE: turnOff } = await import("@/app/api/e/[slug]/me/shares/route");
+const { evaluateShare } = await import("@/lib/share-access");
+const { verifySharePassword } = await import("@/lib/shares");
 const { guestCookieName, signGuestSession } = await import("@/lib/guest");
 const { fetchGalleryMedia } = await import("@/lib/media");
 const { grantEntitlement } = await import("@/lib/entitlements");
@@ -163,5 +165,45 @@ describe("MED-11 links", () => {
     jar.set(guestCookieName(eventId), await signGuestSession({ guestId: someone, eventId }));
     const mediaLink = shares.find((share) => share.scope === "media")!;
     expect((await linkCall(turnOff, slug, { method: "DELETE" }, `?id=${mediaLink.id}`)).status).toBe(404);
+  });
+
+  it("gives the guest's own link an end and a password, and takes them off again", async () => {
+    const { eventId, slug, me, someone } = await setUp();
+    const a = await makeMedia(eventId, { guestId: me });
+    const made = await (await linkCall(makeLink, slug, { method: "POST", body: JSON.stringify({ ids: [a] }) })).json();
+    expect(made.id).toEqual(expect.any(String));
+    const limit = (body: unknown) => linkCall(limitLink, slug, { method: "PATCH", body: JSON.stringify(body) });
+
+    const before = Date.now();
+    const response = await limit({ id: made.id, expiresInDays: 7, password: "aisle" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ locked: true });
+    const [row] = await testDb.select().from(mediaShares).where(eq(mediaShares.id, made.id));
+    const week = 7 * 24 * 60 * 60 * 1000;
+    expect(row.expiresAt!.getTime()).toBeGreaterThanOrEqual(before + week - 1000);
+    expect(row.expiresAt!.getTime()).toBeLessThanOrEqual(Date.now() + week);
+    expect(await verifySharePassword("aisle", row.passwordHash!)).toBe(true);
+    // Whoever has the link is asked for the password, and a week on it has ended.
+    expect(evaluateShare(row, { unlocked: false, counted: false })).toEqual({ ok: false, reason: "password" });
+    expect(evaluateShare(row, { unlocked: true, counted: false }, new Date(Date.now() + week + 60_000))).toEqual({ ok: false, reason: "expired" });
+
+    const listed = await (await linkCall(listLinks, slug)).json();
+    expect(listed.links[0]).toMatchObject({ id: made.id, locked: true, expiresAt: row.expiresAt!.toISOString() });
+
+    const short = await limit({ id: made.id, expiresInDays: null, password: "abc" });
+    expect(short.status).toBe(400);
+    expect((await short.json()).code).toBe("password_short");
+    expect((await limit({ id: made.id, expiresInDays: 3, password: null })).status).toBe(400);
+
+    expect((await limit({ id: made.id, expiresInDays: null, password: null })).status).toBe(200);
+    const [cleared] = await testDb.select().from(mediaShares).where(eq(mediaShares.id, made.id));
+    expect(cleared).toMatchObject({ expiresAt: null, passwordHash: null });
+
+    // Not someone else's link, and not one already turned off.
+    jar.set(guestCookieName(eventId), await signGuestSession({ guestId: someone, eventId }));
+    expect((await limit({ id: made.id, expiresInDays: 1, password: null })).status).toBe(404);
+    jar.set(guestCookieName(eventId), await signGuestSession({ guestId: me, eventId }));
+    await linkCall(turnOff, slug, { method: "DELETE" }, `?id=${made.id}`);
+    expect((await limit({ id: made.id, expiresInDays: 1, password: null })).status).toBe(404);
   });
 });

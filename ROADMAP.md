@@ -68,6 +68,14 @@
 
 **Second check of the brief, the same evening.** Two holes, both fixed: a host's "Select all" on more than 500 photos (any big wedding) was refused by the bulk route, so "make everything private" failed exactly where it matters; the dashboard now sends a selection in batches of `MEDIA_BULK_LIMIT` (`lib/bulk-batches.ts`). And a guest whose page loaded before a folder was hidden could still upload into it, and then not see their own photo; the upload route now answers `folder_gone`. Still not built from the brief: giving access to particular people by name or email (a folder link, with a password from the host's side, is the nearest), and a guest's own links have no password or expiry.
 
+What the second check left became these, built in this order on 2026-10-18, each shipped on its own:
+- **MED-13** a guest's own link can carry an end date and a password. **Done 2026-10-18.**
+- **MED-14** access for particular people: an invite by email to a folder or a selection, opened by signing in as that address.
+- **MED-15** guests make folders of their own.
+- **MED-16** the host puts the photos in a folder in their own order.
+- **ACC-8** a login made on `/admin` can be sent a link to set its own password, instead of a password passed on by hand.
+- Not taken up: a superadmin designing new looks from `/admin` (TPL-1, "Not built").
+
 ## Contents
 
 **This file is the whole plan.** Everything is here: phases, tasks, decisions, findings and build order. There is no second document.
@@ -765,6 +773,9 @@ Found while building it, and fixed for every upload: the upload id is chosen by 
 - Its uploader keeps seeing their own photo in a hidden folder, on the same terms as a photo the host hid. A guest cannot file into a folder kept from them. Nor upload into one: a page loaded before the folder was hidden gets `folder_gone`, the answer for a folder in the trash (the evening's second check).
 - A trashed hidden folder keeps its photos hidden; deleting a folder is never a way to publish its contents.
 - The recap and the highlights treat its photos as not seen by guests.
+
+### MED-13. Limits on a guest's own link
+**DONE 2026-10-18** (`app/api/e/[slug]/me/shares/route.ts` PATCH, `test/guest-self-service.dbtest.ts`). The sheet that hands a guest their new link has **Limit this link**: it ends never, in a day, a week or a month, and can ask for a password (four characters at least, the host's rule). Set after the link is made, so the one-tap link stays one tap, and it applies wherever the link was already sent. Both limits are the host's existing columns (`expires_at`, `password_hash`), so the share page, its gate (`lib/share-access.ts`) and the host's Links tab needed nothing new. **Your links** says "Ends 25 Oct", "Ended" and "Needs a password". As for the host's links, a browser that typed the password keeps it for seven days even if it changes; turning the link off is the hard stop.
 
 ---
 

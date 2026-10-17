@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { nanoid } from "nanoid";
 import { Camera, Check, CheckCircle2, ChevronLeft, Circle, EyeOff, Eye, FolderInput, Heart, ImagePlus, Layers, Link2, MessageCircle, Play, Printer, Stamp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PasswordInput } from "@/components/ui/password-input";
 import type { PublicEvent } from "@/lib/events";
 import { ensureContrast, readableOn } from "@/lib/color";
 import { galleryContentTheme } from "@/components/guest/gallery-theme";
@@ -703,10 +704,18 @@ export function GuestGallery({
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [arranging, setArranging] = useState(false);
-  const [madeLink, setMadeLink] = useState<{ url: string; count: number } | null>(null);
+  const [madeLink, setMadeLink] = useState<{ id: string; url: string; count: number; expiresAt: string | null; locked: boolean } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  // The limits on the link just made: an end and a password, set after making it.
+  const [limitOpen, setLimitOpen] = useState(false);
+  const [limitDays, setLimitDays] = useState<1 | 7 | 30 | null>(null);
+  const [limitPassword, setLimitPassword] = useState("");
+  const [limitBusy, setLimitBusy] = useState(false);
+  const [limitNote, setLimitNote] = useState<{ error: boolean; text: string } | null>(null);
   const [linksOpen, setLinksOpen] = useState(false);
-  const [myLinks, setMyLinks] = useState<Array<{ id: string; url: string; count: number; off: boolean }> | null>(null);
+  const [myLinks, setMyLinks] = useState<
+    Array<{ id: string; url: string; count: number; off: boolean; expiresAt: string | null; locked: boolean }> | null
+  >(null);
   const hasMine = !isOwner && items.some((item) => item.mine);
   const stopSelecting = useCallback(() => {
     setSelecting(false);
@@ -780,7 +789,11 @@ export function GuestGallery({
         return;
       }
       setLinkCopied(false);
-      setMadeLink({ url: data.url, count: data.count });
+      setLimitOpen(false);
+      setLimitDays(null);
+      setLimitPassword("");
+      setLimitNote(null);
+      setMadeLink({ id: data.id, url: data.url, count: data.count, expiresAt: null, locked: false });
       setMyLinks(null);
       stopSelecting();
     } catch {
@@ -789,6 +802,54 @@ export function GuestGallery({
       setArranging(false);
     }
   }, [event.slug, selectedIds, stopSelecting, t]);
+
+  const saveLimits = useCallback(async () => {
+    if (!madeLink) return;
+    const password = limitPassword.trim();
+    if (password && password.length < 4) {
+      setLimitNote({ error: true, text: t.gallery.linkPasswordShort });
+      return;
+    }
+    setLimitBusy(true);
+    setLimitNote(null);
+    try {
+      const res = await fetch(`/api/e/${event.slug}/me/shares`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: madeLink.id, expiresInDays: limitDays, password: password || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLimitNote({ error: true, text: data.code === "password_short" ? t.gallery.linkPasswordShort : t.gallery.arrangeFailed });
+        return;
+      }
+      setMadeLink((current) => (current ? { ...current, expiresAt: data.expiresAt ?? null, locked: Boolean(data.locked) } : current));
+      setLimitNote({ error: false, text: t.gallery.limitsSaved });
+      setMyLinks(null);
+    } catch {
+      setLimitNote({ error: true, text: t.common.noConnection });
+    } finally {
+      setLimitBusy(false);
+    }
+  }, [event.slug, limitDays, limitPassword, madeLink, t]);
+
+  /** "Ends 25 Oct", "Ended", "Needs a password", for a link's line. */
+  const linkLimits = useCallback(
+    (link: { expiresAt: string | null; locked: boolean }) => {
+      const parts: string[] = [];
+      if (link.expiresAt) {
+        const ends = new Date(link.expiresAt);
+        parts.push(
+          ends.getTime() <= Date.now()
+            ? t.gallery.linkEnded
+            : t.gallery.linkEndsOn(ends.toLocaleDateString(locale === "es" ? "es-US" : "en-US", { day: "numeric", month: "short" })),
+        );
+      }
+      if (link.locked) parts.push(t.gallery.linkLocked);
+      return parts;
+    },
+    [locale, t],
+  );
 
   const loadMyLinks = useCallback(async () => {
     const res = await fetch(`/api/e/${event.slug}/me/shares`, { cache: "no-store" }).catch(() => null);
@@ -1545,8 +1606,8 @@ export function GuestGallery({
                   <li key={link.id} className="flex items-center justify-between gap-3 py-2">
                     <span className="min-w-0">
                       <span className={`block truncate text-xs ${link.off ? "text-muted line-through" : "text-paper"}`}>{link.url}</span>
-                      <span className="block text-[11px] text-muted">
-                        {link.off ? t.gallery.linkIsOff : t.gallery.linkItems(link.count)}
+                      <span className="block text-[11px] text-muted" suppressHydrationWarning>
+                        {link.off ? t.gallery.linkIsOff : [t.gallery.linkItems(link.count), ...linkLimits(link)].join(" · ")}
                       </span>
                     </span>
                     {!link.off && (
@@ -1724,6 +1785,77 @@ export function GuestGallery({
               {t.gallery.shareLink}
             </button>
           </div>
+          {(madeLink.expiresAt || madeLink.locked) && (
+            <p className="mt-3 text-xs text-muted" suppressHydrationWarning>
+              {linkLimits(madeLink).join(" · ")}
+            </p>
+          )}
+          <button
+            type="button"
+            aria-expanded={limitOpen}
+            aria-controls="made-link-limits"
+            onClick={() => setLimitOpen((open) => !open)}
+            className="mt-2 inline-flex min-h-11 items-center text-sm text-muted underline underline-offset-2 transition-colors hover:text-paper"
+          >
+            {t.gallery.limitLink}
+          </button>
+          {limitOpen && (
+            <form
+              id="made-link-limits"
+              className="space-y-3 border-t border-canvas-line pt-3"
+              onSubmit={(submit) => {
+                submit.preventDefault();
+                void saveLimits();
+              }}
+            >
+              <fieldset>
+                <legend className="mb-2 text-xs text-muted">{t.gallery.linkEnds}</legend>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    [null, t.gallery.linkEndsNever],
+                    [1, t.gallery.linkEndsDay],
+                    [7, t.gallery.linkEndsWeek],
+                    [30, t.gallery.linkEndsMonth],
+                  ] as const).map(([days, label]) => (
+                    <label
+                      key={String(days)}
+                      className="cursor-pointer rounded-full border border-canvas-line px-3 py-2 text-xs text-paper transition-colors has-[:checked]:border-volt has-[:checked]:bg-volt has-[:checked]:text-on-volt has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-volt"
+                    >
+                      <input
+                        type="radio"
+                        name="made-link-ends"
+                        checked={limitDays === days}
+                        onChange={() => setLimitDays(days)}
+                        className="sr-only"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <div>
+                <label htmlFor="made-link-password" className="mb-2 block text-xs text-muted">
+                  {t.gallery.linkPassword}
+                </label>
+                <PasswordInput
+                  id="made-link-password"
+                  value={limitPassword}
+                  onChange={(change) => setLimitPassword(change.target.value)}
+                  autoComplete="off"
+                  maxLength={200}
+                />
+                <p className="mt-1.5 text-[11px] leading-relaxed text-muted">{t.gallery.linkPasswordHint}</p>
+              </div>
+              {limitNote && (
+                <p className={`text-xs ${limitNote.error ? "text-red-400" : "text-paper"}`} role={limitNote.error ? "alert" : "status"}>
+                  {limitNote.text}
+                </p>
+              )}
+              <Button type="submit" size="sm" disabled={limitBusy}>
+                {t.gallery.saveLimits}
+              </Button>
+            </form>
+          )}
         </div>
       )}
 
