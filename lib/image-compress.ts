@@ -1,3 +1,4 @@
+import { decodeHeif } from "./heif-decode";
 import { COMPRESS_MAX_DIMENSION, COMPRESS_QUALITY } from "./media-constants";
 
 export interface CompressedImage {
@@ -38,13 +39,16 @@ function sharpen(ctx: CanvasRenderingContext2D, width: number, height: number) {
 /**
  * Resizes and re-encodes an image entirely on the user's device, so the
  * compression work is spread across every uploader's own hardware instead of
- * running once per upload on the server. Returns null if the browser can't
- * decode the file (e.g. HEIC on a non-Safari browser) - callers should fall
- * back to uploading the original and letting the server compress it instead.
+ * running once per upload on the server. HEIC and HEIF the browser cannot
+ * read itself (anything but Safari) are decoded here too, by libheif in
+ * WebAssembly (lib/heif-decode.ts). Returns null only when neither can decode
+ * the file; callers then upload the original and the server compresses it.
  */
 export async function compressImageForUpload(file: Blob): Promise<CompressedImage | null> {
   try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const bitmap =
+      (await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => null)) ?? (await decodeHeif(file));
+    if (!bitmap) return null;
 
     const scale = Math.min(1, COMPRESS_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
     const width = Math.round(bitmap.width * scale);
