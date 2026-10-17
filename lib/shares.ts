@@ -17,7 +17,8 @@ import {
 } from "./schema";
 import { descendantIds } from "./folder-tree";
 import { listFolders } from "./folders";
-import { decodeMediaCursor, encodeMediaCursor } from "./media-cursor";
+import { decodeMediaCursor, decodeRankedCursor, encodeMediaCursor, encodeRankedCursor } from "./media-cursor";
+import { UNPLACED, folderRank } from "./folder-order";
 import { rollUndeveloped } from "./media-access";
 import { SHARE_SIGNING_WINDOW_MS, signMediaUrls } from "./media-urls";
 import { SHARE_PAGE_SIZE, shareItemContentPath, type ManagedShare, type SharedItem } from "./share-access";
@@ -167,13 +168,16 @@ export async function collectionCondition(share: MediaShare, event: Event): Prom
 
 /**
  * One page of a folder or selection link's photos, newest first like the
- * gallery, and the cursor for the next page, null at the end.
+ * gallery, and the cursor for the next page, null at the end. A folder link
+ * keeps the hosts' order (MED-16): placed photos first, then the rest newest
+ * first, which is the gallery's order for any folder nobody arranged.
  */
 export async function listCollectionItems(
   share: MediaShare,
   event: Event,
   { cursor, limit = SHARE_PAGE_SIZE }: { cursor?: string | null; limit?: number } = {},
 ): Promise<{ items: Media[]; nextCursor: string | null }> {
+  if (share.scope === "album") return listFolderLinkItems(share, event, { cursor, limit });
   const conditions = [await collectionCondition(share, event)];
   const after = cursor ? decodeMediaCursor(cursor) : null;
   if (after) {
@@ -191,6 +195,31 @@ export async function listCollectionItems(
     .limit(limit + 1);
   const items = rows.slice(0, limit);
   return { items, nextCursor: rows.length > limit ? encodeMediaCursor(items[items.length - 1]) : null };
+}
+
+async function listFolderLinkItems(
+  share: MediaShare,
+  event: Event,
+  { cursor, limit }: { cursor?: string | null; limit: number },
+): Promise<{ items: Media[]; nextCursor: string | null }> {
+  const rank = sql<number>`coalesce(${media.folderPosition}, ${UNPLACED})`;
+  const conditions = [await collectionCondition(share, event)];
+  const after = cursor ? decodeRankedCursor(cursor, UNPLACED) : null;
+  if (after) {
+    const sooner = after.id
+      ? or(lt(media.createdAt, after.createdAt), and(eq(media.createdAt, after.createdAt), lt(media.id, after.id)))!
+      : lt(media.createdAt, after.createdAt);
+    conditions.push(or(sql`${rank} > ${after.rank}`, and(sql`${rank} = ${after.rank}`, sooner))!);
+  }
+  const rows = await db
+    .select()
+    .from(media)
+    .where(and(...conditions))
+    .orderBy(rank, desc(media.createdAt), desc(media.id))
+    .limit(limit + 1);
+  const items = rows.slice(0, limit);
+  const last = items[items.length - 1];
+  return { items, nextCursor: rows.length > limit ? encodeRankedCursor(last, folderRank(last)) : null };
 }
 
 /** How many photos a folder or selection link opens, and their total size. */

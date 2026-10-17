@@ -24,6 +24,7 @@ export function toPublicMedia(
     status: "pending" | "approved" | "rejected";
     visibility: "gallery" | "private" | "link";
     albumId: string | null;
+    folderPosition?: number | null;
     createdAt: Date;
     mine?: boolean;
     uploaderHidden?: boolean;
@@ -53,6 +54,8 @@ export function toPublicMedia(
     // took it out of the gallery, which looks like nothing happened.
     visibility: item.visibility,
     albumId: item.albumId,
+    // MED-16: its place in its folder, when the hosts arranged it.
+    folderPosition: item.folderPosition ?? null,
     createdAt: item.createdAt,
     mine: Boolean(item.mine),
     // MED-11: their own photo, hidden by them, so the gallery can offer to

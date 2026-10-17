@@ -53,6 +53,8 @@ import { SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 import { uploadToGallery } from "@/lib/upload-client";
 import { MEDIA_BULK_LIMIT } from "@/lib/media-constants";
 import { sendInBatches } from "@/lib/bulk-batches";
+import { inFolderOrder } from "@/lib/folder-order";
+import { FolderArranger } from "@/components/dashboard/folder-arranger";
 
 type Tab = "gallery" | "highlights" | "insights" | "links" | "look" | "settings" | "qr" | "trash";
 
@@ -212,6 +214,8 @@ export function EventDashboard({
     })),
   );
   const [chosenView, setChosenView] = useState<FolderView>("all");
+  // MED-16: the folder being put in order, while its arranger is open.
+  const [arrangeFolder, setArrangeFolder] = useState<string | null>(null);
   const [moments, setMoments] = useState<DashboardMoment[]>(initialMoments);
   // AI-2, AI-4. While a search, scene or smart folder is open, it is the grid.
   const gallerySearch = useGallerySearch<{ id: string }>({
@@ -250,7 +254,8 @@ export function EventDashboard({
         ? inFolder(approved, folders, null)
         : viewMoment
           ? approved.filter((item) => item.momentId === viewMoment)
-          : inFolder(approved, folders, folderView, { deep: false });
+          : // MED-16: in the hosts' order, where they gave one.
+            inFolderOrder(inFolder(approved, folders, folderView, { deep: false }));
   const showFolders = canManageAlbums || folders.length > 0 || moments.length > 1;
   const rejected = mediaItems.filter((item) => item.status === "rejected");
   const selectedItems = approved.filter((item) => selectedIds.has(item.id));
@@ -784,6 +789,15 @@ export function EventDashboard({
                 </h2>
                 {approved.length > 0 && (
                   <div className="flex items-center gap-2">
+                    {canManageAlbums && currentFolder && !searching && !selectionMode && arrangeFolder !== currentFolder && shownApproved.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setArrangeFolder(currentFolder)}
+                        className="inline-flex min-h-10 items-center rounded-full border border-canvas-line px-4 text-sm font-medium text-paper transition-colors hover:border-volt/50 hover:text-volt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+                      >
+                        Arrange
+                      </button>
+                    )}
                     {selectionMode && (
                       <button
                         type="button"
@@ -882,6 +896,20 @@ export function EventDashboard({
                       ? "Nothing from this moment is in the gallery."
                     : "Nothing is filed directly in this folder. Drag photos onto it, or select some and move them here."}
                 </Card>
+              ) : arrangeFolder && arrangeFolder === currentFolder ? (
+                <FolderArranger
+                  eventId={event.id}
+                  folder={{ id: currentFolder, name: folders.find((folder) => folder.id === currentFolder)?.name ?? "this folder" }}
+                  items={shownApproved}
+                  onSaved={(positions) =>
+                    setMediaItems((current) =>
+                      current.map((item) =>
+                        item.albumId === currentFolder ? { ...item, folderPosition: positions ? (positions[item.id] ?? null) : null } : item,
+                      ),
+                    )
+                  }
+                  onClose={() => setArrangeFolder(null)}
+                />
               ) : (
                 <MediaGrid
                   items={shownApproved}

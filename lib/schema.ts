@@ -539,6 +539,10 @@ export const media = pgTable(
     // they may undo it. Cleared by a trigger whenever anyone else changes the
     // visibility (drizzle/0057_uploader_hidden.sql).
     uploaderHidden: boolean("uploader_hidden").notNull().default(false),
+    // MED-16: its place in its own folder, smallest first; null sorts after
+    // every placed photo. Cleared by a trigger when it changes folder.
+    // drizzle/0061_folder_order.sql, lib/folder-order.ts.
+    folderPosition: integer("folder_position"),
     // MED-12: its folder, or one above it, is team-only. Kept by triggers in
     // drizzle/0058_team_only_folders.sql, never written by routes.
     folderHidden: boolean("folder_hidden").notNull().default(false),

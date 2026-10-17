@@ -72,7 +72,7 @@ What the second check left became these, built in this order on 2026-10-18, each
 - **MED-13** a guest's own link can carry an end date and a password. **Done 2026-10-18.**
 - **MED-14** access for particular people: a link sent by email to named addresses, opened by signing in as one of them. **Done 2026-10-18.**
 - **MED-15** guests make folders of their own. **Done 2026-10-18.**
-- **MED-16** the host puts the photos in a folder in their own order.
+- **MED-16** the host puts the photos in a folder in their own order. **Done 2026-10-18.**
 - **ACC-8** a login made on `/admin` can be sent a link to set its own password, instead of a password passed on by hand.
 - Not taken up: a superadmin designing new looks from `/admin` (TPL-1, "Not built").
 
@@ -788,6 +788,12 @@ Found while building it, and fixed for every upload: the upload id is chosen by 
 ### MED-15. Guests make folders
 **DONE 2026-10-18** (`drizzle/0060_guest_folders.sql`, `app/api/e/[slug]/me/folders/route.ts`, `test/guest-self-service.dbtest.ts`). Filing their own photos, a guest's **Move to** list ends with **New folder…**: they name it, it is made, and what they picked goes in. A guest's folder is an ordinary folder of the event from then on: everyone sees it once something is in it, anyone can file their own photos into it, and the hosts rename, hide or delete it like their own; the dashboard's card says "Made by Ana, a guest". Top level only, five per guest, inside the plan's cap. **Guests can make folders** in Settings is the host's switch, on by default.
 - Not built: a guest renaming or deleting their own folder. The hosts can, and a folder that other guests have filed into is not one guest's to take away.
+
+### MED-16. A folder in the hosts' own order
+**DONE 2026-10-18** (`drizzle/0061_folder_order.sql`, `lib/folder-order.ts`, `components/dashboard/folder-arranger.tsx`, `app/api/events/[id]/albums/[albumId]/order/route.ts`, `test/folder-order.dbtest.ts`). Asked for as "arrange them". Inside a folder on the dashboard, **Arrange** opens the folder's photos as a numbered grid: drag them on a computer, or use the arrows under each on a phone; **Save this order** keeps it, **Back to newest first** forgets it. The order is the gallery's folder tab and every page of a link to the folder.
+- `media.folder_position`, saved for the whole folder in one statement; a photo not in the list has none. Photos without a place come after the placed ones in the order they would otherwise be in, which is where new photos join an arranged folder. A trigger clears a photo's place when it changes folder, and `folder_position` now stamps `changed_at`, so open galleries pick up a new order on their next sync.
+- A folder link pages by place, time and id (`encodeRankedCursor`); a cursor from before reads as unplaced.
+- Not built: arranging "Everything" or a moment. Both are time by nature; a folder is where an order belongs.
 
 ---
 

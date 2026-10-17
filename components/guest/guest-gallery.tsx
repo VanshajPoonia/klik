@@ -8,6 +8,7 @@ import { Camera, Check, CheckCircle2, ChevronLeft, Circle, EyeOff, Eye, FolderIn
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { InvitePeople } from "@/components/share/invite-people";
+import { inFolderOrder } from "@/lib/folder-order";
 import type { PublicEvent } from "@/lib/events";
 import { ensureContrast, readableOn } from "@/lib/color";
 import { galleryContentTheme } from "@/components/guest/gallery-theme";
@@ -77,6 +78,8 @@ interface MediaItem {
   visibility: "gallery" | "private" | "link";
   blobUrl: string;
   albumId: string | null;
+  /** MED-16: its place in its folder, when the hosts arranged it. */
+  folderPosition?: number | null;
   mine: boolean;
   /** Date over RSC, ISO string over JSON - normalize before using. */
   createdAt: string | Date;
@@ -924,7 +927,8 @@ export function GuestGallery({
   const activePath = folderPath(tabFolders, activeFolderId);
   const activeMomentId =
     chosenMomentId && moments.some((moment) => moment.id === chosenMomentId) ? chosenMomentId : null;
-  const inFolderItems = activeFolderId ? inFolder(items, tabFolders, activeFolderId) : items;
+  // MED-16: a folder in the hosts' order, where they gave one.
+  const inFolderItems = activeFolderId ? inFolderOrder(inFolder(items, tabFolders, activeFolderId)) : items;
   const inMomentItems = activeMomentId
     ? inFolderItems.filter((item) => item.momentId === activeMomentId)
     : inFolderItems;
