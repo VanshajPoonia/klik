@@ -14,7 +14,7 @@ vi.mock("@/lib/storage", async (importOriginal) => ({
   deleteBlobs,
 }));
 
-const { claimGuestCookies, joinedGalleries, forgetGallery } = await import("@/lib/guest-accounts");
+const { claimGuestCookies, galleriesInBrowser, joinedGalleries, forgetGallery } = await import("@/lib/guest-accounts");
 const { POST: join } = await import("@/app/api/e/[slug]/session/route");
 const { DELETE: forgetRoute } = await import("@/app/api/me/galleries/[eventId]/route");
 const { eraseGuest, eraseUser, LegalHoldError } = await import("@/lib/erasure");
@@ -124,6 +124,42 @@ describe("ACC-5 joining while signed in", () => {
     const joined = await joinAs(eventId);
     const [row] = await testDb.select().from(guests).where(eq(guests.id, joined.guest!.guestId));
     expect(row.userId).toBeNull();
+  });
+});
+
+describe("galleriesInBrowser, for a guest without an account", () => {
+  it("lists the galleries this browser joined, from its guest cookies alone", async () => {
+    const first = await gallery();
+    const second = await gallery();
+    const firstGuest = await makeGuest(first);
+    const secondGuest = await makeGuest(second);
+    await makeMedia(first, { guestId: firstGuest });
+    const list = await galleriesInBrowser([
+      await cookieFor(firstGuest, first),
+      await cookieFor(secondGuest, second),
+      { name: "authjs.session-token", value: "x" },
+    ]);
+    expect(list.map((row) => [row.eventId, row.uploads]).sort()).toEqual([[first, 1], [second, 0]].sort());
+  });
+
+  it("trusts only cookies Klik signed, filed under their own event, and never a kiosk's", async () => {
+    const eventId = await gallery();
+    const otherEvent = await gallery();
+    const guestId = await makeGuest(eventId);
+    const misfiled = { name: guestCookieName(otherEvent), value: (await cookieFor(guestId, eventId)).value };
+    const forged = { name: guestCookieName(eventId), value: "not-a-token" };
+    const kiosk = {
+      name: guestCookieName(eventId),
+      value: await signGuestSession({ guestId, eventId, kioskId: "kiosk-1" }),
+    };
+    expect(await galleriesInBrowser([misfiled, forged, kiosk])).toEqual([]);
+  });
+
+  it("leaves out a gallery that has been deleted", async () => {
+    const eventId = await gallery();
+    const guestId = await makeGuest(eventId);
+    await testDb.update(events).set({ deletedAt: new Date() }).where(eq(events.id, eventId));
+    expect(await galleriesInBrowser([await cookieFor(guestId, eventId)])).toEqual([]);
   });
 });
 

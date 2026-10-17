@@ -6,7 +6,14 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api-client";
 import type { JoinedGallery } from "@/lib/guest-accounts";
 
-export function JoinedGalleryRow({ gallery }: { gallery: JoinedGallery }) {
+export function JoinedGalleryRow({
+  gallery,
+  account = true,
+}: {
+  gallery: JoinedGallery;
+  /** Removing from here goes through the account; without one, the gallery's own page does it. */
+  account?: boolean;
+}) {
   const [state, setState] = useState<"idle" | "confirm" | "working" | "gone">("idle");
   const [uploads, setUploads] = useState(gallery.uploads);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +65,7 @@ export function JoinedGalleryRow({ gallery }: { gallery: JoinedGallery }) {
               Download mine
             </a>
           )}
-          {state === "idle" && (
+          {account && state === "idle" && (
             <Button variant="ghost" size="sm" onClick={() => setState("confirm")}>
               Remove mine
             </Button>

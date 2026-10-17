@@ -7,7 +7,7 @@ import { and, count, eq, isNull, or } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { eventCoHosts, events, userPasskeys } from "@/lib/schema";
-import { claimGuestCookies, joinedGalleries } from "@/lib/guest-accounts";
+import { claimGuestCookies, galleriesInBrowser, joinedGalleries, type JoinedGallery } from "@/lib/guest-accounts";
 import { Card } from "@/components/ui/card";
 import { buttonClassName } from "@/components/ui/button";
 import { JoinedGalleryRow } from "@/components/me/joined-gallery-row";
@@ -19,10 +19,19 @@ export const metadata: Metadata = { title: "Your galleries", robots: { index: fa
  * ACC-4: the account as a guest sees it. The galleries you joined, from any
  * phone you joined them on while signed in, and from this phone's anonymous
  * visits, which are claimed on the way in.
+ *
+ * Without an account it is the galleries this browser joined, from its guest
+ * cookies, so a guest who never signed in can still get from one event to
+ * another; signing in is offered to keep them on every phone.
  */
 export default async function MePage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login?next=/me");
+  if (!session?.user?.id) {
+    const galleries = await galleriesInBrowser((await cookies()).getAll());
+    // Nothing joined here and no account: signing in is all this page has.
+    if (galleries.length === 0) redirect("/login?next=/me");
+    return <BrowserGalleries galleries={galleries} />;
+  }
   const userId = session.user.id;
 
   // ACC-3. Idempotent, so reloading the page is harmless.
@@ -97,6 +106,49 @@ export default async function MePage() {
               </Link>
             </div>
           )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/** "Your galleries" for a guest without an account: this browser's, and a way to keep them. */
+function BrowserGalleries({ galleries }: { galleries: JoinedGallery[] }) {
+  return (
+    <div className="min-h-screen px-6 py-10 md:px-10">
+      <div className="mx-auto max-w-2xl">
+        <header className="mb-10 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image src="/klik-mark.png" alt="" width={32} height={32} className="rounded-[8px]" />
+            <span className="text-lg font-semibold tracking-tight">klik</span>
+          </Link>
+          <Link href="/login?next=/me" className="text-sm text-muted hover:text-paper">
+            Sign in
+          </Link>
+        </header>
+
+        <h1 className="font-display text-2xl text-paper">Your galleries</h1>
+        <p className="mt-2 text-sm text-muted">The events you joined on this phone.</p>
+
+        <div className="mt-8 space-y-3">
+          {galleries.map((gallery) => (
+            <JoinedGalleryRow key={gallery.eventId} gallery={gallery} account={false} />
+          ))}
+        </div>
+
+        <Card className="mt-10">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-medium text-paper">Keep them on every phone</h2>
+              <p className="mt-1 max-w-sm text-xs text-muted">
+                Sign in with your email and these galleries are saved to your account, so you can find them
+                from any phone, even if this browser forgets them.
+              </p>
+            </div>
+            <Link href="/login?next=/me" className={buttonClassName({ size: "sm" })}>
+              Sign in
+            </Link>
+          </div>
         </Card>
       </div>
     </div>

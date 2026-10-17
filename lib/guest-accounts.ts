@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "./db";
 import { events, guests, media } from "./schema";
 import { guestCookieName, verifyGuestSession } from "./guest";
@@ -69,6 +69,25 @@ export interface JoinedGallery {
 
 /** ACC-4: every gallery this account has joined as a guest, newest first. */
 export async function joinedGalleries(userId: string): Promise<JoinedGallery[]> {
+  return galleriesOf(eq(guests.userId, userId));
+}
+
+/**
+ * The galleries this browser joined without an account, from its guest
+ * cookies, so "Your galleries" works for a guest who never signed in. Only
+ * what a cookie Klik signed proves; a kiosk's is the venue's, not theirs.
+ */
+export async function galleriesInBrowser(cookieList: Array<{ name: string; value: string }>): Promise<JoinedGallery[]> {
+  const guestIds: string[] = [];
+  for (const cookie of cookieList) {
+    if (!cookie.name.startsWith(GUEST_COOKIE_PREFIX)) continue;
+    const session = await verifyGuestSession(cookie.value);
+    if (session && !session.kioskId && cookie.name === guestCookieName(session.eventId)) guestIds.push(session.guestId);
+  }
+  return guestIds.length === 0 ? [] : galleriesOf(inArray(guests.id, guestIds));
+}
+
+async function galleriesOf(whose: SQL): Promise<JoinedGallery[]> {
   const rows = await db
     .select({
       eventId: events.id,
@@ -83,7 +102,7 @@ export async function joinedGalleries(userId: string): Promise<JoinedGallery[]> 
     .from(guests)
     .innerJoin(events, eq(events.id, guests.eventId))
     .leftJoin(media, eq(media.guestId, guests.id))
-    .where(and(eq(guests.userId, userId), isNull(events.deletedAt)))
+    .where(and(whose, isNull(events.deletedAt)))
     .groupBy(events.id)
     .orderBy(desc(sql`min(${guests.createdAt})`));
   return rows.map((row) => ({

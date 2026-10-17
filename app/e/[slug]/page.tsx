@@ -307,6 +307,8 @@ export default async function GuestEventPage({
       galleryFull={galleryFull && canUpload(event)}
       disposable={disposable}
       signedIn={Boolean(signedInUserId)}
+      // Other galleries this browser has joined, so the header can lead back to them.
+      otherGalleries={cookieStore.getAll().filter(({ name }) => name.startsWith("klik_g_") && name !== guestCookieName(event.id)).length}
       canModerateComments={Boolean(actor && can(actor.role, "media.moderate"))}
       linked={linked}
       board={board}

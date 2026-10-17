@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { nanoid } from "nanoid";
-import { Camera, CheckCircle2, Circle, Heart, ImagePlus, Layers, MessageCircle, Play, Printer, Stamp } from "lucide-react";
+import { Camera, CheckCircle2, ChevronLeft, Circle, Heart, ImagePlus, Layers, MessageCircle, Play, Printer, Stamp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { ensureContrast, readableOn } from "@/lib/color";
@@ -150,6 +150,7 @@ export function GuestGallery({
   galleryFull = false,
   disposable = null,
   signedIn = false,
+  otherGalleries = 0,
   canModerateComments = false,
   linked = null,
   linkedMissing = false,
@@ -178,6 +179,8 @@ export function GuestGallery({
   disposable?: { shotsPerGuest: number; shotsLeft: number; developsAt: string | null; developed: boolean } | null;
   /** ACC-4: whether this guest is signed in, which only changes one line of copy. */
   signedIn?: boolean;
+  /** Other galleries this browser has joined, which "Your galleries" leads back to. */
+  otherGalleries?: number;
   /** MED-9: a team member whose role may hide comments. */
   canModerateComments?: boolean;
   /** CAM-3: the photo a shared link points at, opened on arrival. */
@@ -792,6 +795,16 @@ export function GuestGallery({
         )}
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
+            {/* Back to every gallery this guest is in, when there is more than this one. */}
+            {!isOwner && (signedIn || otherGalleries > 0) && (
+              <a
+                href="/me"
+                className="mb-1 inline-flex min-h-8 items-center gap-1 text-xs text-muted transition-colors hover:text-paper"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                {t.gallery.yourGalleries}
+              </a>
+            )}
             <h1 className="font-display text-2xl text-paper">{event.name}</h1>
             <p className="mt-1 text-sm text-muted">
               {t.gallery.itemsShared(items.length, hasMore)}
@@ -1242,6 +1255,14 @@ export function GuestGallery({
               </>
             ) : (
               <>
+                {otherGalleries > 0 && (
+                  <>
+                    <a href="/me" className="underline underline-offset-2 transition-colors hover:text-paper">
+                      {t.gallery.yourGalleries}
+                    </a>
+                    {" · "}
+                  </>
+                )}
                 {t.gallery.findAgain}{" "}
                 <a
                   href={`/login?next=${encodeURIComponent(`/e/${event.slug}`)}`}
