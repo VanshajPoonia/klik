@@ -53,6 +53,12 @@ if (process.env.AUTH_RESEND_KEY && env.AUTH_EMAIL_FROM) {
   );
 }
 
+const DAY_SECONDS = 24 * 60 * 60;
+/** How long an account stays signed in after its last visit. */
+export const ACCOUNT_SESSION_DAYS = 365;
+/** Klik's own staff, whose session can grant plans and erase clients. */
+const ADMIN_SESSION_DAYS = 30;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db, {
     usersTable: users,
@@ -64,7 +70,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // row), regardless of this setting. Reading a session back branches purely
   // on this global setting, so "database" here would make credential logins
   // look logged-out on the very next request. JWT is required, not a choice.
-  session: { strategy: "jwt" },
+  //
+  // A year from the last visit, renewed once a day while it is used, so a
+  // host or a guest with an account is not asked to sign in again and again.
+  // Klik's own superadmins still sign in every 30 days (the jwt callback),
+  // because that session can grant plans and erase clients.
+  session: { strategy: "jwt", maxAge: ACCOUNT_SESSION_DAYS * DAY_SECONDS, updateAge: DAY_SECONDS },
   providers: [
     ...oauthProviders,
     Credentials({
@@ -170,7 +181,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role ?? "organizer";
         token.username = user.username ?? null;
         token.credentialVersion = user.credentialVersion;
+        token.signedInAt = Date.now();
         return token;
+      }
+
+      // A superadmin signs in again every 30 days, however often they visit.
+      // A token from before this was counted starts counting now.
+      if (token.role === "superadmin") {
+        const since = typeof token.signedInAt === "number" ? token.signedInAt : Date.now();
+        if (Date.now() - since > ADMIN_SESSION_DAYS * DAY_SECONDS * 1000) return null;
+        token.signedInAt = since;
       }
 
       if (typeof token.username === "string" && typeof token.id === "string") {
