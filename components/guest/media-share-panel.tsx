@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useDialogFocus } from "@/components/ui/use-dialog-focus";
 import { useGuestCopy } from "@/components/guest/guest-copy";
-import { ArrowLeft, Check, Download, Link2, Send, Smartphone, Share2 } from "lucide-react";
+import { ArrowLeft, Check, Download, Link2, Loader2, Send, Smartphone, Share2 } from "lucide-react";
+import type { UploadKind } from "@/lib/i18n/guest";
 import { saveBlob } from "@/lib/enhance-view";
 import {
   canShareFiles,
@@ -40,12 +41,21 @@ const TILE =
  * opens, and "Send" only calls the share sheet once the file is in hand. A
  * video can be hundreds of megabytes, so it waits to be asked.
  */
+/** What this device added to the gallery that has not arrived yet (OPS-3). */
+export interface PendingUploads {
+  count: number;
+  kind: UploadKind;
+  /** Some of it is still being made smaller here, not just on its way. */
+  preparing: boolean;
+}
+
 export function MediaSharePanel({
   item,
   slug,
   eventName,
   accent,
   canTakeFile,
+  notInGallery = null,
   linkable,
   downloadHref,
   enhanced,
@@ -58,6 +68,8 @@ export function MediaSharePanel({
   accent: string;
   /** Send, save and make a story of it. Off when the host turned downloads off, except for the viewer's own. */
   canTakeFile: boolean;
+  /** Said first, so nobody shares the gallery thinking their own clip is in it. */
+  notInGallery?: PendingUploads | null;
   /** Others in the gallery can see it, so a link to it is worth sending. */
   linkable: boolean;
   /** The download route, which names the file and checks access again. */
@@ -242,6 +254,13 @@ export function MediaSharePanel({
       <p ref={headingRef} tabIndex={-1} className="text-sm font-medium text-paper outline-none">
         {t.share.title(noun)}
       </p>
+
+      {notInGallery && (
+        <p role="status" className="flex items-start gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-muted">
+          <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-volt" aria-hidden="true" />
+          <span>{t.share.pendingUploads(notInGallery.count, notInGallery.kind, notInGallery.preparing)}</span>
+        </p>
+      )}
 
       {(showSend || showStory) && (
         <div className={`grid gap-2 ${showSend && showStory ? "grid-cols-2" : "grid-cols-1"}`}>

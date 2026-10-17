@@ -362,6 +362,9 @@ const en = {
     notSent: "That did not send. Try again, or save it instead.",
     failed: "That did not work. Try again.",
     videoPreparing: "This video is still being prepared. Try again in a minute.",
+    // Shown when sharing while some of what this phone added is not in the gallery yet.
+    pendingUploads: (n: number, kind: UploadKind, preparing: boolean) =>
+      `${n === 1 ? "One" : n} ${enNoun(n, kind)} you added ${n === 1 ? "is" : "are"} still ${preparing ? "being prepared on this phone" : "uploading"}, so ${n === 1 ? "it isn't" : "they aren't"} in the gallery to share yet. Keep this page open and ${n === 1 ? "it'll" : "they'll"} appear in a moment.`,
     loadFailed: "It could not be loaded. Try again.",
     storyDialog: "Story image",
     back: "Back",
@@ -812,6 +815,8 @@ const es: GuestCopy = {
     notSent: "No se envió. Inténtalo de nuevo, o guárdala en su lugar.",
     failed: "Eso no funcionó. Inténtalo de nuevo.",
     videoPreparing: "Este video todavía se está preparando. Inténtalo de nuevo en un minuto.",
+    pendingUploads: (n: number, kind: UploadKind, preparing: boolean) =>
+      `${n === 1 ? (kind === "photo" ? "Una" : "Un") : n} ${esNoun(n, kind)} que agregaste todavía ${n === 1 ? "se está" : "se están"} ${preparing ? "preparando en este teléfono" : "subiendo"}, así que aún no ${n === 1 ? "está" : "están"} en la galería para compartir. Deja esta página abierta y ${n === 1 ? "aparecerá" : "aparecerán"} en un momento.`,
     loadFailed: "No se pudo cargar. Inténtalo de nuevo.",
     storyDialog: "Imagen para historia",
     back: "Atrás",

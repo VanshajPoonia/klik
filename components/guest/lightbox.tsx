@@ -27,6 +27,7 @@ import { fetchMediaBlob } from "@/lib/media-share";
 import { ProofNote } from "@/components/guest/proof-note";
 import { useGuestCopy } from "@/components/guest/guest-copy";
 import { StreamVideo, UnplayableVideo } from "@/components/media/stream-video";
+import type { PendingUploads } from "@/components/guest/media-share-panel";
 import { PRINT_PRODUCTS, printDpi, printQuality } from "@/lib/print-catalog";
 
 // CAM-2. A few hundred kilobytes that only someone editing should download,
@@ -95,6 +96,8 @@ export interface LightboxShare {
   accent: string;
   /** Whether this viewer may send, save or post this item as a file. */
   canTakeFile: (item: LightboxItem) => boolean;
+  /** What this device added that is not in the gallery yet, said when sharing. */
+  notInGallery?: PendingUploads | null;
 }
 
 /** MED-9: what the viewer shows and allows of hearts and comments. */
@@ -764,6 +767,7 @@ export function Lightbox({
             eventName={share.eventName}
             accent={share.accent}
             canTakeFile={share.canTakeFile(item)}
+            notInGallery={share.notInGallery ?? null}
             linkable={(item.status ?? "approved") === "approved" && (item.visibility ?? "gallery") === "gallery"}
             downloadHref={downloadBaseUrl ? `${downloadBaseUrl}/${item.id}/download` : null}
             enhanced={item && enhancedFor?.id === item.id ? enhancedFor.blob : null}

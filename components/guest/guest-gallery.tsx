@@ -14,6 +14,7 @@ import { formatDuration } from "@/lib/video-poster";
 import { uploadToGallery } from "@/lib/upload-client";
 import { UploadTray } from "@/components/upload/upload-tray";
 import { useUploadQueue } from "@/components/upload/use-upload-queue";
+import type { PendingUploads } from "@/components/guest/media-share-panel";
 import type { AddedEvent } from "@/lib/upload-queue/page-queue";
 import {
   VIEW_ENHANCE_FILTER,
@@ -463,6 +464,17 @@ export function GuestGallery({
     onUploaded,
   );
   const { enqueue, clear: clearUploads } = uploads;
+  // What this phone added that is not in the gallery yet, so sharing can say so.
+  const notYetIn = uploads.items.filter((item) => item.status !== "refused");
+  const notYetInVideos = notYetIn.filter((item) => item.kind === "video").length;
+  const pendingUploads: PendingUploads | null =
+    notYetIn.length === 0
+      ? null
+      : {
+          count: notYetIn.length,
+          kind: notYetInVideos === 0 ? "photo" : notYetInVideos === notYetIn.length ? "video" : "mixed",
+          preparing: notYetIn.some((item) => item.status === "preparing"),
+        };
   const shotsLeft = Math.max(0, shotsOnServer - uploads.items.filter((item) => item.status !== "refused").length);
 
   const uploadFiles = useCallback(
@@ -1359,6 +1371,7 @@ export function GuestGallery({
             accent: event.accentColor,
             // A guest's own upload is theirs to send on, whatever the setting.
             canTakeFile: (item) => event.downloadsEnabled || isOwner || Boolean(item.mine),
+            notInGallery: pendingUploads,
           }}
           // GRW-6: a print is a copy, so it follows the download rule, and
           // never a watermarked proof.
