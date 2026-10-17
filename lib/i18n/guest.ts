@@ -61,6 +61,12 @@ const en = {
     recapHint: "Get the best photos the morning after.",
     recapPlaceholder: "you@example.com",
     recapConsent: "Email me the highlights the morning after. One email, then Klik deletes my address.",
+    // ACC-7: an account is offered, never needed.
+    continueAsGuest: "Continue as a guest",
+    or: "or",
+    withAccount: "Sign in or create an account",
+    accountWhy: "Keeps what you share on your account, on any phone. Nobody needs one to join.",
+    signedInAs: (name: string) => `Signed in as ${name}. What you share here stays on your account.`,
   },
   // A gallery on the guest's home screen (lib/home-screen.ts).
   home: {
@@ -523,6 +529,11 @@ const es: GuestCopy = {
     recapHint: "Recibe las mejores fotos a la mañana siguiente.",
     recapPlaceholder: "tu@ejemplo.com",
     recapConsent: "Envíame lo mejor a la mañana siguiente. Un solo correo, y después Klik borra mi dirección.",
+    continueAsGuest: "Continuar como invitado",
+    or: "o",
+    withAccount: "Inicia sesión o crea una cuenta",
+    accountWhy: "Guarda lo que compartes en tu cuenta, en cualquier teléfono. Nadie la necesita para entrar.",
+    signedInAs: (name: string) => `Has iniciado sesión como ${name}. Lo que compartas aquí queda en tu cuenta.`,
   },
   home: {
     title: "Ten esta galería en tu pantalla de inicio",

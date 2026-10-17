@@ -21,8 +21,11 @@ export function EntrySheet({
   accentColor = KLIK_COLORS.accent,
   backgroundColor = KLIK_COLORS.background,
   look,
+  account = null,
 }: {
   slug: string;
+  /** ACC-7: who is signed in, if anyone. Otherwise an account is offered beside "continue as a guest". */
+  account?: { name: string | null } | null;
   eventName: string;
   requiresPassword: boolean;
   /** TPL-1: the gallery's look, so the first screen after scanning already wears it. */
@@ -36,7 +39,7 @@ export function EntrySheet({
   const router = useRouter();
   const { t, locale } = useGuestCopy();
   const consent_ = consentText(CURRENT_CONSENT, locale);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(account?.name?.split(" ")[0] ?? "");
   const [password, setPassword] = useState("");
   const [consent, setConsent] = useState(false);
   const [recapEmail, setRecapEmail] = useState("");
@@ -186,9 +189,31 @@ export function EntrySheet({
             </a>
           </p>
           <Button type="submit" disabled={loading || !consent || (wantsRecap && !recapConsent)} className="w-full">
-            {loading ? t.entry.joining : t.entry.continue}
+            {loading ? t.entry.joining : account ? t.entry.continue : t.entry.continueAsGuest}
           </Button>
         </form>
+        {/* ACC-7: an account is offered, never asked for. The guest button
+            above is the main one; this keeps what they share on every phone. */}
+        {account ? (
+          <p className="mt-5 text-center text-xs leading-relaxed text-muted">
+            {t.entry.signedInAs(account.name || "you")}
+          </p>
+        ) : (
+          <div className="mt-5">
+            <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
+              <span className="h-px flex-1 bg-canvas-line" />
+              {t.entry.or}
+              <span className="h-px flex-1 bg-canvas-line" />
+            </div>
+            <a
+              href={`/login?next=${encodeURIComponent(`/e/${slug}`)}`}
+              className="mt-4 flex min-h-11 w-full items-center justify-center rounded-full border border-canvas-line px-5 text-sm font-medium text-paper transition-colors hover:border-paper/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+            >
+              {t.entry.withAccount}
+            </a>
+            <p className="mt-2 text-center text-xs leading-relaxed text-muted">{t.entry.accountWhy}</p>
+          </div>
+        )}
         {/* TRS-3: before agreeing to anything, in a language the guest reads. */}
         <LanguageSwitch className="mt-6" />
       </div>

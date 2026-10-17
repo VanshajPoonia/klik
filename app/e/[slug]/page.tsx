@@ -143,7 +143,17 @@ export default async function GuestEventPage({
 
   if (!access.allowed) {
     if (access.reason === "password_required") {
-      return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword offerRecap={offerRecap} {...sheetColors} />);
+      const signedIn = (await auth())?.user ?? null;
+      return speak(
+        <EntrySheet
+          slug={slug}
+          eventName={event.name}
+          requiresPassword
+          offerRecap={offerRecap}
+          account={signedIn ? { name: signedIn.name ?? null } : null}
+          {...sheetColors}
+        />,
+      );
     }
     return speak(
       <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
@@ -182,7 +192,18 @@ export default async function GuestEventPage({
   const hasConsented = Boolean(guestSession && guestSession.eventId === event.id);
 
   if (!hasConsented && !isOwner) {
-    return speak(<EntrySheet slug={slug} eventName={event.name} requiresPassword={false} offerRecap={offerRecap} {...sheetColors} />);
+    // ACC-7: a signed-in guest is told so; anyone else is offered an account.
+    const signedIn = (await auth())?.user ?? null;
+    return speak(
+      <EntrySheet
+        slug={slug}
+        eventName={event.name}
+        requiresPassword={false}
+        offerRecap={offerRecap}
+        account={signedIn ? { name: signedIn.name ?? null } : null}
+        {...sheetColors}
+      />,
+    );
   }
 
   // GRW-7: an open by someone other than the event's team. Counted after the

@@ -14,6 +14,8 @@ import {
   mediaVision,
   planRequests,
   referrals,
+  shareSaves,
+  mediaShares,
   userPasskeys,
   users,
   watermarks,
@@ -43,7 +45,7 @@ export async function accountExport(userId: string, appUrl: string) {
   const [account] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!account) return null;
 
-  const [linked, passkeys, plans, history, owned, teams, joined, credits, referralCounts, watermark, comments, asked] = await Promise.all([
+  const [linked, passkeys, plans, history, owned, teams, joined, credits, referralCounts, watermark, comments, asked, opened] = await Promise.all([
     db.select({ provider: accounts.provider }).from(accounts).where(eq(accounts.userId, userId)),
     db.select().from(userPasskeys).where(eq(userPasskeys.userId, userId)).orderBy(asc(userPasskeys.createdAt)),
     db.select().from(entitlements).where(eq(entitlements.userId, userId)).orderBy(asc(entitlements.createdAt)),
@@ -95,6 +97,13 @@ export async function accountExport(userId: string, appUrl: string) {
       .where(eq(mediaComments.userId, userId))
       .orderBy(asc(mediaComments.createdAt)),
     db.select().from(planRequests).where(eq(planRequests.userId, userId)).orderBy(asc(planRequests.createdAt)),
+    db
+      .select({ token: mediaShares.token, eventName: events.name, firstOpenedAt: shareSaves.firstOpenedAt, lastOpenedAt: shareSaves.lastOpenedAt })
+      .from(shareSaves)
+      .innerJoin(mediaShares, eq(mediaShares.id, shareSaves.shareId))
+      .innerJoin(events, eq(events.id, mediaShares.eventId))
+      .where(eq(shareSaves.userId, userId))
+      .orderBy(asc(shareSaves.firstOpenedAt)),
   ]);
   const [referredBy] = await db.select({ at: referrals.createdAt }).from(referrals).where(eq(referrals.referredId, userId)).limit(1);
 
@@ -136,6 +145,12 @@ export async function accountExport(userId: string, appUrl: string) {
       usedAt: iso(plan.appliedAt),
     })),
     history: history.map((entry) => ({ what: entry.kind, detail: entry.detail, at: iso(entry.createdAt) })),
+    linksYouOpened: opened.map((link) => ({
+      link: `${appUrl}/s/${link.token}`,
+      from: link.eventName,
+      firstOpenedAt: iso(link.firstOpenedAt),
+      lastOpenedAt: iso(link.lastOpenedAt),
+    })),
     plansYouAskedFor: asked.map((request) => ({
       plan: request.planKey,
       kindOfEvent: request.occasion,

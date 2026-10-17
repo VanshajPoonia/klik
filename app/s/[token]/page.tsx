@@ -15,6 +15,10 @@ import { INLINE_ZIP_LIMIT_BYTES, buildDownloadBatches } from "@/lib/download-bat
 import { ShareView } from "@/components/share/share-view";
 import { ShareCollection } from "@/components/share/share-collection";
 import { SharePasswordGate } from "@/components/share/share-password-gate";
+import { ShareAccountPrompt } from "@/components/share/share-account-prompt";
+import { after } from "next/server";
+import { auth } from "@/lib/auth";
+import { rememberShare } from "@/lib/share-saves";
 
 /**
  * A photo, a folder or a selection, reachable by token alone.
@@ -140,6 +144,12 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
     return <Refusal title={copy.title} detail={copy.detail} />;
   }
 
+  // ACC-7: a signed-in person keeps what was shared with them, on /me; anyone
+  // else is offered an account once, with "continue as a guest" beside it.
+  const viewer = (await auth())?.user?.id ?? null;
+  if (viewer) after(() => rememberShare(viewer, resolved.share.id));
+  const prompt = viewer ? null : <ShareAccountPrompt next={`/s/${token}`} />;
+
   // Only offered when the gallery is genuinely open to anyone with the
   // address. Pointing a stranger at a private or password-protected gallery is
   // an invitation to a locked door.
@@ -162,39 +172,45 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
         ? buildDownloadBatches(await allCollectionItems(share, event), INLINE_ZIP_LIMIT_BYTES).length
         : 0;
     return (
-      <ShareCollection
-        token={token}
-        eventName={event.name}
-        folderName={folder?.name ?? null}
-        count={summary.count}
-        initialItems={await toSharedItems(token, firstPage.items)}
-        initialCursor={firstPage.nextCursor}
-        canDownload={share.allowDownload}
-        zipParts={zipParts}
-        undeveloped={share.scope === "album" && rollUndeveloped(event)}
-        galleryUrl={galleryUrl}
-      />
+      <>
+        <ShareCollection
+          token={token}
+          eventName={event.name}
+          folderName={folder?.name ?? null}
+          count={summary.count}
+          initialItems={await toSharedItems(token, firstPage.items)}
+          initialCursor={firstPage.nextCursor}
+          canDownload={share.allowDownload}
+          zipParts={zipParts}
+          undeveloped={share.scope === "album" && rollUndeveloped(event)}
+          galleryUrl={galleryUrl}
+        />
+        {prompt}
+      </>
     );
   }
 
   const { share, event, item } = resolved;
 
   return (
-    <ShareView
-      token={token}
-      eventName={event.name}
-      kind={item.kind}
-      contentUrl={shareContentPath(token)}
-      posterUrl={item.posterPathname ? `${shareContentPath(token)}?poster=1` : null}
-      downloadUrl={share.allowDownload ? shareDownloadPath(token) : null}
-      /**
-       * Computed from the same helper the download route uses. The viewer saves
-       * the locally enhanced bytes rather than following the link when there are
-       * any, and a file that arrives under a different name depending on which
-       * of those two paths ran would be a small, permanent confusion.
-       */
-      downloadName={shareDownloadFilename(item, extensionForMime(item.mimeType))}
-      galleryUrl={galleryUrl}
-    />
+    <>
+      <ShareView
+        token={token}
+        eventName={event.name}
+        kind={item.kind}
+        contentUrl={shareContentPath(token)}
+        posterUrl={item.posterPathname ? `${shareContentPath(token)}?poster=1` : null}
+        downloadUrl={share.allowDownload ? shareDownloadPath(token) : null}
+        /**
+         * Computed from the same helper the download route uses. The viewer saves
+         * the locally enhanced bytes rather than following the link when there are
+         * any, and a file that arrives under a different name depending on which
+         * of those two paths ran would be a small, permanent confusion.
+         */
+        downloadName={shareDownloadFilename(item, extensionForMime(item.mimeType))}
+        galleryUrl={galleryUrl}
+      />
+      {prompt}
+    </>
   );
 }

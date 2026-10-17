@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { buttonClassName } from "@/components/ui/button";
 import { JoinedGalleryRow } from "@/components/me/joined-gallery-row";
 import { PasskeyPrompt } from "@/components/me/passkey-prompt";
+import { sharedWith } from "@/lib/share-saves";
 
 export const metadata: Metadata = { title: "Your galleries", robots: { index: false } };
 
@@ -37,7 +38,7 @@ export default async function MePage() {
   // ACC-3. Idempotent, so reloading the page is harmless.
   await claimGuestCookies(userId, (await cookies()).getAll());
 
-  const [galleries, [hosting], [passkeys]] = await Promise.all([
+  const [galleries, [hosting], [passkeys], shared] = await Promise.all([
     joinedGalleries(userId),
     db
       .select({ n: count() })
@@ -45,6 +46,8 @@ export default async function MePage() {
       .leftJoin(eventCoHosts, and(eq(eventCoHosts.eventId, events.id), eq(eventCoHosts.userId, userId), isNull(eventCoHosts.deletedAt)))
       .where(and(isNull(events.deletedAt), or(eq(events.ownerId, userId), eq(eventCoHosts.userId, userId)))),
     db.select({ n: count() }).from(userPasskeys).where(eq(userPasskeys.userId, userId)),
+    // ACC-7: links people sent this account, while they still open.
+    sharedWith(userId),
   ]);
   const hostsEvents = (hosting?.n ?? 0) > 0;
 
@@ -75,6 +78,33 @@ export default async function MePage() {
             galleries.map((gallery) => <JoinedGalleryRow key={gallery.eventId} gallery={gallery} />)
           )}
         </div>
+
+        {shared.length > 0 && (
+          <section className="mt-10" aria-labelledby="shared-with-you">
+            <h2 id="shared-with-you" className="text-sm font-medium text-paper">
+              Shared with you
+            </h2>
+            <p className="mt-1 text-xs text-muted">Links you opened while signed in, for as long as they stay open.</p>
+            <ul className="mt-4 divide-y divide-canvas-line rounded-2xl border border-canvas-line">
+              {shared.map((link) => (
+                <li key={link.token}>
+                  <Link
+                    href={`/s/${link.token}`}
+                    className="flex min-h-14 items-center justify-between gap-4 px-4 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl hover:bg-paper/5"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-paper">{link.eventName}</span>
+                      <span className="block truncate text-xs text-muted">{link.what}</span>
+                    </span>
+                    <span className="shrink-0 text-xs text-muted">
+                      {link.lastOpenedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* ACC-6: offered only to an account with no passkey yet. */}
         {(passkeys?.n ?? 0) === 0 && <PasskeyPrompt />}

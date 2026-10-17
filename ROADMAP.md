@@ -60,7 +60,7 @@
 **The brief of 2026-10-17.** The user described the whole product flow in one message. Checked against the code the same day, most of it was already built (guest join with or without an account, guest passes kept a year, uploads into folders, per-photo privacy, bulk actions, share links for photos, folders and selections, co-hosts with roles, QR, admin provisioning with generated credentials, grants, password resets). What was missing became these tasks, built in this order, each shipped on its own:
 - **TPL-1** gallery looks per kind of event, weddings first. **Done 2026-10-17.**
 - **ADM-6** signup records which plan button was clicked, and the admin queue shows it. **Done 2026-10-17.**
-- **ACC-7** the entry sheet and a shared link offer "sign in or create an account" beside "continue as a guest".
+- **ACC-7** the entry sheet and a shared link offer "sign in or create an account" beside "continue as a guest". **Done 2026-10-17.**
 - **MSG-1** messages between an organizer and Klik, one conversation per organizer, read on `/admin`.
 - **ADM-7** every event on `/admin`, moving an event to another account, a new event for an existing account, and an account without an event.
 - **MED-11** guests manage their own uploads: hide or show, move to a folder, make a share link, hide all of theirs. "Private" means the guest and the event's team, decided 2026-10-17.
@@ -425,6 +425,9 @@ When a signed-in person uploads, attribute the media to their account as well as
 - **Discoverable, verified, bound to Klik's address.** No address is typed first and nothing reveals whether an account exists; the phone's lock is always asked for; only `APP_URL` (and localhost in development) can make or use one, so a preview deployment cannot mint passkeys for a URL that will vanish.
 - **Every new passkey emails the owner** and goes on the account timeline. A passkey outlives every session, so it is exactly what a stolen session would add; the email is how the owner finds out. Removing one stops it at once and, where the browser supports WebAuthn signals, tells the phone to forget it.
 - Ten per account. A removed passkey that is still on a phone is reported as such, so the sign-in page can say so and ask the phone to drop it.
+
+### ACC-7. An account offered, beside "continue as a guest"
+**DONE 2026-10-17** (`drizzle/0055_share_saves.sql`, `lib/share-saves.ts`, `components/share/share-account-prompt.tsx`, `test/share-saves.dbtest.ts`). Asked for as "after scanning the QR, the option to create an account or continue as a guest", and the same for "someone a link is shared with, prompted once". **The entry sheet**'s button now says "Continue as a guest" and stays the main one; under it, "Sign in or create an account" goes to the email-code sign-in and back to the gallery, which then says who is signed in and fills in their first name. English and Spanish. **A share link** shows a small sheet once per browser (localStorage) with "Sign in or sign up" and "Continue as a guest" side by side, never to someone signed in. A signed-in person who opens a link through its gate has it kept in `share_saves`, and `/me` lists those under **Shared with you** while they still open (not revoked, not expired, event not deleted or paused); the full gate runs again on every tap. Included in the account's data export, erased with the account. Principle 1 holds: nothing here is a step for a guest who ignores it.
 
 ---
 

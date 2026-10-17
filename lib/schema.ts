@@ -790,6 +790,25 @@ export const mediaShareItems = pgTable(
 );
 
 /**
+ * ACC-7: share links a signed-in account has opened, so /me can list what was
+ * shared with it. drizzle/0055_share_saves.sql, lib/share-saves.ts.
+ */
+export const shareSaves = pgTable(
+  "share_saves",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    shareId: text("share_id")
+      .notNull()
+      .references(() => mediaShares.id, { onDelete: "cascade" }),
+    firstOpenedAt: timestamp("first_opened_at", { withTimezone: true }).notNull().defaultNow(),
+    lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.shareId] }), index("share_saves_share_idx").on(table.shareId)],
+);
+
+/**
  * Stripe bookkeeping. See ROADMAP.md PAY-2.
  *
  * These tables record money. They do not grant capability: that stays with the

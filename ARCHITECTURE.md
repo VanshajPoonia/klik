@@ -308,6 +308,8 @@ Bring the database up with `scripts/test-db.sh`. It creates a throwaway cluster 
 
 **Plan requests, 2026-10-17 (ADM-6).** `plan_requests` (`drizzle/0054_plan_requests.sql`) is append-only: the plan whose button reached `/signup`, an optional occasion and date, and whether it came from the form or a signed-in click. Written through `recordPlanRequest`, which never throws and treats the same plan within ten minutes as one request. Read by `getPendingSignups`, `listClientSummaries` and `getClientDetail`. It grants nothing.
 
+**Shared with you, 2026-10-17 (ACC-7).** `share_saves` (`drizzle/0055_share_saves.sql`) is keyed by account and share. `/s/[token]` writes it after the response, through `rememberShare`, only for a signed-in viewer who passed the gate; `/me` reads it through `sharedWith`, which drops revoked, expired, deleted and paused ones. The entry sheet takes an `account` prop from the gallery page and offers sign-in to everyone else.
+
 **Admin client pages, 2026-10-16.** The per-client cards on `/admin` are gone: the page is the queues and `ClientTable`, built by `lib/admin-clients.ts`, which also decides who is a customer, a guest or Klik. Everything done to one account is on `/admin/clients/[userId]`. Grants reach any account now, not only `organizer`.
 
 **Folders on every plan, prints off, 2026-10-17.** `canUseAlbums` reads the plan's `maxAlbums` (50 on all three). `isPrintsAvailable` also needs `PRINTS_ENABLED=1`, and `startOrder` uses it rather than checking the keys, so no order starts while prints are off. `mediaVisibilityFilter` leaves out other people's videos whose `metadata_state` is `pending` or `failed`, as `videoHeldBack` already did for their bytes.
