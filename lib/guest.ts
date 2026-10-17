@@ -1,5 +1,29 @@
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT, decodeJwt, jwtVerify } from "jose";
 import { env } from "./env";
+import { COOKIE_DAYS } from "./legal";
+
+/**
+ * How long joining a gallery lasts, and unlocking a password-protected one:
+ * a year from the guest's last visit. Each visit renews it (`renewGuestPass`,
+ * called by `proxy.ts`), so a guest who opens the gallery from their home
+ * screen now and then is never asked to join again. It was 30 days from
+ * joining, which is how a guest coming back after a month met the entry sheet.
+ */
+export const GUEST_PASS_DAYS = COOKIE_DAYS;
+
+/** Renewed at most once a day, so a gallery's every request does not sign a token. */
+const RENEW_AFTER_SECONDS = 24 * 60 * 60;
+
+/** The one set of options every guest and unlock cookie is written with. */
+export function guestCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: GUEST_PASS_DAYS * 24 * 60 * 60,
+  };
+}
 
 export interface GuestSession {
   guestId: string;
@@ -22,8 +46,31 @@ export async function signGuestSession(payload: GuestSession): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime(`${GUEST_PASS_DAYS}d`)
     .sign(secret());
+}
+
+/**
+ * A guest or unlock cookie re-signed with a fresh year, or null when it does
+ * not need it (signed in the last day) or is not one of ours. The same claims
+ * go back in, so a renewal can never grant anything the old token did not.
+ */
+export async function renewGuestPass(token: string, now = Date.now()): Promise<string | null> {
+  try {
+    const issued = decodeJwt(token).iat;
+    if (typeof issued === "number" && now / 1000 - issued < RENEW_AFTER_SECONDS) return null;
+    const { payload } = await jwtVerify(token, secret());
+    const { iat, exp, ...claims } = payload;
+    void iat;
+    void exp;
+    return await new SignJWT(claims)
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt(Math.floor(now / 1000))
+      .setExpirationTime(Math.floor(now / 1000) + GUEST_PASS_DAYS * 24 * 60 * 60)
+      .sign(secret());
+  } catch {
+    return null;
+  }
 }
 
 export async function verifyGuestSession(token: string): Promise<GuestSession | null> {
@@ -52,7 +99,7 @@ export async function signEventUnlock(eventId: string, accessVersion: number): P
   return new SignJWT({ eventId, accessVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime(`${GUEST_PASS_DAYS}d`)
     .sign(secret());
 }
 

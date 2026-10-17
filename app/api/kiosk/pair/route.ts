@@ -5,9 +5,8 @@ import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
 import { consume, clientIp } from "@/lib/ratelimit";
 import { pairKiosk } from "@/lib/kiosks";
-import { guestCookieName, signGuestSession } from "@/lib/guest";
+import { guestCookieName, guestCookieOptions, signGuestSession } from "@/lib/guest";
 
-const THIRTY_DAYS = 60 * 60 * 24 * 30;
 const bodySchema = z.object({ code: z.string().min(1).max(64) });
 
 /**
@@ -44,13 +43,7 @@ export async function POST(request: Request) {
   response.cookies.set(
     guestCookieName(event.id),
     await signGuestSession({ guestId: kiosk.guestId, eventId: event.id, kioskId: kiosk.id }),
-    {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: THIRTY_DAYS,
-    },
+    guestCookieOptions(),
   );
   return response;
 }

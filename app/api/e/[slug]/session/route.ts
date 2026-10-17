@@ -19,6 +19,7 @@ import { reportError } from "@/lib/observability";
 import {
   signGuestSession,
   guestCookieName,
+  guestCookieOptions,
   signEventUnlock,
   eventUnlockCookieName,
 } from "@/lib/guest";
@@ -35,8 +36,6 @@ const bodySchema = z.object({
   // The phone's zone, so "nine in the morning" is the guest's morning.
   timeZone: z.string().max(64).optional(),
 });
-
-const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -128,13 +127,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!valid) return NextResponse.json({ error: "Incorrect password", code: "wrong_password" }, { status: 401 });
 
     const unlockToken = await signEventUnlock(event.id, event.accessVersion);
-    response.cookies.set(eventUnlockCookieName(event.id), unlockToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: THIRTY_DAYS,
-    });
+    response.cookies.set(eventUnlockCookieName(event.id), unlockToken, guestCookieOptions());
   }
 
   // ACC-5: someone signed in who has joined this gallery before, on any phone,
@@ -174,13 +167,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
 
   const guestToken = await signGuestSession({ guestId: guest.id, eventId: event.id });
-  response.cookies.set(guestCookieName(event.id), guestToken, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: THIRTY_DAYS,
-  });
+  response.cookies.set(guestCookieName(event.id), guestToken, guestCookieOptions());
 
   return response;
 }

@@ -39,5 +39,9 @@ export const GALLERY_ACCESS_DAYS = { event: 180, premium: 365, venue: 365 } as c
 /** Enforced by `pruneRateLimits` in `lib/ratelimit.ts`, called by the nightly purge. */
 export const RATE_LIMIT_RETENTION_HOURS = 24;
 
-/** `maxAge` on the guest and event-unlock cookies in the session route. */
-export const COOKIE_DAYS = 30;
+/**
+ * How long a guest stays joined to a gallery, and a password-protected one
+ * unlocked, after their last visit (`GUEST_PASS_DAYS` in `lib/guest.ts`):
+ * renewed whenever they come back, so nobody joins the same gallery twice.
+ */
+export const COOKIE_DAYS = 365;
