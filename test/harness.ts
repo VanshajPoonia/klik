@@ -96,6 +96,8 @@ const TABLES = [
   '"verificationTokens"',
   // ACC-6, MED-10 and GRW-5, before `users`.
   "user_passkeys",
+  // ADM-6, before `users`.
+  "plan_requests",
   "watermarks",
   "account_credits",
   "referrals",

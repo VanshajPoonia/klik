@@ -4,9 +4,12 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { Field, inputClass } from "@/components/ui/field";
+import { Field, inputClass, selectClass } from "@/components/ui/field";
 import { PasswordInput } from "@/components/ui/password-input";
 import { PASSWORD_MIN } from "@/lib/signup";
+
+import { OCCASIONS } from "@/lib/gallery-templates";
+import type { PlanKey } from "@/lib/plans";
 
 export function SignupForm({
   /**
@@ -17,17 +20,24 @@ export function SignupForm({
    */
   payUrl,
   planName,
+  planKey = null,
   /** ORG-3: signing up to accept an invitation, which fixes the address. */
   invitation = null,
 }: {
   payUrl: string | null;
   planName: string | null;
+  /** ADM-6: the plan button that brought them, recorded with the account. */
+  planKey?: PlanKey | null;
   invitation?: { token: string; email: string } | null;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState(invitation?.email ?? "");
   const [password, setPassword] = useState("");
+  // ADM-6: optional, and only asked of someone buying, so Klik knows what
+  // they are buying for before the payment arrives.
+  const [occasion, setOccasion] = useState("");
+  const [eventDate, setEventDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +50,12 @@ export function SignupForm({
       const response = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          ...(planKey ? { planKey, occasion: occasion || undefined, eventDate: eventDate || undefined } : {}),
+        }),
       });
       const body = await response.json().catch(() => ({}));
 
@@ -134,6 +149,32 @@ export function SignupForm({
           required
         />
       </Field>
+
+      {planKey && !invitation && (
+        <fieldset className="space-y-3 rounded-xl border border-canvas-line p-4">
+          <legend className="px-1 text-xs font-medium tracking-wide text-muted uppercase">
+            Your event <span className="normal-case tracking-normal">(optional)</span>
+          </legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-xs text-muted">What it is</span>
+              <select className={selectClass} value={occasion} onChange={(event) => setOccasion(event.target.value)}>
+                <option value="">Choose…</option>
+                {OCCASIONS.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs text-muted">When</span>
+              <input type="date" className={inputClass} value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
+            </label>
+          </div>
+          <p className="text-xs text-muted">So we can have your kit ready in time.</p>
+        </fieldset>
+      )}
 
       {error && (
         <p className="text-sm text-red-400" role="alert">

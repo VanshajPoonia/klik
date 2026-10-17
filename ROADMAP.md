@@ -59,7 +59,7 @@
 
 **The brief of 2026-10-17.** The user described the whole product flow in one message. Checked against the code the same day, most of it was already built (guest join with or without an account, guest passes kept a year, uploads into folders, per-photo privacy, bulk actions, share links for photos, folders and selections, co-hosts with roles, QR, admin provisioning with generated credentials, grants, password resets). What was missing became these tasks, built in this order, each shipped on its own:
 - **TPL-1** gallery looks per kind of event, weddings first. **Done 2026-10-17.**
-- **ADM-6** signup records which plan button was clicked, and the admin queue shows it.
+- **ADM-6** signup records which plan button was clicked, and the admin queue shows it. **Done 2026-10-17.**
 - **ACC-7** the entry sheet and a shared link offer "sign in or create an account" beside "continue as a guest".
 - **MSG-1** messages between an organizer and Klik, one conversation per organizer, read on `/admin`.
 - **ADM-7** every event on `/admin`, moving an event to another account, a new event for an existing account, and an account without an event.
@@ -1187,6 +1187,9 @@ Table `audit_log` (id, actor_user_id, action, target_type, target_id, metadata j
 **Size:** M. **Depends on:** AI-6, NEW-9.
 Guest-reported media and AI-flagged media in one queue, with actions to hide, delete, notify the organizer, or suspend an event.
 
+
+### ADM-6. Who asked for which plan
+**DONE 2026-10-17** (`drizzle/0054_plan_requests.sql`, `lib/plan-requests.ts`, `test/plan-requests.dbtest.ts`). Asked for as "who requested for what event; that click should be captured and shown on the admin panel". A plan button that reaches `/signup` writes a `plan_requests` row: from the signup form, with an optional "what it is" and "when" shown only to someone buying; and for an account already signed in, before it is sent to pay. "Signed up, not activated" says "Asked for Klik Premium, for a wedding on 13 Jun 2026" with when, the client list says it under each customer not yet activated, and each client's page lists every request above the grant form. It also lands in the account's history and in its data export. A row grants nothing (BILLING.md), a reload within ten minutes is the same request, and a plan or date the route cannot read is dropped rather than refusing the signup. Clicks by visitors who never sign up are not recorded: there is no one to attach them to.
 
 ## Phase TPL: Gallery looks
 

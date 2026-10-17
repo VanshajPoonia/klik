@@ -34,7 +34,7 @@ export default async function ClientPage({ params }: { params: Promise<{ userId:
   const { userId } = await params;
   const detail = await getClientDetail(userId);
   if (!detail) notFound();
-  const { account, events, grants, plan, creditCents, referredBy, history } = detail;
+  const { account, events, grants, plan, creditCents, referredBy, history, requests } = detail;
   const isKlik = account.role === "superadmin";
   // How far they have got and whose turn it is, the same chain the old cards showed.
   const chain = (
@@ -96,6 +96,20 @@ export default async function ClientPage({ params }: { params: Promise<{ userId:
               <h2 className={sectionTitle}>Plan</h2>
               <p className="text-sm text-muted">{plan}</p>
             </div>
+            {/* ADM-6: what they asked for, before deciding what to grant. */}
+            {requests.length > 0 && (
+              <ul className="space-y-1.5 rounded-xl border border-canvas-line px-4 py-3 text-sm">
+                {requests.map((request) => (
+                  <li key={request.id} className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <span className="text-paper">Asked for {request.summary}</span>
+                    <span className="shrink-0 text-xs text-muted">
+                      {request.at}
+                      {request.source === "signup" ? " · at signup" : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <GrantControl
               userId={account.id}
               events={liveEvents.map((event) => ({ id: event.id, name: event.name, state: event.license }))}

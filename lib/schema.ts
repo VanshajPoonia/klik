@@ -13,6 +13,7 @@ import {
   primaryKey,
   jsonb,
   vector,
+  date,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { PlanKey } from "./plans";
@@ -121,6 +122,7 @@ export const TIMELINE_KINDS = [
   "grace_email_sent",
   "grace_email_failed",
   "details_changed",
+  "plan_requested",
 ] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
@@ -152,6 +154,27 @@ export const accountTimeline = pgTable(
     index("account_timeline_user_idx").on(table.userId, table.createdAt),
     index("account_timeline_kind_idx").on(table.kind, table.createdAt),
   ],
+);
+
+/**
+ * ADM-6: every time an account asked for a plan by clicking its button, with
+ * what kind of event and when, if they said. Append-only, grants nothing.
+ * drizzle/0054_plan_requests.sql, lib/plan-requests.ts.
+ */
+export const planRequests = pgTable(
+  "plan_requests",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planKey: text("plan_key").$type<PlanKey>().notNull(),
+    occasion: text("occasion"),
+    eventDate: date("event_date", { mode: "string" }),
+    source: text("source").$type<"signup" | "signed_in">().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("plan_requests_user_idx").on(table.userId, table.createdAt)],
 );
 
 export const accounts = pgTable("accounts", {

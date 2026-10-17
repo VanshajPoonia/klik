@@ -12,6 +12,7 @@ import {
   mediaComments,
   mediaReactions,
   mediaVision,
+  planRequests,
   referrals,
   userPasskeys,
   users,
@@ -42,7 +43,7 @@ export async function accountExport(userId: string, appUrl: string) {
   const [account] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!account) return null;
 
-  const [linked, passkeys, plans, history, owned, teams, joined, credits, referralCounts, watermark, comments] = await Promise.all([
+  const [linked, passkeys, plans, history, owned, teams, joined, credits, referralCounts, watermark, comments, asked] = await Promise.all([
     db.select({ provider: accounts.provider }).from(accounts).where(eq(accounts.userId, userId)),
     db.select().from(userPasskeys).where(eq(userPasskeys.userId, userId)).orderBy(asc(userPasskeys.createdAt)),
     db.select().from(entitlements).where(eq(entitlements.userId, userId)).orderBy(asc(entitlements.createdAt)),
@@ -93,6 +94,7 @@ export async function accountExport(userId: string, appUrl: string) {
       .innerJoin(events, eq(events.id, mediaComments.eventId))
       .where(eq(mediaComments.userId, userId))
       .orderBy(asc(mediaComments.createdAt)),
+    db.select().from(planRequests).where(eq(planRequests.userId, userId)).orderBy(asc(planRequests.createdAt)),
   ]);
   const [referredBy] = await db.select({ at: referrals.createdAt }).from(referrals).where(eq(referrals.referredId, userId)).limit(1);
 
@@ -134,6 +136,12 @@ export async function accountExport(userId: string, appUrl: string) {
       usedAt: iso(plan.appliedAt),
     })),
     history: history.map((entry) => ({ what: entry.kind, detail: entry.detail, at: iso(entry.createdAt) })),
+    plansYouAskedFor: asked.map((request) => ({
+      plan: request.planKey,
+      kindOfEvent: request.occasion,
+      eventDate: request.eventDate,
+      at: iso(request.createdAt),
+    })),
     eventsYouRun: owned.map((event) => ({
       name: event.name,
       address: `${appUrl}/e/${event.slug}`,

@@ -14,6 +14,28 @@ import { recordAccountEvent } from "@/lib/timeline";
 import { isUniqueViolation, raisedBy } from "@/lib/db-errors";
 import { REFERRAL_COOKIE, attachReferral } from "@/lib/referrals";
 import { cookieFrom } from "@/lib/request-cookies";
+import { z } from "zod";
+import { PLAN_KEYS } from "@/lib/plans";
+import { OCCASIONS, type OccasionKey } from "@/lib/gallery-templates";
+import { recordPlanRequest } from "@/lib/plan-requests";
+
+/**
+ * ADM-6: which plan button brought them here, and what it is for if they said.
+ * Parsed apart from the account fields, and never a reason to refuse a signup:
+ * a value that does not parse is dropped, not argued with.
+ */
+const intentSchema = z.object({
+  planKey: z.enum(PLAN_KEYS).optional().catch(undefined),
+  occasion: z
+    .enum(OCCASIONS.map((occasion) => occasion.key) as [OccasionKey, ...OccasionKey[]])
+    .optional()
+    .catch(undefined),
+  eventDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .catch(undefined),
+});
 
 /**
  * Creates an organizer account from the public signup form.
@@ -65,6 +87,7 @@ export async function POST(request: Request) {
     );
   }
   const { name, email, password } = parsed.data;
+  const intent = intentSchema.safeParse(body ?? {}).data ?? {};
 
   const byEmail = await consume(`signup:email:${email}`, 3, 60 * 60);
   if (!byEmail.allowed) {
@@ -143,12 +166,20 @@ export async function POST(request: Request) {
   await recordAccountEvent({
     userId: created.id,
     kind: "account_created",
-    // The route does not receive the plan the dialog was opened from, so there
-    // is nothing honest to say about intent here. Carrying it through the form
-    // would make this row answer "which plan were they trying to buy", which is
-    // the first thing asked about a signup that never paid.
+    // Which plan they were trying to buy is its own row, just below (ADM-6).
     detail: "Signed up through the form.",
   });
+
+  // ADM-6: the plan button that brought them, and what it is for if they said.
+  if (intent.planKey) {
+    await recordPlanRequest({
+      userId: created.id,
+      planKey: intent.planKey,
+      occasion: intent.occasion ?? null,
+      eventDate: intent.eventDate ?? null,
+      source: "signup",
+    });
+  }
 
   // GRW-5: who sent them, if a referral link did. Never worth failing a signup over.
   await attachReferral(created.id, cookieFrom(request.headers.get("cookie"), REFERRAL_COOKIE)).catch((error) =>

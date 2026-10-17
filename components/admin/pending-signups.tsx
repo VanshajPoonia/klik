@@ -33,6 +33,17 @@ export function PendingSignups({
                 <span className="min-w-0">
                   <span className="text-paper">{signup.name ?? signup.username ?? signup.userId}</span>
                   {signup.email && <span className="ml-2 break-all text-xs text-muted">{signup.email}</span>}
+                  {/* ADM-6: the plan button they clicked, and what it is for. */}
+                  <span className="mt-0.5 block text-xs text-muted">
+                    {signup.request ? (
+                      <>
+                        Asked for <span className="text-paper">{signup.request.summary}</span>
+                        {` · ${signup.request.createdAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
+                      </>
+                    ) : (
+                      "Signed up without choosing a plan"
+                    )}
+                  </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
                   signed up {signup.createdAt.toLocaleDateString("en-GB")}

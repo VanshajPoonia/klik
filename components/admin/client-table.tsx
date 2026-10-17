@@ -99,6 +99,9 @@ export function ClientTable({ clients }: { clients: ClientSummary[] }) {
                     {[client.email, client.username ? `@${client.username}` : null].filter(Boolean).join(" · ")}
                     {` · joined ${client.joined}`}
                   </p>
+                  {client.asked && !client.activated && (
+                    <p className="truncate text-xs text-muted">Asked for {client.asked}</p>
+                  )}
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                   {client.kind === "admin" && <Badge tone="neutral">Klik</Badge>}

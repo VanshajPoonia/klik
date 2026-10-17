@@ -5,6 +5,7 @@ import { accountCredits, accountTimeline, entitlements, events, referrals, users
 import { eventLicenseState, type LicenseState } from "@/lib/license";
 import { getPlan } from "@/lib/plans";
 import type { EntitlementRow } from "@/components/admin/entitlement-list";
+import { latestPlanRequests, planRequestsFor } from "@/lib/plan-requests";
 
 /**
  * What /admin shows about accounts: one row each for the list, and everything
@@ -36,6 +37,8 @@ export interface ClientSummary {
   lapsed: number;
   /** Drafts whose organizer pressed "Ask Klik to activate it". */
   requested: number;
+  /** ADM-6: the plan they last asked for, and what for. */
+  asked: string | null;
 }
 
 const day = (date: Date) => date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -78,6 +81,7 @@ export async function listClientSummaries(): Promise<ClientSummary[]> {
         .from(entitlements)
         .where(eq(entitlements.status, "active"))
     : [];
+  const asked = await latestPlanRequests(rows.map((row) => row.userId));
   const byUser = new Map<string, typeof grants>();
   for (const grant of grants) byUser.set(grant.userId, [...(byUser.get(grant.userId) ?? []), grant]);
 
@@ -104,6 +108,7 @@ export async function listClientSummaries(): Promise<ClientSummary[]> {
         drafts: row.drafts,
         lapsed: row.lapsed,
         requested: row.requested,
+        asked: asked.get(row.userId)?.summary ?? null,
       };
     });
 }
@@ -213,9 +218,17 @@ export async function getClientDetail(userId: string) {
   }));
 
   const active = grantRows.filter((grant) => grant.status === "active");
+  const requests = await planRequestsFor(userId);
   return {
     account,
     events: clientEvents,
+    // ADM-6: every plan button they clicked, newest first.
+    requests: requests.map((request) => ({
+      id: request.id,
+      summary: request.summary,
+      at: request.createdAt.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+      source: request.source,
+    })),
     grants,
     plan: planSummary(active),
     creditCents: credit?.total ?? 0,

@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/schema";
 import { cookies } from "next/headers";
 import { REFERRAL_COOKIE, REFERRAL_CREDIT_CENTS, attachReferral, formatCents, referrerByCode } from "@/lib/referrals";
+import { recordPlanRequest } from "@/lib/plan-requests";
 
 export const metadata: Metadata = {
   title: "Create your account",
@@ -52,13 +53,15 @@ export default async function SignupPage({
 
   const referralCode = (await cookies()).get(REFERRAL_COOKIE)?.value ?? null;
   const session = await auth();
-  if (session?.user?.id && payUrl) {
+  if (session?.user?.id && payUrl && planKey) {
     // ACC-2: a signed-in account on its way to pay. Recorded before it leaves
     // for Stripe, so the payment has an account in the admin queue to match.
     await db
       .update(users)
       .set({ organizerIntentAt: sql`COALESCE(${users.organizerIntentAt}, now())` })
       .where(eq(users.id, session.user.id));
+    // ADM-6: and which plan, so the queue says what they are paying for.
+    await recordPlanRequest({ userId: session.user.id, planKey, source: "signed_in" });
     // GRW-5: a guest account becoming a customer through someone's link is
     // the path referrals exist for. Refused for an account already a customer.
     await attachReferral(session.user.id, referralCode).catch(() => false);
@@ -120,6 +123,7 @@ export default async function SignupPage({
         <SignupForm
           payUrl={payUrl}
           planName={chosen?.name ?? null}
+          planKey={planKey}
           invitation={invitation ? { token: invitation.token, email: invitation.email } : null}
         />
       </div>

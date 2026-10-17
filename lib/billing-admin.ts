@@ -1,4 +1,5 @@
 import { and, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { latestPlanRequests } from "./plan-requests";
 import { db } from "@/lib/db";
 import { entitlements, events, purchases, subscriptions, users } from "@/lib/schema";
 
@@ -89,7 +90,7 @@ export async function getPendingActivations() {
  * account that is owed something for it.
  */
 export async function getPendingSignups() {
-  return db
+  const rows = await db
     .select({
       userId: users.id,
       name: users.name,
@@ -111,4 +112,7 @@ export async function getPendingSignups() {
       ),
     )
     .orderBy(desc(users.createdAt));
+  // ADM-6: what each was trying to buy, and for what, if they said.
+  const requests = await latestPlanRequests(rows.map((row) => row.userId));
+  return rows.map((row) => ({ ...row, request: requests.get(row.userId) ?? null }));
 }

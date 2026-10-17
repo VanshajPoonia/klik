@@ -109,3 +109,62 @@ describe("templates in Settings", () => {
     expect(await colorsOf(id)).toEqual({ accent: "#123456", background: "#abcdef" });
   });
 });
+
+describe("TPL-1 looks and the host's words", () => {
+  async function lookOf(id: string) {
+    const [row] = await testDb
+      .select({ key: events.templateKey, fields: events.templateFields })
+      .from(events)
+      .where(eq(events.id, id));
+    return row;
+  }
+
+  it("stores the look, its colourway and only the words that look asks for", async () => {
+    session.user = { id: await makeUser() };
+    const response = await createEvent(
+      request("POST", "/api/events", {
+        name: "Ana & Bo's wedding",
+        template: "black-tie",
+        colorway: "silver",
+        templateFields: { names: [" Ana ", "Bo"], age: 30, message: "Thank you" },
+      }),
+    );
+    expect(response.status).toBe(201);
+    const { event } = await response.json();
+    expect(await lookOf(event.id)).toEqual({ key: "black-tie", fields: { names: ["Ana", "Bo"], message: "Thank you" } });
+    expect(await colorsOf(event.id)).toEqual({ accent: "#c9cdd3", background: "#0b0c0e" });
+  });
+
+  it("refuses a word it does not know rather than store it for guests", async () => {
+    session.user = { id: await makeUser() };
+    const response = await createEvent(
+      request("POST", "/api/events", { name: "X", template: "party", templateFields: { script: "<b>" } }),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("lets the $39 plan change look and words, and keeps them to the new look", async () => {
+    const id = await liveEvent("event");
+    const response = await saveEvent(
+      request("PATCH", `/api/events/${id}`, {
+        templateKey: "party",
+        templateFields: { name: "Maya", age: 30, names: ["Ana", "Bo"] },
+        accentColor: "#ff4f8b",
+        backgroundColor: "#1c0f22",
+      }),
+      { params: Promise.resolve({ id }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await lookOf(id)).toEqual({ key: "party", fields: { name: "Maya", age: 30 } });
+  });
+
+  it("clears a cleared age instead of refusing the save", async () => {
+    const id = await liveEvent("event");
+    const response = await saveEvent(
+      request("PATCH", `/api/events/${id}`, { templateKey: "party", templateFields: { name: "Maya", age: null } }),
+      { params: Promise.resolve({ id }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await lookOf(id)).toEqual({ key: "party", fields: { name: "Maya" } });
+  });
+});

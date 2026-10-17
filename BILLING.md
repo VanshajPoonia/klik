@@ -339,6 +339,13 @@ queue, so the panel reads `users.organizer_intent_at`, which is set by:
 - `/signup?plan=<key>` when the visitor is already signed in, **before** the redirect to
   the Payment Link, so a guest account that buys still lands in the queue.
 
+**Which plan, since ADM-6 (2026-10-17).** The same two places also write a `plan_requests`
+row (`lib/plan-requests.ts`): the plan whose button was clicked, and, from the signup form
+only, an optional kind of event and date. The queue row and the client page say "Asked for
+Klik Premium, for a wedding on 13 Jun 2026", so the person granting knows what was bought
+before finding it in Stripe. A row grants nothing and is never updated; a reload within ten
+minutes is not a second request.
+
 Every pricing button goes through `/signup?plan=`, so every purchase made through the
 site sets it. A Payment Link opened directly, from a shared URL, does not; that buyer is
 found by email on `/admin/search`. Accounts that existed before this were backfilled
