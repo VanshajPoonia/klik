@@ -244,8 +244,8 @@ async function playbackHost(): Promise<string | null> {
 /** An hour covers a three-minute clip, pauses and all, and is far under Stream's 24-hour cap. */
 export const PLAYBACK_TOKEN_SECONDS = 60 * 60;
 
-/** The HLS manifest for one video, behind a token this server signed. Null if it cannot be made. */
-export async function signedManifestUrl(uid: string, now = Date.now()): Promise<string | null> {
+/** Where one video is, behind a token this server signed, which Stream takes wherever it takes a uid. */
+async function signedVideoBase(uid: string, now: number): Promise<string | null> {
   const host = await playbackHost();
   if (!host) return null;
   const { id, key } = await streamSigningKey();
@@ -255,7 +255,33 @@ export async function signedManifestUrl(uid: string, now = Date.now()): Promise<
     .setNotBefore(seconds - 60)
     .setExpirationTime(seconds + PLAYBACK_TOKEN_SECONDS)
     .sign(key);
-  return `https://${host}/${token}/manifest/video.m3u8`;
+  return `https://${host}/${token}`;
+}
+
+/** The HLS manifest for one video, behind a token this server signed. Null if it cannot be made. */
+export async function signedManifestUrl(uid: string, now = Date.now()): Promise<string | null> {
+  const base = await signedVideoBase(uid, now);
+  return base ? `${base}/manifest/video.m3u8` : null;
+}
+
+/**
+ * A still from a ready copy, as JPEG bytes, for a video that arrived without
+ * a poster because the uploader's browser could not draw it (HEVC outside
+ * Safari, say). Null when there is none to be had: a missing poster is a
+ * plain tile, never a failure.
+ */
+export async function streamPoster(uid: string, options: Options = {}): Promise<Buffer | null> {
+  const base = await signedVideoBase(uid, Date.now());
+  if (!base) return null;
+  try {
+    const response = await (options.fetchImpl ?? fetch)(`${base}/thumbnails/thumbnail.jpg?time=0.15s&height=720`, {
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok || !response.headers.get("content-type")?.startsWith("image/")) return null;
+    return Buffer.from(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
 }
 
 /** Whether a video plays from its Stream copy. */

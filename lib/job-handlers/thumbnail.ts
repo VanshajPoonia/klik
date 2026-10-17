@@ -38,8 +38,9 @@ export async function generateThumbnail(
     .limit(1);
   if (!row || row.thumbPathname) return;
 
-  // A video is thumbnailed from its poster still, never from the video. Until
-  // OPS-1 a video with no poster simply has nothing to make one from.
+  // A video is thumbnailed from its poster still, never from the video. One
+  // with no poster gets one from its Stream copy (OPS-1), which queues this
+  // again; without Stream it has nothing to make one from.
   const sourceKey = row.kind === "video" ? row.posterPathname : row.blobPathname;
   if (!sourceKey) return;
 

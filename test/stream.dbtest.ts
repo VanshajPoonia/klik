@@ -20,6 +20,7 @@ vi.mock("@/lib/media-urls", async (importOriginal) => ({
 const { transcodeVideo, backfillTranscodes, reapStreamCopies } = await import("@/lib/job-handlers/transcode");
 const { GET: content } = await import("@/app/api/e/[slug]/media/[mediaId]/content/route");
 const { jobs, media, providerSecrets, streamDeletions } = await import("@/lib/schema");
+const { r2 } = await import("@/lib/storage");
 const { closeDatabase, makeEvent, makeMedia, makeUser, resetDatabase, testDb } = await import("./harness");
 
 const context = { jobId: "j", attempt: 1, maxAttempts: 5, deadline: Date.now() + 60_000 };
@@ -32,8 +33,18 @@ const jwk = { ...(await exportJWK(privateKey)), kid: "key_1", alg: "RS256" };
 let videoState: { readyToStream: boolean; state: string } = { readyToStream: false, state: "inprogress" };
 const calls: Array<{ method: string; path: string; body: unknown }> = [];
 let deleteStatus = 200;
+/** What the playback host was asked for, and how it answers a thumbnail. */
+const stills: string[] = [];
+let stillStatus = 200;
+let send: ReturnType<typeof vi.spyOn>;
 
 function stream(url: string, init?: RequestInit): Response {
+  if (url.startsWith("https://customer-abc123.cloudflarestream.com/")) {
+    stills.push(url);
+    return stillStatus === 200
+      ? new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), { headers: { "content-type": "image/jpeg" } })
+      : new Response("not found", { status: stillStatus, headers: { "content-type": "text/plain" } });
+  }
   const path = url.replace(/^https:\/\/api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/stream/, "");
   const method = init?.method ?? "GET";
   calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : null });
@@ -60,18 +71,29 @@ beforeEach(async () => {
   calls.length = 0;
   videoState = { readyToStream: false, state: "inprogress" };
   deleteStatus = 200;
+  stills.length = 0;
+  stillStatus = 200;
+  send = vi.spyOn(r2, "send").mockResolvedValue({} as never);
   process.env.CLOUDFLARE_STREAM_API_TOKEN = "stream-token";
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => stream(String(input), init)));
   await resetDatabase();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  send.mockRestore();
   delete process.env.CLOUDFLARE_STREAM_API_TOKEN;
 });
 afterAll(closeDatabase);
 
 async function clip(eventId: string, overrides: Parameters<typeof makeMedia>[1] = {}) {
-  return makeMedia(eventId, { kind: "video", mimeType: "video/mp4", metadataState: "clean", ...overrides });
+  // With the poster its uploader's browser made, as most videos have.
+  return makeMedia(eventId, {
+    kind: "video",
+    mimeType: "video/mp4",
+    metadataState: "clean",
+    posterPathname: `events/${eventId}/clip-poster.jpg`,
+    ...overrides,
+  });
 }
 const row = async (id: string) => (await testDb.select().from(media).where(eq(media.id, id)))[0];
 
@@ -212,5 +234,52 @@ describe("deleting a video deletes its Stream copy", () => {
     const { events } = await import("@/lib/schema");
     await testDb.delete(events).where(eq(events.id, eventId));
     expect((await testDb.select().from(streamDeletions)).map((row) => row.uid)).toEqual([UID]);
+  });
+});
+
+// Last, because the signing key is kept in the module once made, and the
+// playback test above counts the call that makes it.
+describe("a video that arrived without a poster", () => {
+  async function ready(id: string) {
+    await transcodeVideo({ mediaId: id }, context);
+    videoState = { readyToStream: true, state: "ready" };
+    await transcodeVideo({ mediaId: id }, context);
+  }
+
+  it("takes one from its copy, behind a signed token, then queues its thumbnail", async () => {
+    const eventId = await makeEvent(await makeUser());
+    const id = await clip(eventId, { mimeType: "video/quicktime", posterPathname: null });
+    await ready(id);
+
+    expect(stills).toHaveLength(1);
+    const match = /^https:\/\/customer-abc123\.cloudflarestream\.com\/([^/]+)\/thumbnails\/thumbnail\.jpg\?time=0\.15s&height=720$/.exec(stills[0]);
+    expect(match).not.toBeNull();
+    expect((await jwtVerify(match![1], publicKey)).payload.sub).toBe(UID);
+
+    const key = `events/${eventId}/${id}-poster.jpg`;
+    const put = send.mock.calls.map((call: unknown[]) => (call[0] as { input: { Key: string; ContentType: string } }).input);
+    expect(put).toEqual([expect.objectContaining({ Key: key, ContentType: "image/jpeg" })]);
+    expect(await row(id)).toMatchObject({ streamState: "ready", posterPathname: key });
+    const queued = await testDb.select().from(jobs);
+    expect(queued.map((job) => [job.kind, (job.payload as { mediaId: string }).mediaId])).toContainEqual(["media.thumbnail", id]);
+  });
+
+  it("keeps the poster its uploader's browser made", async () => {
+    const eventId = await makeEvent(await makeUser());
+    const filmed = await clip(eventId);
+    await ready(filmed);
+    expect(stills).toHaveLength(0);
+    expect(send).not.toHaveBeenCalled();
+    expect((await row(filmed)).posterPathname).toBe(`events/${eventId}/clip-poster.jpg`);
+  });
+
+  it("leaves the copy playing when Stream has no still to give", async () => {
+    const eventId = await makeEvent(await makeUser());
+    stillStatus = 404;
+    const bare = await clip(eventId, { posterPathname: null });
+    await ready(bare);
+    expect(stills).toHaveLength(1);
+    expect(send).not.toHaveBeenCalled();
+    expect(await row(bare)).toMatchObject({ streamState: "ready", posterPathname: null });
   });
 });

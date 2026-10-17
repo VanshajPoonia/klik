@@ -1,8 +1,10 @@
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { and, asc, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { media, streamDeletions } from "../schema";
 import { signObjectUrl } from "../media-urls";
-import { enqueueTranscode, type JobPayload } from "../jobs";
+import { posterPathnameFor, r2 } from "../storage";
+import { enqueueThumbnail, enqueueTranscode, type JobPayload } from "../jobs";
 import {
   StreamError,
   copyToStream,
@@ -12,6 +14,7 @@ import {
   getStreamVideo,
   isStreamConfigured,
   rememberCustomerHost,
+  streamPoster,
 } from "../stream";
 import { log } from "../observability";
 import type { JobContext, JobOutcome } from "../job-runner";
@@ -41,6 +44,7 @@ export async function transcodeVideo(payload: JobPayload<"media.transcode">, con
       createdAt: media.createdAt,
       streamUid: media.streamUid,
       streamState: media.streamState,
+      posterPathname: media.posterPathname,
     })
     .from(media)
     .where(eq(media.id, payload.mediaId))
@@ -71,6 +75,7 @@ export async function transcodeVideo(payload: JobPayload<"media.transcode">, con
       if (host) await rememberCustomerHost(host);
       await db.update(media).set({ streamState: "ready" }).where(eq(media.id, row.id));
       log.info("stream.ready", { mediaId: row.id });
+      if (!row.posterPathname) await posterFromCopy({ id: row.id, eventId: row.eventId, streamUid: row.streamUid });
       return;
     }
     if (video.state === "error" || Date.now() - row.createdAt.getTime() > GIVE_UP_MS) {
@@ -84,6 +89,32 @@ export async function transcodeVideo(payload: JobPayload<"media.transcode">, con
     if (retryable && context.attempt < context.maxAttempts) throw error;
     await db.update(media).set({ streamState: "failed" }).where(eq(media.id, row.id));
     log.warn("stream.failed", { mediaId: row.id, error });
+  }
+}
+
+/**
+ * A video with no poster, because the uploader's browser could not draw a
+ * frame of it, takes one from its copy, and its grid thumbnail from that.
+ * Best effort and after the copy is marked ready, so a still that cannot be
+ * had never costs the video its playback.
+ */
+async function posterFromCopy(row: { id: string; eventId: string; streamUid: string }) {
+  try {
+    const still = await streamPoster(row.streamUid);
+    if (!still) return;
+    const key = posterPathnameFor(row.eventId, row.id);
+    await r2.send(
+      new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, Body: still, ContentType: "image/jpeg" }),
+    );
+    const saved = await db
+      .update(media)
+      .set({ posterPathname: key })
+      .where(and(eq(media.id, row.id), isNull(media.posterPathname)))
+      .returning({ id: media.id });
+    if (saved.length > 0) await enqueueThumbnail(row.id);
+    log.info("stream.poster_saved", { mediaId: row.id });
+  } catch (error) {
+    log.warn("stream.poster_failed", { mediaId: row.id, error });
   }
 }
 
