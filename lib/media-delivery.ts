@@ -26,6 +26,7 @@ export function toPublicMedia(
     albumId: string | null;
     createdAt: Date;
     mine?: boolean;
+    uploaderHidden?: boolean;
     posterPathname?: string | null;
     durationS?: number | null;
     reactionCount?: number;
@@ -54,6 +55,9 @@ export function toPublicMedia(
     albumId: item.albumId,
     createdAt: item.createdAt,
     mine: Boolean(item.mine),
+    // MED-11: their own photo, hidden by them, so the gallery can offer to
+    // show it again. Only ever true on the viewer's own upload.
+    hiddenByMe: Boolean(item.mine && item.visibility === "private" && item.uploaderHidden),
     blobUrl: mediaContentPath(slug, item.id),
     // Null when the clip predates poster extraction or the browser could not
     // decode it; the grid falls back to loading video metadata in that case.

@@ -63,7 +63,7 @@
 - **ACC-7** the entry sheet and a shared link offer "sign in or create an account" beside "continue as a guest". **Done 2026-10-17.**
 - **MSG-1** messages between an organizer and Klik, one conversation per organizer, read on `/admin`. **Done 2026-10-17.**
 - **ADM-7** every event on `/admin`, moving an event to another account, a new event for an existing account, and an account without an event. **Done 2026-10-17.**
-- **MED-11** guests manage their own uploads: hide or show, move to a folder, make a share link, hide all of theirs. "Private" means the guest and the event's team, decided 2026-10-17.
+- **MED-11** guests manage their own uploads: hide or show, move to a folder, make a share link, hide all of theirs. "Private" means the guest and the event's team, decided 2026-10-17. **Done 2026-10-17.**
 - **MED-12** private folders the host can hide from guests.
 
 ## Contents
@@ -747,6 +747,15 @@ Still open here:
 - Changing a watermark applies to proofs uploaded afterwards; ones already stamped keep theirs.
 
 Found while building it, and fixed for every upload: the upload id is chosen by the browser, so an upload asking to be called `<another photo's id>-thumb` was handed a signed PUT for that photo's thumbnail and could replace what every guest saw in its tile (the same for `-poster`). `lib/media-id.ts` now refuses ids ending in a suffix the server derives keys with, in all four upload routes.
+
+### MED-11. Guests arrange what they uploaded
+**DONE 2026-10-17** (`drizzle/0057_uploader_hidden.sql`, `app/api/e/[slug]/me/media`, `app/api/e/[slug]/me/shares`, `test/guest-self-service.dbtest.ts`). Asked for as "users can select pictures, move them to folders, make some private, make all private, share them with a link". In the gallery, **Select yours** picks only the guest's own uploads (everyone else's fade and do nothing), and a bar at the thumb offers Hide, Show, Move to a folder and Link. The footer has **Hide all of mine** and **Your links**, where a guest turns off links they made. Decided 2026-10-17: hidden means the guest and the event's team, said as "Hidden: you and the hosts" on the tile.
+- **A guest undoes only their own hiding.** `media.uploader_hidden` records that the private visibility came from the uploader; a trigger clears it whenever anyone else changes the visibility, so a photo the host hid, or decided on after the guest did, stays hidden whatever the guest presses. A trigger rather than per-route code, so a later route cannot forget it.
+- **Hiding your own photo never hides it from you**, even where the host turned off "uploaders keep seeing their private photos": the access rule lets an uploader see what they hid themselves. `test/media-access.dbtest.ts` now checks the SQL filter and the single-row rule agree with `uploader_hidden` as a fourth axis.
+- **Links** are photo links for one and selection links for several, through the same gate as the host's, recorded with `created_by_guest_id`; only the guest's own uploads go in, and the host sees and can turn off every one on the Links tab.
+- Hiding works even when the gallery is closed; showing, filing and links need it open. Not a kiosk.
+- Found on the way: badges over a photo used the gallery's text colour on a dark pill, unreadable on every light look. They are white now.
+- **Not built:** sharing with particular people by name or email. A link can carry a password from the host's side; per-person access would be its own task.
 
 ---
 

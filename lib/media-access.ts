@@ -57,7 +57,7 @@ export function rollUndeveloped(event: MediaAccessEvent, now = new Date()): bool
  * cannot accidentally check visibility while forgetting status.
  */
 export function canViewMedia(
-  item: Pick<Media, "visibility" | "status" | "guestId">,
+  item: Pick<Media, "visibility" | "status" | "guestId" | "uploaderHidden">,
   viewer: MediaViewer,
   event: MediaAccessEvent,
 ): boolean {
@@ -76,8 +76,10 @@ export function canViewMedia(
 
     case "private":
       // Managers already returned true above, so reaching here means a guest.
-      // They see it only if it is theirs and the host left the setting on.
-      return event.uploaderSeesOwnPrivate && isUploader;
+      // They see it only if it is theirs, and either the host left the setting
+      // on or they hid it themselves (MED-11): hiding your own photo from
+      // everyone must not hide it from you.
+      return isUploader && (event.uploaderSeesOwnPrivate || item.uploaderHidden);
 
     case "link":
       // Never in the gallery, for anyone but a manager. A link-only photo is
@@ -132,12 +134,17 @@ export function mediaVisibilityFilter(
 
   const branches: SQL[] = [galleryApproved, ownPending];
 
-  if (event.uploaderSeesOwnPrivate) {
-    // Their own private photo. Status is deliberately not checked here: it is
-    // their photo either way, and a pending private photo disappearing on them
-    // would be the same confusing vanishing act the setting exists to avoid.
-    branches.push(and(eq(media.visibility, "private"), eq(media.guestId, guestId))!);
-  }
+  // Their own private photo. Status is deliberately not checked here: it is
+  // their photo either way, and a pending private photo disappearing on them
+  // would be the same confusing vanishing act the setting exists to avoid.
+  // With the setting off, still the ones they hid themselves (MED-11).
+  branches.push(
+    and(
+      eq(media.visibility, "private"),
+      eq(media.guestId, guestId),
+      event.uploaderSeesOwnPrivate ? undefined : eq(media.uploaderHidden, true),
+    )!,
+  );
 
   return and(or(...branches)!, notHeldBack);
 }

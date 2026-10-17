@@ -1,0 +1,167 @@
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq, inArray } from "drizzle-orm";
+
+/**
+ * MED-11: a guest hides, shows and files their own uploads and sends links to
+ * them, never anyone else's, and never undoes what the host decided.
+ */
+
+const jar = new Map<string, string>();
+vi.mock("@/lib/db", async () => ({ db: (await import("./harness")).testDb }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (jar.has(name) ? { name, value: jar.get(name) } : undefined) }),
+}));
+vi.mock("@/lib/roles", () => ({ requireEventManagerSession: async () => null }));
+
+const { POST: arrange } = await import("@/app/api/e/[slug]/me/media/route");
+const { GET: listLinks, POST: makeLink, DELETE: turnOff } = await import("@/app/api/e/[slug]/me/shares/route");
+const { guestCookieName, signGuestSession } = await import("@/lib/guest");
+const { fetchGalleryMedia } = await import("@/lib/media");
+const { grantEntitlement } = await import("@/lib/entitlements");
+const { albums, media, mediaShareItems, mediaShares } = await import("@/lib/schema");
+const { closeDatabase, makeEvent, makeGuest, makeMedia, makeUser, resetDatabase, testDb } = await import("./harness");
+
+beforeEach(async () => {
+  jar.clear();
+  await resetDatabase();
+});
+afterAll(closeDatabase);
+
+async function setUp(overrides: Parameters<typeof makeEvent>[1] = {}) {
+  const owner = await makeUser();
+  const eventId = await makeEvent(owner, overrides);
+  await grantEntitlement({ userId: owner, planKey: "event", source: "admin", reason: "Test", grantedBy: null, applyToEventId: eventId });
+  const me = await makeGuest(eventId);
+  const someone = await makeGuest(eventId);
+  jar.set(guestCookieName(eventId), await signGuestSession({ guestId: me, eventId }));
+  return { owner, eventId, slug: `${eventId}-slug`, me, someone };
+}
+
+const call = (handler: typeof arrange, slug: string, body: unknown) =>
+  handler(
+    new Request(`https://klik.test/api/e/${slug}/me/media`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.20" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ slug }) },
+  );
+const rowsOf = (ids: string[]) => testDb.select().from(media).where(inArray(media.id, ids));
+
+describe("MED-11 hiding and showing", () => {
+  it("hides only the guest's own, keeps it in their view, and hides it from everyone else", async () => {
+    const { eventId, slug, me, someone } = await setUp({ uploaderSeesOwnPrivate: false });
+    const mine = await makeMedia(eventId, { guestId: me });
+    const theirs = await makeMedia(eventId, { guestId: someone });
+
+    const response = await call(arrange, slug, { action: "hide", ids: [mine, theirs] });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ changed: [mine], skipped: [theirs] });
+    const [mineRow, theirsRow] = await Promise.all([rowsOf([mine]), rowsOf([theirs])]);
+    expect(mineRow[0]).toMatchObject({ visibility: "private", uploaderHidden: true });
+    expect(theirsRow[0].visibility).toBe("gallery");
+
+    // The host turned off "uploaders keep seeing their private photos", and
+    // still the guest sees the one they hid themselves.
+    const event = { uploaderSeesOwnPrivate: false, disposableMode: false, developsAt: null };
+    const forMe = await fetchGalleryMedia(eventId, { isOwner: false, guestId: me, event, limit: 50 });
+    const forSomeone = await fetchGalleryMedia(eventId, { isOwner: false, guestId: someone, event, limit: 50 });
+    expect(forMe.map((row) => row.id)).toContain(mine);
+    expect(forSomeone.map((row) => row.id)).not.toContain(mine);
+
+    expect(await (await call(arrange, slug, { action: "show", ids: [mine] })).json()).toEqual({ changed: [mine], skipped: [] });
+    expect((await rowsOf([mine]))[0]).toMatchObject({ visibility: "gallery", uploaderHidden: false });
+  });
+
+  it("never shows what the host hid, even after the guest hid it first", async () => {
+    const { eventId, slug, me } = await setUp();
+    const hostHid = await makeMedia(eventId, { guestId: me, visibility: "private" });
+    const both = await makeMedia(eventId, { guestId: me });
+    await call(arrange, slug, { action: "hide", ids: [both] });
+    // The team takes it to link-only, then back to hidden: their decision now.
+    await testDb.update(media).set({ visibility: "link" }).where(eq(media.id, both));
+    await testDb.update(media).set({ visibility: "private" }).where(eq(media.id, both));
+    expect((await rowsOf([both]))[0].uploaderHidden).toBe(false);
+
+    const response = await call(arrange, slug, { action: "show", ids: [hostHid, both] });
+    expect((await response.json()).changed).toEqual([]);
+    expect((await rowsOf([hostHid, both])).map((row) => row.visibility)).toEqual(["private", "private"]);
+  });
+
+  it("hides all of a guest's uploads at once", async () => {
+    const { eventId, slug, me, someone } = await setUp();
+    const ids = [await makeMedia(eventId, { guestId: me }), await makeMedia(eventId, { guestId: me })];
+    const theirs = await makeMedia(eventId, { guestId: someone });
+    const response = await call(arrange, slug, { action: "hide", all: true });
+    expect((await response.json()).changed.sort()).toEqual([...ids].sort());
+    expect((await rowsOf([theirs]))[0].visibility).toBe("gallery");
+  });
+
+  it("refuses without a guest cookie", async () => {
+    const { eventId, slug, me } = await setUp();
+    const mine = await makeMedia(eventId, { guestId: me });
+    jar.clear();
+    expect((await call(arrange, slug, { action: "hide", ids: [mine] })).status).toBe(401);
+  });
+});
+
+describe("MED-11 folders", () => {
+  it("files the guest's own into this event's folders only", async () => {
+    const { eventId, slug, me, someone } = await setUp();
+    const otherEvent = await makeEvent(await makeUser());
+    await testDb.insert(albums).values([
+      { id: "alb_here", eventId, name: "Ceremony" },
+      { id: "alb_there", eventId: otherEvent, name: "Elsewhere" },
+    ]);
+    const mine = await makeMedia(eventId, { guestId: me });
+    const theirs = await makeMedia(eventId, { guestId: someone });
+
+    expect((await call(arrange, slug, { action: "move", ids: [mine, theirs], albumId: "alb_here" })).status).toBe(200);
+    expect((await rowsOf([mine]))[0].albumId).toBe("alb_here");
+    expect((await rowsOf([theirs]))[0].albumId).toBeNull();
+    expect((await call(arrange, slug, { action: "move", ids: [mine], albumId: "alb_there" })).status).toBe(404);
+    await call(arrange, slug, { action: "move", ids: [mine], albumId: null });
+    expect((await rowsOf([mine]))[0].albumId).toBeNull();
+  });
+});
+
+describe("MED-11 links", () => {
+  const linkCall = (handler: typeof makeLink, slug: string, init: RequestInit = {}, query = "") =>
+    handler(
+      new Request(`https://klik.test/api/e/${slug}/me/shares${query}`, {
+        headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.21" },
+        ...init,
+      }),
+      { params: Promise.resolve({ slug }) },
+    );
+
+  it("makes a photo link for one and a selection for several, of their own only, and turns them off", async () => {
+    const { eventId, slug, me, someone } = await setUp();
+    const a = await makeMedia(eventId, { guestId: me });
+    const b = await makeMedia(eventId, { guestId: me });
+    const theirs = await makeMedia(eventId, { guestId: someone });
+
+    const one = await linkCall(makeLink, slug, { method: "POST", body: JSON.stringify({ ids: [a] }) });
+    expect(one.status).toBe(201);
+    const several = await linkCall(makeLink, slug, { method: "POST", body: JSON.stringify({ ids: [a, b, theirs] }) });
+    expect(await several.json()).toMatchObject({ count: 2, skipped: 1 });
+    expect((await linkCall(makeLink, slug, { method: "POST", body: JSON.stringify({ ids: [theirs] }) })).status).toBe(404);
+
+    const shares = await testDb.select().from(mediaShares).where(eq(mediaShares.createdByGuestId, me));
+    expect(shares.map((share) => share.scope).sort()).toEqual(["media", "selection"]);
+    const selection = shares.find((share) => share.scope === "selection")!;
+    const items = await testDb.select().from(mediaShareItems).where(eq(mediaShareItems.shareId, selection.id));
+    expect(items.map((item) => item.mediaId).sort()).toEqual([a, b].sort());
+
+    const listed = await (await linkCall(listLinks, slug)).json();
+    expect(listed.links).toHaveLength(2);
+    expect((await linkCall(turnOff, slug, { method: "DELETE" }, `?id=${selection.id}`)).status).toBe(200);
+    const [after] = await testDb.select().from(mediaShares).where(eq(mediaShares.id, selection.id));
+    expect(after.revokedAt).not.toBeNull();
+
+    // Someone else's link is not theirs to turn off.
+    jar.set(guestCookieName(eventId), await signGuestSession({ guestId: someone, eventId }));
+    const mediaLink = shares.find((share) => share.scope === "media")!;
+    expect((await linkCall(turnOff, slug, { method: "DELETE" }, `?id=${mediaLink.id}`)).status).toBe(404);
+  });
+});

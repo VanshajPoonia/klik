@@ -47,17 +47,20 @@ describe("the SQL filter and the boolean check agree", () => {
 
         // One row per combination, so a single query exercises the whole matrix.
         const expected = new Map<string, boolean>();
+        // MED-11 added a fourth axis: whether the uploader hid it themselves.
         for (const visibility of MEDIA_VISIBILITIES) {
           for (const status of MEDIA_STATUSES) {
-            const id = await makeMedia(eventId, { visibility, status, guestId: uploader });
-            expected.set(
-              id,
-              canViewMedia(
-                { visibility, status, guestId: uploader },
-                { isManager: false, guestId: viewer },
-                event,
-              ),
-            );
+            for (const uploaderHidden of [false, true]) {
+              const id = await makeMedia(eventId, { visibility, status, guestId: uploader, uploaderHidden });
+              expected.set(
+                id,
+                canViewMedia(
+                  { visibility, status, guestId: uploader, uploaderHidden },
+                  { isManager: false, guestId: viewer },
+                  event,
+                ),
+              );
+            }
           }
         }
 
@@ -182,7 +185,7 @@ describe("what a guest actually sees", () => {
     // And it is still approved, so un-hiding it does not need re-moderating.
     expect(
       canViewMedia(
-        { visibility: "gallery", status: "approved", guestId: other },
+        { visibility: "gallery", status: "approved", guestId: other, uploaderHidden: false },
         { isManager: false, guestId: guest },
         { uploaderSeesOwnPrivate: true, disposableMode: false, developsAt: null },
       ),
@@ -238,7 +241,7 @@ describe("an unknown visibility", () => {
     expect(
       canViewMedia(
         // Deliberately not a valid MediaVisibility.
-        { visibility: "something-new" as never, status: "approved", guestId: "g1" },
+        { visibility: "something-new" as never, status: "approved", guestId: "g1", uploaderHidden: false },
         { isManager: false, guestId: "g1" },
         { uploaderSeesOwnPrivate: true, disposableMode: false, developsAt: null },
       ),
@@ -248,7 +251,7 @@ describe("an unknown visibility", () => {
   it("is still visible to a manager, so nothing becomes unreachable", () => {
     expect(
       canViewMedia(
-        { visibility: "something-new" as never, status: "approved", guestId: "g1" },
+        { visibility: "something-new" as never, status: "approved", guestId: "g1", uploaderHidden: false },
         { isManager: true, guestId: null },
         { uploaderSeesOwnPrivate: true, disposableMode: false, developsAt: null },
       ),

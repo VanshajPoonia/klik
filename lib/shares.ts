@@ -299,7 +299,9 @@ export async function countShareView(token: string): Promise<boolean> {
 export interface CreateMediaShareInput {
   eventId: string;
   mediaId: string;
-  createdByUserId: string;
+  /** The team member who made it, or null when a guest did (MED-11). */
+  createdByUserId: string | null;
+  createdByGuestId?: string | null;
   allowDownload?: boolean;
   expiresAt?: Date | null;
   maxViews?: number | null;
@@ -316,6 +318,7 @@ export async function createMediaShare(input: CreateMediaShareInput): Promise<Me
       mediaId: input.mediaId,
       scope: "media",
       createdByUserId: input.createdByUserId,
+      createdByGuestId: input.createdByGuestId ?? null,
       allowDownload: input.allowDownload ?? false,
       expiresAt: input.expiresAt ?? null,
       maxViews: input.maxViews ?? null,
@@ -328,7 +331,8 @@ export async function createMediaShare(input: CreateMediaShareInput): Promise<Me
 
 export interface CreateCollectionShareInput {
   eventId: string;
-  createdByUserId: string;
+  createdByUserId: string | null;
+  createdByGuestId?: string | null;
   /** A folder link. */
   albumId?: string;
   /** A selection link: photos already checked to be in this event. */
@@ -356,6 +360,7 @@ export async function createCollectionShare(input: CreateCollectionShareInput): 
       albumId: selection ? null : (input.albumId ?? null),
       scope: selection ? "selection" : "album",
       createdByUserId: input.createdByUserId,
+      createdByGuestId: input.createdByGuestId ?? null,
       allowDownload: input.allowDownload ?? false,
       expiresAt: input.expiresAt ?? null,
       maxViews: input.maxViews ?? null,

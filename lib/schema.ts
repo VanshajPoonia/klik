@@ -528,6 +528,10 @@ export const media = pgTable(
     // the query builder in lib/media.ts and the content delivery route. Both
     // go through lib/media-access.ts so there is one rule, not two.
     visibility: text("visibility").$type<MediaVisibility>().notNull().default("gallery"),
+    // MED-11: the private visibility came from the guest who uploaded it, so
+    // they may undo it. Cleared by a trigger whenever anyone else changes the
+    // visibility (drizzle/0057_uploader_hidden.sql).
+    uploaderHidden: boolean("uploader_hidden").notNull().default(false),
     blobUrl: text("blob_url").notNull(),
     blobPathname: text("blob_pathname").notNull(),
     contentHash: text("content_hash"),

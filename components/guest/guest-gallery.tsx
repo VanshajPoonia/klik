@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { nanoid } from "nanoid";
-import { Camera, CheckCircle2, ChevronLeft, Circle, Heart, ImagePlus, Layers, MessageCircle, Play, Printer, Stamp } from "lucide-react";
+import { Camera, Check, CheckCircle2, ChevronLeft, Circle, EyeOff, Eye, FolderInput, Heart, ImagePlus, Layers, Link2, MessageCircle, Play, Printer, Stamp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PublicEvent } from "@/lib/events";
 import { ensureContrast, readableOn } from "@/lib/color";
@@ -89,6 +89,8 @@ interface MediaItem {
   challengeId?: string | null;
   /** MED-10. A watermarked proof. */
   proof?: boolean;
+  /** MED-11. Their own, hidden by them, so they may show it again. */
+  hiddenByMe?: boolean;
 }
 
 interface PendingUpload {
@@ -696,6 +698,105 @@ export function GuestGallery({
     window.location.reload();
   }, [clearUploads, event.slug, t]);
 
+  // MED-11: a guest arranging what they uploaded. Selecting is only ever over
+  // their own; everyone else's tiles fade and do nothing while it is on.
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [arranging, setArranging] = useState(false);
+  const [madeLink, setMadeLink] = useState<{ url: string; count: number } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [linksOpen, setLinksOpen] = useState(false);
+  const [myLinks, setMyLinks] = useState<Array<{ id: string; url: string; count: number; off: boolean }> | null>(null);
+  const hasMine = !isOwner && items.some((item) => item.mine);
+  const stopSelecting = useCallback(() => {
+    setSelecting(false);
+    setSelectedIds(new Set());
+  }, []);
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  /** Hide, show or file the guest's own uploads, and show the result at once. */
+  const arrange = useCallback(
+    async (body: { action: "hide" | "show" | "move"; ids?: string[]; all?: true; albumId?: string | null }) => {
+      setArranging(true);
+      setNotice(null);
+      try {
+        const res = await fetch(`/api/e/${event.slug}/me/media`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setNotice(data.error ?? t.gallery.arrangeFailed);
+          return;
+        }
+        const changed = new Set<string>(data.changed ?? []);
+        setItems((current) =>
+          current.map((item) => {
+            if (!changed.has(item.id)) return item;
+            if (body.action === "hide") return { ...item, visibility: "private", hiddenByMe: true };
+            if (body.action === "show") return { ...item, visibility: "gallery", hiddenByMe: false };
+            return { ...item, albumId: body.albumId ?? null };
+          }),
+        );
+        const done =
+          body.action === "hide"
+            ? t.gallery.hiddenNotice(changed.size)
+            : body.action === "show"
+              ? t.gallery.shownNotice(changed.size)
+              : t.gallery.movedNotice(changed.size);
+        const skipped = (data.skipped ?? []).length;
+        setNotice(skipped > 0 ? `${done} ${t.gallery.skippedNotice(skipped)}` : done);
+        stopSelecting();
+      } catch {
+        setNotice(t.common.noConnection);
+      } finally {
+        setArranging(false);
+      }
+    },
+    [event.slug, stopSelecting, t],
+  );
+
+  /** A share link to what they picked, made by them and turned off by them. */
+  const makeLink = useCallback(async () => {
+    setArranging(true);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/e/${event.slug}/me/shares`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice(data.error ?? t.gallery.arrangeFailed);
+        return;
+      }
+      setLinkCopied(false);
+      setMadeLink({ url: data.url, count: data.count });
+      setMyLinks(null);
+      stopSelecting();
+    } catch {
+      setNotice(t.common.noConnection);
+    } finally {
+      setArranging(false);
+    }
+  }, [event.slug, selectedIds, stopSelecting, t]);
+
+  const loadMyLinks = useCallback(async () => {
+    const res = await fetch(`/api/e/${event.slug}/me/shares`, { cache: "no-store" }).catch(() => null);
+    if (!res?.ok) return;
+    const data = await res.json().catch(() => ({ links: [] }));
+    setMyLinks(data.links ?? []);
+  }, [event.slug]);
+
   // Tabs are for folders with something in them; a folder that empties or
   // goes away under someone browsing it drops them back to everything.
   const tabFolders = folders.filter((folder) => folder.filled);
@@ -1148,6 +1249,24 @@ export function GuestGallery({
           </nav>
         )}
 
+        {/* MED-11: the guest's own uploads, chosen to hide, show, file or send. */}
+        {hasMine && !searching && (
+          <div className="mb-3 flex items-center justify-end gap-3">
+            {selecting && <span className="mr-auto text-xs text-muted">{t.gallery.selectHint}</span>}
+            <button
+              type="button"
+              onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
+              aria-pressed={selecting}
+              className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm transition-colors ${
+                selecting ? "border-volt bg-volt text-on-volt" : "border-canvas-line text-paper hover:border-paper/40"
+              }`}
+            >
+              {selecting ? <X className="h-3.5 w-3.5" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
+              {selecting ? t.gallery.doneSelecting : t.gallery.selectYours}
+            </button>
+          </div>
+        )}
+
         {/* While searching, the line under the search box says what it found. */}
         {visibleItems.length === 0 && searching ? null : visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-canvas-line bg-canvas-raised px-6 py-16 text-center text-sm text-muted">
@@ -1164,12 +1283,33 @@ export function GuestGallery({
             {gridItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setLightboxId(item.id)}
+                onClick={() => {
+                  // MED-11: while choosing, a tap picks your own and does nothing on anyone else's.
+                  if (selecting) {
+                    if (item.mine) toggleSelected(item.id);
+                    return;
+                  }
+                  setLightboxId(item.id);
+                }}
                 aria-label={item.kind === "video" ? t.gallery.openVideo : t.gallery.openPhoto}
-                className={`look-tile relative aspect-square overflow-hidden bg-canvas-raised transition-transform duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
+                aria-pressed={selecting && item.mine ? selectedIds.has(item.id) : undefined}
+                disabled={selecting && !item.mine}
+                className={`look-tile relative aspect-square overflow-hidden bg-canvas-raised transition-[transform,opacity] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt ${
                   settledIds.has(item.id) ? "" : "klik-frame"
+                } ${selecting && !item.mine ? "opacity-35" : ""} ${
+                  selecting && selectedIds.has(item.id) ? "ring-[3px] ring-volt ring-offset-2 ring-offset-canvas" : ""
                 }`}
               >
+                {selecting && item.mine && (
+                  <span
+                    className={`absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 ${
+                      selectedIds.has(item.id) ? "border-volt bg-volt text-on-volt" : "border-white/90 bg-black/30"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {selectedIds.has(item.id) && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                  </span>
+                )}
                 {item.kind === "video" ? (
                   <>
                     {/* A poster image where we have one. The old path rendered
@@ -1200,11 +1340,11 @@ export function GuestGallery({
                     )}
                     <span className="absolute inset-0 flex items-center justify-center">
                       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 backdrop-blur">
-                        <Play className="h-4 w-4 text-paper" />
+                        <Play className="h-4 w-4 text-white" />
                       </span>
                     </span>
                     {item.durationS ? (
-                      <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-paper backdrop-blur">
+                      <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white backdrop-blur">
                         {formatDuration(item.durationS)}
                       </span>
                     ) : null}
@@ -1223,8 +1363,11 @@ export function GuestGallery({
                     style={{ filter: gridFilter }}
                   />
                 )}
+                {/* Badges over a photo sit on their own dark pill, so their text
+                    is white whatever the gallery's colours: on a light look,
+                    the theme's text colour is dark and vanished into the pill. */}
                 {item.status === "pending" && item.mine && (
-                  <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-paper">
+                  <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white">
                     {t.gallery.awaitingApproval}
                   </span>
                 )}
@@ -1233,15 +1376,16 @@ export function GuestGallery({
                     Without it their photo is simply there, with no hint the
                     host took it out of the gallery. */}
                 {item.visibility === "private" && item.mine && (
-                  <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-paper">
-                    {t.gallery.onlyYou}
+                  <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white">
+                    <EyeOff className="h-3 w-3" aria-hidden="true" />
+                    {item.hiddenByMe ? t.gallery.hiddenByYou : t.gallery.onlyYou}
                   </span>
                 )}
                 {/* MED-9. Only when there is something to count, so a quiet
                     gallery is not a grid of zeros. */}
                 {((features.reactions && (item.reactionCount ?? 0) > 0) ||
                   (features.comments && (item.commentCount ?? 0) > 0)) && (
-                  <span className="absolute bottom-1.5 left-1.5 flex items-center gap-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium tabular-nums text-paper backdrop-blur">
+                  <span className="absolute bottom-1.5 left-1.5 flex items-center gap-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium tabular-nums text-white backdrop-blur">
                     {features.reactions && (item.reactionCount ?? 0) > 0 && (
                       <span className="flex items-center gap-1">
                         <Heart className={`h-3 w-3 ${item.reacted ? "fill-volt text-volt" : ""}`} aria-hidden="true" />
@@ -1260,7 +1404,7 @@ export function GuestGallery({
                 )}
                 {/* AI-1: the rest of the burst is a swipe away in the viewer. */}
                 {(burstSizes.get(item.id) ?? 0) > 1 && (
-                  <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium tabular-nums text-paper backdrop-blur">
+                  <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium tabular-nums text-white backdrop-blur">
                     <Layers className="h-3 w-3" aria-hidden="true" />
                     {burstSizes.get(item.id)}
                     <span className="sr-only">{t.gallery.takenTogether}</span>
@@ -1313,24 +1457,52 @@ export function GuestGallery({
         {!isOwner && (
           <div className="mt-4 text-center text-xs text-muted">
             {leaving === "idle" ? (
-              <span className="inline-flex flex-wrap items-center justify-center gap-x-3">
-                {/* TRS-2: a copy of everything this guest added, and what Klik holds about them here. */}
-                <a
-                  href={`/api/e/${encodeURIComponent(event.slug)}/me/export`}
-                  download
-                  className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
-                >
-                  {t.gallery.downloadMine}
-                </a>
-                <span aria-hidden="true">·</span>
-                <button
-                  type="button"
-                  onClick={() => setLeaving("confirm")}
-                  className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
-                >
-                  {t.gallery.removeMine}
-                </button>
-              </span>
+              <>
+                {/* MED-11: out of everyone's view in one tap, and back the same way. */}
+                {hasMine && (
+                  <span className="mb-1 flex flex-wrap items-center justify-center gap-x-3">
+                    <button
+                      type="button"
+                      disabled={arranging}
+                      onClick={() => void arrange({ action: "hide", all: true })}
+                      className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper disabled:opacity-50"
+                    >
+                      {arranging ? t.gallery.hidingAll : t.gallery.hideAllMine}
+                    </button>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      type="button"
+                      aria-expanded={linksOpen}
+                      onClick={() => {
+                        const next = !linksOpen;
+                        setLinksOpen(next);
+                        if (next && myLinks === null) void loadMyLinks();
+                      }}
+                      className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
+                    >
+                      {t.gallery.yourLinks}
+                    </button>
+                  </span>
+                )}
+                <span className="inline-flex flex-wrap items-center justify-center gap-x-3">
+                  {/* TRS-2: a copy of everything this guest added, and what Klik holds about them here. */}
+                  <a
+                    href={`/api/e/${encodeURIComponent(event.slug)}/me/export`}
+                    download
+                    className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
+                  >
+                    {t.gallery.downloadMine}
+                  </a>
+                  <span aria-hidden="true">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setLeaving("confirm")}
+                    className="inline-flex min-h-11 items-center underline underline-offset-2 transition-colors hover:text-paper"
+                  >
+                    {t.gallery.removeMine}
+                  </button>
+                </span>
+              </>
             ) : (
               <div className="mx-auto max-w-sm space-y-3 rounded-2xl border border-canvas-line bg-canvas-raised p-4 text-left">
                 <p className="text-sm text-paper">
@@ -1359,6 +1531,43 @@ export function GuestGallery({
           </div>
         )}
 
+        {/* MED-11: the links this guest made here, each turned off with one tap. */}
+        {!isOwner && linksOpen && (
+          <div className="mx-auto mt-4 max-w-sm rounded-2xl border border-canvas-line bg-canvas-raised p-4 text-left">
+            <p className="text-sm font-medium text-paper">{t.gallery.yourLinks}</p>
+            {myLinks === null ? (
+              <p className="mt-2 text-xs text-muted">…</p>
+            ) : myLinks.length === 0 ? (
+              <p className="mt-2 text-xs text-muted">{t.gallery.noLinks}</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-canvas-line">
+                {myLinks.map((link) => (
+                  <li key={link.id} className="flex items-center justify-between gap-3 py-2">
+                    <span className="min-w-0">
+                      <span className={`block truncate text-xs ${link.off ? "text-muted line-through" : "text-paper"}`}>{link.url}</span>
+                      <span className="block text-[11px] text-muted">
+                        {link.off ? t.gallery.linkIsOff : t.gallery.linkItems(link.count)}
+                      </span>
+                    </span>
+                    {!link.off && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await fetch(`/api/e/${event.slug}/me/shares?id=${encodeURIComponent(link.id)}`, { method: "DELETE" }).catch(() => null);
+                          if (res?.ok) setMyLinks((current) => (current ?? []).map((row) => (row.id === link.id ? { ...row, off: true } : row)));
+                        }}
+                        className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-canvas-line px-3 text-xs text-paper hover:border-paper/40"
+                      >
+                        {t.gallery.turnOff}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {/* TRS-3: the guest's own language, whatever the host or the browser chose. */}
         <LanguageSwitch className="mt-6" />
 
@@ -1376,6 +1585,147 @@ export function GuestGallery({
           </p>
         )}
       </div>
+
+      {/* MED-11: what can be done with the guest's own picks. Fixed to the
+          bottom, in reach of a thumb, only while choosing. */}
+      {selecting && (
+        <div
+          className="klik-sheet-up fixed inset-x-3 bottom-3 z-40 mx-auto max-w-xl rounded-2xl border border-canvas-line bg-canvas-raised p-3"
+          style={contentTheme}
+          role="toolbar"
+          aria-label={t.gallery.selectYours}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3 px-1">
+            <span className="text-sm font-medium text-paper" aria-live="polite">
+              {t.gallery.selectedCount(selectedIds.size)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set(items.filter((item) => item.mine).map((item) => item.id)))}
+              className="min-h-9 text-sm text-muted underline underline-offset-2 hover:text-paper"
+            >
+              {t.gallery.selectAllYours}
+            </button>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {(
+              [
+                ["hide", EyeOff, t.gallery.hideFromOthers],
+                ["show", Eye, t.gallery.showToEveryone],
+              ] as const
+            ).map(([action, Icon, label]) => (
+              <button
+                key={action}
+                type="button"
+                disabled={arranging || selectedIds.size === 0}
+                onClick={() => void arrange({ action, ids: [...selectedIds] })}
+                className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border border-canvas-line text-xs text-paper transition-transform active:scale-[0.97] disabled:opacity-40"
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {label}
+              </button>
+            ))}
+            <label
+              className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border border-canvas-line text-xs text-paper ${
+                arranging || selectedIds.size === 0 || folders.length === 0 ? "opacity-40" : ""
+              }`}
+            >
+              <FolderInput className="h-4 w-4" aria-hidden="true" />
+              {t.gallery.moveToFolder}
+              <select
+                aria-label={t.gallery.moveToFolder}
+                disabled={arranging || selectedIds.size === 0 || folders.length === 0}
+                value=""
+                onChange={(change) => {
+                  const value = change.target.value;
+                  if (!value) return;
+                  void arrange({ action: "move", ids: [...selectedIds], albumId: value === "none" ? null : value });
+                }}
+                className="absolute inset-0 cursor-pointer opacity-0"
+              >
+                <option value="">{t.gallery.moveToFolder}</option>
+                <option value="none">{t.gallery.noFolderOption}</option>
+                {flattenFolders(folders).map((folder) => (
+                  <option key={folder.id} value={folder.id}>
+                    {"\u00a0\u00a0\u00a0".repeat(folder.depth - 1)}
+                    {folder.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={arranging || selectedIds.size === 0}
+              onClick={() => void makeLink()}
+              className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl bg-volt text-xs font-medium text-on-volt transition-transform active:scale-[0.97] disabled:opacity-40"
+            >
+              <Link2 className="h-4 w-4" aria-hidden="true" />
+              {t.gallery.makeLink}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MED-11: the link a guest just made, ready to send. */}
+      {madeLink && (
+        <div
+          className="klik-sheet-up fixed inset-x-3 bottom-3 z-40 mx-auto max-w-md rounded-2xl border border-canvas-line bg-canvas-raised p-4"
+          style={contentTheme}
+          role="dialog"
+          aria-labelledby="made-link-title"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p id="made-link-title" className="text-sm font-medium text-paper">
+              {t.gallery.linkReady(madeLink.count)}
+            </p>
+            <button
+              type="button"
+              onClick={() => setMadeLink(null)}
+              aria-label={t.common.close}
+              className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted hover:text-paper"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+          <input
+            readOnly
+            value={madeLink.url}
+            onFocus={(focus) => focus.currentTarget.select()}
+            className="mt-3 w-full rounded-xl border border-canvas-line bg-canvas px-3 py-2 text-xs text-paper"
+            aria-label={t.gallery.makeLink}
+          />
+          <p className="mt-2 text-xs leading-relaxed text-muted">{t.gallery.linkNote}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(madeLink.url);
+                  setLinkCopied(true);
+                } catch {
+                  // The field above is selectable by hand.
+                }
+              }}
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-canvas-line text-sm text-paper"
+            >
+              {linkCopied ? t.gallery.linkCopied : t.gallery.copyLink}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (typeof navigator.share === "function") {
+                  await navigator.share({ url: madeLink.url, title: event.name }).catch(() => {});
+                } else {
+                  await navigator.clipboard.writeText(madeLink.url).then(() => setLinkCopied(true)).catch(() => {});
+                }
+              }}
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-volt text-sm font-medium text-on-volt"
+            >
+              {t.gallery.shareLink}
+            </button>
+          </div>
+        </div>
+      )}
 
       {cameraOpen && (
         <CameraCapture
