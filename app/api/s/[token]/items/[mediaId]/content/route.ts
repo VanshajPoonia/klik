@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { r2 } from "@/lib/storage";
+import { playbackMimeType, r2 } from "@/lib/storage";
 import { resolveCollectionRequest } from "@/lib/share-request";
 import { denialCopy, denialStatus } from "@/lib/share-access";
 import { collectionItem } from "@/lib/shares";
@@ -50,7 +50,7 @@ export async function GET(
     new GetObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,
-      ResponseContentType: stillKey ? "image/jpeg" : item.mimeType,
+      ResponseContentType: stillKey ? "image/jpeg" : playbackMimeType(item.mimeType, search.get("as")),
       ResponseContentDisposition: "inline",
     }),
     { expiresIn },

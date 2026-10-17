@@ -8,7 +8,11 @@ let session: { user: { id: string; role: string } } | null = null;
 vi.mock("@/lib/db", async () => ({ db: (await import("./harness")).testDb }));
 vi.mock("@/lib/auth", () => ({ auth: async () => session }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
-vi.mock("@/lib/storage", () => ({ r2: {}, extensionForMime: () => "jpg" }));
+vi.mock("@/lib/storage", async (importOriginal) => ({
+  r2: {},
+  extensionForMime: () => "jpg",
+  playbackMimeType: (await importOriginal<typeof import("@/lib/storage")>()).playbackMimeType,
+}));
 vi.mock("@aws-sdk/s3-request-presigner", () => ({ getSignedUrl: async () => "https://r2.test/signed" }));
 
 const shares = await import("@/lib/shares");

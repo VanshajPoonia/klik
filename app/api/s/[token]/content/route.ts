@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { r2 } from "@/lib/storage";
+import { playbackMimeType, r2 } from "@/lib/storage";
 import { resolveShareRequest } from "@/lib/share-request";
 import { denialStatus, DENIAL_COPY } from "@/lib/share-access";
 import { videoHeldBack } from "@/lib/media-access";
@@ -36,8 +36,8 @@ export async function GET(
   // A folder or selection link serves each photo from its own route below
   // `/items`, which checks that the link opens that photo.
   if (!item) return NextResponse.json({ error: DENIAL_COPY.not_found.title }, { status: 404 });
-  const wantsPoster =
-    new URL(request.url).searchParams.get("poster") === "1" && item.posterPathname;
+  const search = new URL(request.url).searchParams;
+  const wantsPoster = search.get("poster") === "1" && item.posterPathname;
 
   if (!wantsPoster) {
     // MED-8: a link holder is never the person who filmed it, so a video still
@@ -58,7 +58,7 @@ export async function GET(
     new GetObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: wantsPoster ? item.posterPathname! : item.blobPathname,
-      ResponseContentType: wantsPoster ? "image/jpeg" : item.mimeType,
+      ResponseContentType: wantsPoster ? "image/jpeg" : playbackMimeType(item.mimeType, search.get("as")),
       ResponseContentDisposition: "inline",
     }),
     { expiresIn },

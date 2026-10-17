@@ -38,7 +38,9 @@ export function StreamVideo({
     const video = ref.current;
     if (!video) return;
     if (!useStream) {
-      video.src = src;
+      // QuickTime under its own name is refused by browsers that do not
+      // claim it, though they play the same bytes named MP4 (lib/storage.ts).
+      video.src = video.canPlayType("video/quicktime") ? src : `${src}${src.includes("?") ? "&" : "?"}as=mp4`;
       return;
     }
     const manifest = `${src}${src.includes("?") ? "&" : "?"}hls=1`;

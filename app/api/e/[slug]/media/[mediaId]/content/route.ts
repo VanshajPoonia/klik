@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { findEventBySlug } from "@/lib/slugs";
 import { events, media } from "@/lib/schema";
 import { resolveEventViewer } from "@/lib/event-viewer";
-import { r2 } from "@/lib/storage";
+import { playbackMimeType, r2 } from "@/lib/storage";
 import { canViewMedia, videoHeldBack } from "@/lib/media-access";
 import { cleanOriginalFor } from "@/lib/proof-access";
 import { playsFromStream, signedManifestUrl } from "@/lib/stream";
@@ -117,7 +117,7 @@ export async function GET(
       Bucket: process.env.R2_BUCKET_NAME,
       // MED-10: clean for the photographer alone while a proof is locked.
       Key: cleanOriginalFor(item, viewer.ownerSession?.user?.id) ?? item.blobPathname,
-      ResponseContentType: item.mimeType,
+      ResponseContentType: playbackMimeType(item.mimeType, searchParams.get("as")),
       ResponseContentDisposition: "inline",
     }),
     { expiresIn: isVideo ? 6 * 60 * 60 : 60 },

@@ -41,6 +41,17 @@ export function isAllowedMime(mimeType: string): boolean {
   return (ALLOWED_MEDIA_MIME_TYPES as readonly string[]).includes(baseMimeType(mimeType));
 }
 
+/**
+ * The type a video is served as for playing in the page. An iPhone's `.mov`
+ * is QuickTime, whose layout MP4 was built on, and a browser that does not
+ * claim QuickTime (anything but Safari) may refuse it under that name while
+ * playing the same bytes named MP4. The player asks with `?as=mp4` only where
+ * the browser says it cannot play QuickTime, so Safari gets what it always has.
+ */
+export function playbackMimeType(mimeType: string, as: string | null) {
+  return as === "mp4" && baseMimeType(mimeType) === "video/quicktime" ? "video/mp4" : mimeType;
+}
+
 export function extensionForMime(mimeType: string) {
   const extensions: Record<string, string> = {
     "image/jpeg": "jpg",
