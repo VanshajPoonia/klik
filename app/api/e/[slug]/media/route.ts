@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { uploadMediaId } from "@/lib/media-id";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import heicConvert from "heic-convert";
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
@@ -345,11 +345,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: "Folders are not available on this plan" }, { status: 403 });
     }
     // Live folders only: one in the trash would take the photo with it, out of
-    // sight, the moment it landed.
+    // sight, the moment it landed. MED-12: and for a guest's own upload, not
+    // one the hosts have kept to the team since the guest's page loaded, which
+    // would hide the photo from the person who just took it. An edited copy
+    // sits where its original does; a kiosk files where the host pointed it.
+    const guestUpload = !viewer.ownerSession && !viewer.kioskId && !derivedFrom;
     const [album] = await db
       .select({ id: albums.id })
       .from(albums)
-      .where(and(eq(albums.id, input.albumId), eq(albums.eventId, event.id), isNull(albums.deletedAt)))
+      .where(
+        and(
+          eq(albums.id, input.albumId),
+          eq(albums.eventId, event.id),
+          isNull(albums.deletedAt),
+          guestUpload ? sql`NOT album_hidden(${albums.id})` : undefined,
+        ),
+      )
       .limit(1);
     if (!album) {
       return NextResponse.json({ error: "That folder is not in this event any more", code: "folder_gone" }, { status: 404 });

@@ -8,28 +8,29 @@ import { requireEventCapability } from "@/lib/roles";
 import { eventPlan } from "@/lib/license";
 import { canUseAlbums } from "@/lib/plans";
 import { resolveReportsFor } from "@/lib/reports";
+import { MEDIA_BULK_LIMIT } from "@/lib/media-constants";
 
 const requestSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("approve"), ids: z.array(z.string().min(1).max(64)).min(1).max(500) }),
-  z.object({ action: z.literal("reject"), ids: z.array(z.string().min(1).max(64)).min(1).max(500) }),
+  z.object({ action: z.literal("approve"), ids: z.array(z.string().min(1).max(64)).min(1).max(MEDIA_BULK_LIMIT) }),
+  z.object({ action: z.literal("reject"), ids: z.array(z.string().min(1).max(64)).min(1).max(MEDIA_BULK_LIMIT) }),
   z.object({
     action: z.literal("visibility"),
-    ids: z.array(z.string().min(1).max(64)).min(1).max(500),
+    ids: z.array(z.string().min(1).max(64)).min(1).max(MEDIA_BULK_LIMIT),
     visibility: z.enum(MEDIA_VISIBILITIES),
   }),
   z.object({
     action: z.literal("move"),
-    ids: z.array(z.string().min(1).max(64)).min(1).max(500),
+    ids: z.array(z.string().min(1).max(64)).min(1).max(MEDIA_BULK_LIMIT),
     albumId: z.string().min(1).max(64).nullable(),
   }),
   // AI-8: the host's word on the highlights. Null hands it back to the score.
   z.object({
     action: z.literal("highlight"),
-    ids: z.array(z.string().min(1).max(64)).min(1).max(500),
+    ids: z.array(z.string().min(1).max(64)).min(1).max(MEDIA_BULK_LIMIT),
     highlight: z.enum(["pinned", "excluded"]).nullable(),
   }),
-  z.object({ action: z.literal("delete"), ids: z.array(z.string().min(1).max(64)).min(1).max(500) }),
-  z.object({ action: z.literal("restore"), ids: z.array(z.string().min(1).max(64)).min(1).max(500) }),
+  z.object({ action: z.literal("delete"), ids: z.array(z.string().min(1).max(64)).min(1).max(MEDIA_BULK_LIMIT) }),
+  z.object({ action: z.literal("restore"), ids: z.array(z.string().min(1).max(64)).min(1).max(MEDIA_BULK_LIMIT) }),
 ]);
 
 /**

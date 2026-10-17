@@ -51,6 +51,8 @@ import { highlightsFor } from "@/lib/highlights";
 import { nanoid } from "nanoid";
 import { SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 import { uploadToGallery } from "@/lib/upload-client";
+import { MEDIA_BULK_LIMIT } from "@/lib/media-constants";
+import { sendInBatches } from "@/lib/bulk-batches";
 
 type Tab = "gallery" | "highlights" | "insights" | "links" | "look" | "settings" | "qr" | "trash";
 
@@ -427,28 +429,39 @@ export function EventDashboard({
     | { action: "move"; albumId: string | null }
     | { action: "highlight"; highlight: "pinned" | "excluded" | null };
 
-  /** Resolves to the ids that changed, or null when the request failed. */
+  /**
+   * Resolves to the ids that changed, or null when a request failed. The route
+   * takes MEDIA_BULK_LIMIT ids at a time and "Select all" on a big wedding is
+   * more, so a selection goes in batches; whatever changed before a failed
+   * batch is still shown as changed.
+   */
   async function runBulk(request: BulkRequest, ids: string[]): Promise<Set<string> | null> {
     if (ids.length === 0) return new Set();
     setBulkBusy(true);
     setMediaError(null);
-    try {
+    const { changed, failure } = await sendInBatches(ids, MEDIA_BULK_LIMIT, async (batch) => {
       const response = await fetch(`/api/events/${event.id}/media/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...request, ids }),
+        body: JSON.stringify({ ...request, ids: batch }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error ?? "Could not update the selection.");
-      const changed = new Set<string>(data.changed ?? []);
-      if (request.action === "delete") {
+      return (data.changed ?? []) as string[];
+    });
+    try {
+      if (failure && changed.size === 0) {
+        // Nothing to show as changed.
+      } else if (request.action === "delete") {
         const removed = mediaItems.filter((item) => changed.has(item.id));
         setMediaItems((items) => items.filter((item) => !changed.has(item.id)));
         setUndo({ items: removed, label: `Moved ${removed.length} to the trash` });
         clearSelection();
       } else if (request.action === "restore") {
         setMediaItems((items) => [...(undo?.items.filter((item) => changed.has(item.id)) ?? []), ...items]);
-        setUndo(null);
+        // A restore cut short keeps the rest of the undo, so it can be tried again.
+        const left = undo?.items.filter((item) => !changed.has(item.id)) ?? [];
+        setUndo(failure && undo && left.length > 0 ? { ...undo, items: left } : null);
       } else {
         setMediaItems((items) =>
           items.map((item) => {
@@ -463,13 +476,14 @@ export function EventDashboard({
         );
         if (request.action === "reject") clearSelection();
       }
+      if (failure) {
+        setMediaError(changed.size > 0 ? `${failure} ${changed.size} of ${ids.length} were changed first.` : failure);
+        return null;
+      }
       if (changed.size < ids.length && request.action !== "restore") {
         setMediaError(`${ids.length - changed.size} could not be changed. Anything Klik is reviewing stays as it is.`);
       }
       return changed;
-    } catch (error) {
-      setMediaError(error instanceof Error ? error.message : "Could not update the selection.");
-      return null;
     } finally {
       setBulkBusy(false);
     }

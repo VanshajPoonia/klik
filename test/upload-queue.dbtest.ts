@@ -30,7 +30,7 @@ const { POST: resume } = await import("@/app/api/upload/parts/route");
 const { grantEntitlement } = await import("@/lib/entitlements");
 const { blobPathnameFor } = await import("@/lib/storage");
 const { MULTIPART_THRESHOLD, PART_SIZE } = await import("@/lib/upload-parts");
-const { events, media } = await import("@/lib/schema");
+const { albums, events, media } = await import("@/lib/schema");
 const { closeDatabase, makeEvent, makeGuest, makeMedia, makeUser, resetDatabase, testDb } = await import("./harness");
 
 beforeEach(async () => {
@@ -182,5 +182,58 @@ describe("resuming a large upload", () => {
 
     await testDb.update(events).set({ uploadsEnabled: false }).where(eq(events.id, event.id));
     expect((await resumeIt(event)).status).toBe(403);
+  });
+});
+
+describe("MED-12: uploading into a folder kept to the team", () => {
+  async function upload(event: Awaited<ReturnType<typeof liveEvent>>, mediaId: string, albumId: string) {
+    const response = await register(
+      post(`/api/e/${event.slug}/media`, {
+        mediaId,
+        pathname: blobPathnameFor(event.id, mediaId, "jpg"),
+        mimeType: "image/jpeg",
+        sizeBytes: 1024,
+        clientCompressed: true,
+        albumId,
+      }),
+      { params: Promise.resolve({ slug: event.slug }) },
+    );
+    return { status: response.status, body: await response.json().catch(() => ({})) };
+  }
+
+  async function withFolders() {
+    const event = await liveEvent();
+    await testDb.insert(albums).values([
+      { id: "alb_team_only", eventId: event.id, name: "Getting ready", teamOnly: true },
+      { id: "alb_inside_it", eventId: event.id, name: "Inside", parentId: "alb_team_only" },
+      { id: "alb_everyone", eventId: event.id, name: "Ceremony" },
+    ]);
+    // Storage has nothing: anything that gets past the folder check stops there.
+    r2Send.mockRejectedValue(Object.assign(new Error("NotFound"), { name: "NotFound" }));
+    return event;
+  }
+
+  it("tells a guest whose page is out of date that the folder has gone, before storage is asked", async () => {
+    const event = await withFolders();
+    viewer.guestId = await makeGuest(event.id);
+    for (const albumId of ["alb_team_only", "alb_inside_it"]) {
+      const { status, body } = await upload(event, `queued_photo_${albumId}`, albumId);
+      expect(status, albumId).toBe(404);
+      expect(body.code, albumId).toBe("folder_gone");
+    }
+    expect(r2Send).not.toHaveBeenCalled();
+  });
+
+  it("still takes a guest's photo into any other folder, and the team's into that one", async () => {
+    const event = await withFolders();
+    viewer.guestId = await makeGuest(event.id);
+    expect((await upload(event, "queued_photo_open", "alb_everyone")).body.code).not.toBe("folder_gone");
+    expect(r2Send).toHaveBeenCalled();
+
+    r2Send.mockClear();
+    viewer.guestId = null;
+    viewer.ownerSession = { user: { id: event.ownerId } };
+    expect((await upload(event, "queued_photo_team", "alb_team_only")).body.code).not.toBe("folder_gone");
+    expect(r2Send).toHaveBeenCalled();
   });
 });

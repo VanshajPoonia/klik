@@ -13,3 +13,10 @@ export const COMPRESS_QUALITY = 80;
 export function baseMimeType(mimeType: string): string {
   return mimeType.split(";")[0].trim().toLowerCase();
 }
+
+/**
+ * How many photos one request to /api/events/[id]/media/bulk may name. The
+ * dashboard sends a bigger selection ("Select all" on a big wedding) in
+ * batches of this size.
+ */
+export const MEDIA_BULK_LIMIT = 500;

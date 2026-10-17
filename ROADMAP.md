@@ -66,6 +66,8 @@
 - **MED-11** guests manage their own uploads: hide or show, move to a folder, make a share link, hide all of theirs. "Private" means the guest and the event's team, decided 2026-10-17. **Done 2026-10-17.**
 - **MED-12** private folders the host can hide from guests. **Done 2026-10-17.**
 
+**Second check of the brief, the same evening.** Two holes, both fixed: a host's "Select all" on more than 500 photos (any big wedding) was refused by the bulk route, so "make everything private" failed exactly where it matters; the dashboard now sends a selection in batches of `MEDIA_BULK_LIMIT` (`lib/bulk-batches.ts`). And a guest whose page loaded before a folder was hidden could still upload into it, and then not see their own photo; the upload route now answers `folder_gone`. Still not built from the brief: giving access to particular people by name or email (a folder link, with a password from the host's side, is the nearest), and a guest's own links have no password or expiry.
+
 ## Contents
 
 **This file is the whole plan.** Everything is here: phases, tasks, decisions, findings and build order. There is no second document.
@@ -760,7 +762,7 @@ Found while building it, and fixed for every upload: the upload id is chosen by 
 ### MED-12. Folders kept to the team
 **DONE 2026-10-17** (`drizzle/0058_team_only_folders.sql`, `test/team-only-folders.dbtest.ts`). Asked for as "manage access of folders" and "private and public folders". A folder's actions on the dashboard have **Hide from guests**: the folder, every folder inside it and everything in them leave the guests' gallery, tabs and upload picker; the team sees them with a crossed eye on the card. **A folder link still opens it**, because the link is the grant: that is how a host shows one folder to particular people and nobody else.
 - `albums.team_only` is the switch; the access rule reads `media.folder_hidden`, kept by triggers (a photo filed in or out, a folder switched, a folder moved under or out from a hidden one), so the rule stays a one-row check and `test/media-access.dbtest.ts` holds the SQL and the boolean to agreement with it as a fifth axis.
-- Its uploader keeps seeing their own photo in a hidden folder, on the same terms as a photo the host hid. A guest cannot file into a folder kept from them.
+- Its uploader keeps seeing their own photo in a hidden folder, on the same terms as a photo the host hid. A guest cannot file into a folder kept from them. Nor upload into one: a page loaded before the folder was hidden gets `folder_gone`, the answer for a folder in the trash (the evening's second check).
 - A trashed hidden folder keeps its photos hidden; deleting a folder is never a way to publish its contents.
 - The recap and the highlights treat its photos as not seen by guests.
 
