@@ -48,6 +48,8 @@ export type AuditAction =
   | "report.organizer_notified"
   | "domain.added"
   | "domain.removed"
+  // MSG-1: a superadmin replying in an account's messages.
+  | "message.sent"
   | "prints.submitted"
   | "prints.refunded";
 

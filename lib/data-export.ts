@@ -16,6 +16,7 @@ import {
   referrals,
   shareSaves,
   mediaShares,
+  supportMessages,
   userPasskeys,
   users,
   watermarks,
@@ -45,7 +46,7 @@ export async function accountExport(userId: string, appUrl: string) {
   const [account] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!account) return null;
 
-  const [linked, passkeys, plans, history, owned, teams, joined, credits, referralCounts, watermark, comments, asked, opened] = await Promise.all([
+  const [linked, passkeys, plans, history, owned, teams, joined, credits, referralCounts, watermark, comments, asked, opened, messages] = await Promise.all([
     db.select({ provider: accounts.provider }).from(accounts).where(eq(accounts.userId, userId)),
     db.select().from(userPasskeys).where(eq(userPasskeys.userId, userId)).orderBy(asc(userPasskeys.createdAt)),
     db.select().from(entitlements).where(eq(entitlements.userId, userId)).orderBy(asc(entitlements.createdAt)),
@@ -104,6 +105,11 @@ export async function accountExport(userId: string, appUrl: string) {
       .innerJoin(events, eq(events.id, mediaShares.eventId))
       .where(eq(shareSaves.userId, userId))
       .orderBy(asc(shareSaves.firstOpenedAt)),
+    db
+      .select({ body: supportMessages.body, fromKlik: supportMessages.fromKlik, createdAt: supportMessages.createdAt })
+      .from(supportMessages)
+      .where(eq(supportMessages.accountId, userId))
+      .orderBy(asc(supportMessages.createdAt)),
   ]);
   const [referredBy] = await db.select({ at: referrals.createdAt }).from(referrals).where(eq(referrals.referredId, userId)).limit(1);
 
@@ -145,6 +151,11 @@ export async function accountExport(userId: string, appUrl: string) {
       usedAt: iso(plan.appliedAt),
     })),
     history: history.map((entry) => ({ what: entry.kind, detail: entry.detail, at: iso(entry.createdAt) })),
+    messagesWithKlik: messages.map((message) => ({
+      from: message.fromKlik ? "Klik" : "you",
+      text: message.body,
+      at: iso(message.createdAt),
+    })),
     linksYouOpened: opened.map((link) => ({
       link: `${appUrl}/s/${link.token}`,
       from: link.eventName,

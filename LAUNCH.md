@@ -607,6 +607,9 @@ value (**⋯** → **Edit** on that variable's row) and redeploy again.
 
 ### 1. Error emails: `ALERT_EMAIL`
 
+Also where organizers' messages to Klik are emailed (MSG-1), unless `SUPPORT_INBOX_EMAIL` is set to a different address. Optional: without either, messages still arrive on `/admin/messages`, only without an email.
+
+
 Klik emails you when something fails in production, at most once per kind of failure
 every 15 minutes.
 

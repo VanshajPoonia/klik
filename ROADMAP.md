@@ -61,7 +61,7 @@
 - **TPL-1** gallery looks per kind of event, weddings first. **Done 2026-10-17.**
 - **ADM-6** signup records which plan button was clicked, and the admin queue shows it. **Done 2026-10-17.**
 - **ACC-7** the entry sheet and a shared link offer "sign in or create an account" beside "continue as a guest". **Done 2026-10-17.**
-- **MSG-1** messages between an organizer and Klik, one conversation per organizer, read on `/admin`.
+- **MSG-1** messages between an organizer and Klik, one conversation per organizer, read on `/admin`. **Done 2026-10-17.**
 - **ADM-7** every event on `/admin`, moving an event to another account, a new event for an existing account, and an account without an event.
 - **MED-11** guests manage their own uploads: hide or show, move to a folder, make a share link, hide all of theirs. "Private" means the guest and the event's team, decided 2026-10-17.
 - **MED-12** private folders the host can hide from guests.
@@ -90,6 +90,7 @@
 | Phase TRS | Trust, safety, compliance, accessibility |
 | Phase ADM | Admin console |
 | Phase TPL | Gallery looks per kind of event |
+| Phase MSG | Messages between organizers and Klik |
 | Phase LAW | US compliance: terms, DMCA, COPPA, consent scope |
 | Section B | Proposals, all accepted and promoted |
 | Section C | Every decision made, with reasoning |
@@ -1203,6 +1204,12 @@ Guest-reported media and AI-flagged media in one queue, with actions to hide, de
 - **Party:** Fredoka, the age as a giant numeral, confetti, tilted rounded photos. **Diploma:** Cinzel in a double rule, the class year in laurels, the school. **Modern:** a tight Space Grotesk headline and an accent bar, for any event. **Plain** is the header every gallery had.
 - Decisions: a look only decides type, composition, ornament and tiles; colour stays the gallery's own tokens, so every colourway and Premium's own colours stay WCAG-held. Sizes follow the hero's container (`cqi`), so the picker's 170px cards are the real markup. The six faces are declared on the root and never preloaded, so a page downloads only the face it sets. Every field is optional and a look with nothing filled in is headed with the event's name. Existing events were not migrated: their colours name their look.
 - **Not built:** a superadmin designing new looks from `/admin`. Looks are code, like the print templates; a new one is a definition in `lib/gallery-templates.ts` and a block of CSS.
+
+## Phase MSG: Messages
+
+### MSG-1. Organizers and Klik, in writing
+**DONE 2026-10-17** (`drizzle/0056_messages.sql`, `lib/messages.ts`, `app/api/messages`, `app/api/admin/messages`, `components/messages/conversation.tsx`, `test/messages.dbtest.ts`). Asked for as "organizers can send a message to admin, a chat section with the different organizers, and admin can chat with them". Each account has one conversation with Klik at `/dashboard/messages`, linked from the dashboard header (with the unread count) and from "Need a hand?". A message can say which of their events it is about. Every superadmin reads all conversations on `/admin/messages`, unread first, with the count on the admin nav; opening one marks it read for Klik as a whole, and replies are signed "Klik". Polled every five seconds while open, like the gallery, so no sockets. Each side is emailed once per unread stretch, not per message: an organizer at their account email, Klik at `SUPPORT_INBOX_EMAIL`, else `ALERT_EMAIL`, inside the daily email cap. Nothing is optimistic; a message shows once the server has it. 30 messages an hour per account. Replies are in the audit log; the conversation is in the account's data export and erased with it.
+- **Not built:** organizers messaging each other, attachments, and a "done" state for a conversation. Unread is the queue.
 ---
 
 # SECTION B: proposals (all accepted 2026-09-30)

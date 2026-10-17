@@ -20,6 +20,7 @@ import { CustomDomainCard } from "@/components/dashboard/custom-domain-card";
 import { domainFor } from "@/lib/custom-domains";
 import { isDomainsConfigured } from "@/lib/vercel-domains";
 import { SupportCard } from "@/components/dashboard/support-card";
+import { unreadForAccount } from "@/lib/messages";
 import { AwaitingActivation } from "@/components/dashboard/awaiting-activation";
 import { DeletedEvents } from "@/components/dashboard/deleted-events";
 import { getAppUrl } from "@/lib/env";
@@ -33,7 +34,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const [ownedRows, coHostedRows, held, account, clientRows, deletedRows] = await Promise.all([
+  const [ownedRows, coHostedRows, held, account, clientRows, deletedRows, unreadMessages] = await Promise.all([
     db
       .select()
       .from(events)
@@ -78,6 +79,7 @@ export default async function DashboardPage() {
       .from(events)
       .where(and(eq(events.ownerId, session.user.id), isNotNull(events.deletedAt)))
       .orderBy(desc(events.deletedAt)),
+    unreadForAccount(session.user.id).catch(() => 0),
   ]);
   const rows = [
     ...ownedRows,
@@ -124,7 +126,17 @@ export default async function DashboardPage() {
             <Image src="/klik-mark.png" alt="" width={32} height={32} className="rounded-[8px]" />
             <span className="text-lg font-semibold tracking-tight">klik</span>
           </div>
-          <div className="flex items-center gap-5">
+          <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2">
+            {/* MSG-1: the conversation with Klik, with what is waiting in it. */}
+            <Link href="/dashboard/messages" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-paper">
+              Messages
+              {unreadMessages > 0 && (
+                <span className="rounded-full bg-volt px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-on-volt">
+                  {unreadMessages}
+                  <span className="sr-only"> unread</span>
+                </span>
+              )}
+            </Link>
             <Link href="/me" className="text-sm text-muted hover:text-paper">
               Your galleries
             </Link>

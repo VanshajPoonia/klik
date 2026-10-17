@@ -100,6 +100,9 @@ const TABLES = [
   "user_passkeys",
   // ADM-6, before `users`.
   "plan_requests",
+  // MSG-1. One statement truncates the whole list, so order is for reading.
+  "support_messages",
+  "support_threads",
   "watermarks",
   "account_credits",
   "referrals",

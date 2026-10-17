@@ -809,6 +809,41 @@ export const shareSaves = pgTable(
 );
 
 /**
+ * MSG-1: one conversation per account with Klik. drizzle/0056_messages.sql,
+ * lib/messages.ts.
+ */
+export const supportThreads = pgTable(
+  "support_threads",
+  {
+    accountId: text("account_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
+    accountReadAt: timestamp("account_read_at", { withTimezone: true }),
+    klikReadAt: timestamp("klik_read_at", { withTimezone: true }),
+    accountNotifiedAt: timestamp("account_notified_at", { withTimezone: true }),
+    klikNotifiedAt: timestamp("klik_notified_at", { withTimezone: true }),
+  },
+  (table) => [index("support_threads_recent_idx").on(table.lastMessageAt)],
+);
+
+export const supportMessages = pgTable(
+  "support_messages",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => supportThreads.accountId, { onDelete: "cascade" }),
+    authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
+    fromKlik: boolean("from_klik").notNull(),
+    body: text("body").notNull(),
+    eventId: text("event_id").references(() => events.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("support_messages_thread_idx").on(table.accountId, table.createdAt)],
+);
+
+/**
  * Stripe bookkeeping. See ROADMAP.md PAY-2.
  *
  * These tables record money. They do not grant capability: that stays with the

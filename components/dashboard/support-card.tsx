@@ -1,4 +1,4 @@
-import { MessageSquare, Phone } from "lucide-react";
+import { MessageSquare, Phone, Send } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/support";
 
@@ -30,12 +30,20 @@ export function SupportCard() {
             <a href={SUPPORT_PHONE_HREF} className="font-semibold text-paper hover:text-volt">
               {SUPPORT_PHONE}
             </a>
-            . If your event is today, say so and we will come to you first.
+            , or write to us here. If your event is today, say so and we will come to you first.
           </p>
         </div>
       </div>
 
-      <div className="flex shrink-0 gap-2">
+      <div className="flex shrink-0 flex-wrap gap-2">
+        {/* MSG-1: for what can wait an hour, written down where the answer stays. */}
+        <a
+          href="/dashboard/messages"
+          className="inline-flex items-center justify-center gap-2 rounded-full border border-canvas-line px-5 py-2.5 text-sm font-medium text-paper transition-transform duration-150 ease-out hover:border-paper/40 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+        >
+          <Send className="h-4 w-4" aria-hidden="true" />
+          Write
+        </a>
         <a
           href={SUPPORT_PHONE_HREF}
           className="inline-flex items-center justify-center gap-2 rounded-full bg-volt px-5 py-2.5 text-sm font-medium text-on-volt transition-transform duration-150 ease-out hover:brightness-95 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
