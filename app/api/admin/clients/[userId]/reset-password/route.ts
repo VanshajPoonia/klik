@@ -5,9 +5,23 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/schema";
 import { requireSuperadmin } from "@/lib/roles";
 import { generatePassword, hashPassword } from "@/lib/credentials";
+import { z } from "zod";
+import { PASSWORD_MAX, PASSWORD_MIN } from "@/lib/signup";
+
+/**
+ * ADM-7: the password the superadmin typed, or a generated one when they typed
+ * none. Either way it is shown once, and every signed-in session ends.
+ */
+const bodySchema = z.object({
+  password: z
+    .string()
+    .min(PASSWORD_MIN, `Use at least ${PASSWORD_MIN} characters`)
+    .max(PASSWORD_MAX, `Use at most ${PASSWORD_MAX} characters`)
+    .optional(),
+});
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ userId: string }> },
 ) {
   const session = await requireSuperadmin();
@@ -23,7 +37,19 @@ export async function POST(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const password = generatePassword();
+  // An empty body is the generated-password case, so it is not an error.
+  const raw = await request.text().catch(() => "");
+  let body: unknown = {};
+  try {
+    body = raw ? JSON.parse(raw) : {};
+  } catch {
+    return NextResponse.json({ error: "Check the password" }, { status: 400 });
+  }
+  const parsed = bodySchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the password" }, { status: 400 });
+  }
+  const password = parsed.data.password ?? generatePassword();
   const passwordHash = await hashPassword(password);
   await db
     .update(users)

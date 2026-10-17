@@ -50,6 +50,8 @@ export type AuditAction =
   | "domain.removed"
   // MSG-1: a superadmin replying in an account's messages.
   | "message.sent"
+  // ADM-7: a superadmin making an event on someone else's account.
+  | "event.created_for_account"
   | "prints.submitted"
   | "prints.refunded";
 

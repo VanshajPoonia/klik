@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
+import { recordAccountEvent } from "@/lib/timeline";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { users, events, EVENT_VISIBILITIES } from "@/lib/schema";
@@ -16,7 +17,11 @@ import { templateChoiceSchema, templateFieldsSchema } from "@/lib/template-field
 
 const createClientSchema = z.object({
   contactName: z.string().trim().min(1).max(120),
-  eventName: z.string().trim().min(1).max(120),
+  // ADM-7: where their access email and receipts go. Optional, as before.
+  email: z.union([z.literal(""), z.string().trim().email().max(254)]).optional(),
+  // ADM-7: false makes the login alone, with no event and no plan yet.
+  withEvent: z.boolean().default(true),
+  eventName: z.string().trim().min(1).max(120).optional(),
   eventDate: z.coerce.date().nullable().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
   moderation: z.boolean().optional(),
@@ -62,6 +67,7 @@ export async function GET() {
  */
 async function createOrganizerUserAndEvent(
   contactName: string,
+  email: string | null,
   planKey: PlanKey,
   eventInput: Omit<CreateEventInput, "ownerId">,
 ) {
@@ -76,6 +82,7 @@ async function createOrganizerUserAndEvent(
       .values({
         id: userId,
         name: contactName,
+        email,
         role: "organizer",
         planKey,
         venueSlug: planKey === "venue" ? createVenueSlug(contactName) : null,
@@ -99,6 +106,37 @@ async function createOrganizerUserAndEvent(
     try {
       const [[user], [event]] = await db.batch([userQuery, eventQuery]);
       return { user, event, password };
+    } catch (error) {
+      const uniqueViolation = isUniqueViolation(error) || raisedBy(error, "username_reserved");
+      if (!uniqueViolation || attempt === 4) throw error;
+    }
+  }
+  throw new Error("Could not generate a unique username");
+}
+
+/**
+ * ADM-7: a login and nothing else. Not activated and holding no plan, so it
+ * waits in "Signed up, not activated" like a signup would, and is granted from
+ * its page when there is something to grant.
+ */
+async function createOrganizerUserOnly(contactName: string, email: string | null) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const password = generatePassword();
+    try {
+      const [user] = await db
+        .insert(users)
+        .values({
+          id: nanoid(),
+          name: contactName,
+          email,
+          role: "organizer",
+          username: generateUsername(contactName),
+          passwordHash: await hashPassword(password),
+          activatedAt: null,
+          organizerIntentAt: new Date(),
+        })
+        .returning();
+      return { user, password };
     } catch (error) {
       const uniqueViolation = isUniqueViolation(error) || raisedBy(error, "username_reserved");
       if (!uniqueViolation || attempt === 4) throw error;
@@ -131,6 +169,27 @@ export async function POST(request: Request) {
     planKey,
   } = parsed.data;
   const choice = parsed.data.template ? resolveTemplateChoice(parsed.data.template, parsed.data.colorway) : null;
+  const email = parsed.data.email ? parsed.data.email.toLowerCase() : null;
+  if (email) {
+    const [taken] = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+    if (taken) {
+      return NextResponse.json({ error: "There is already an account with that email. Find it on Search." }, { status: 409 });
+    }
+  }
+
+  if (!parsed.data.withEvent) {
+    const { user, password } = await createOrganizerUserOnly(contactName, email);
+    await recordAccountEvent({
+      userId: user.id,
+      kind: "account_created",
+      detail: "Created by Klik at /admin/new, without an event.",
+      actor: session.user.id ? { id: session.user.id, label: session.user.username ?? session.user.name ?? null } : null,
+    });
+    return NextResponse.json({ username: user.username, password, userId: user.id, event: null }, { status: 201 });
+  }
+  if (!eventName) {
+    return NextResponse.json({ error: "Name the event, or untick \"Set up their first event\"" }, { status: 400 });
+  }
 
   if (visibility === "password" && !galleryPassword) {
     return NextResponse.json(
@@ -141,6 +200,7 @@ export async function POST(request: Request) {
 
   const { user, event: draft, password } = await createOrganizerUserAndEvent(
     contactName,
+    email,
     planKey,
     {
       name: eventName,
@@ -174,6 +234,7 @@ export async function POST(request: Request) {
     {
       username: user.username,
       password, // shown once here, never retrievable again after this response
+      userId: user.id,
       event: toPublicEvent(event),
     },
     { status: 201 },

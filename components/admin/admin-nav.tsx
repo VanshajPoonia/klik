@@ -4,6 +4,7 @@ import { unreadForKlik } from "@/lib/messages";
 const LINKS = [
   { href: "/admin", label: "Queues and clients" },
   { href: "/admin/messages", label: "Messages" },
+  { href: "/admin/events", label: "Events" },
   { href: "/admin/search", label: "Search" },
   { href: "/admin/capacity", label: "Capacity" },
   { href: "/admin/revenue", label: "Revenue" },

@@ -62,7 +62,7 @@
 - **ADM-6** signup records which plan button was clicked, and the admin queue shows it. **Done 2026-10-17.**
 - **ACC-7** the entry sheet and a shared link offer "sign in or create an account" beside "continue as a guest". **Done 2026-10-17.**
 - **MSG-1** messages between an organizer and Klik, one conversation per organizer, read on `/admin`. **Done 2026-10-17.**
-- **ADM-7** every event on `/admin`, moving an event to another account, a new event for an existing account, and an account without an event.
+- **ADM-7** every event on `/admin`, moving an event to another account, a new event for an existing account, and an account without an event. **Done 2026-10-17.**
 - **MED-11** guests manage their own uploads: hide or show, move to a folder, make a share link, hide all of theirs. "Private" means the guest and the event's team, decided 2026-10-17.
 - **MED-12** private folders the host can hide from guests.
 
@@ -1194,6 +1194,14 @@ Guest-reported media and AI-flagged media in one queue, with actions to hide, de
 
 ### ADM-6. Who asked for which plan
 **DONE 2026-10-17** (`drizzle/0054_plan_requests.sql`, `lib/plan-requests.ts`, `test/plan-requests.dbtest.ts`). Asked for as "who requested for what event; that click should be captured and shown on the admin panel". A plan button that reaches `/signup` writes a `plan_requests` row: from the signup form, with an optional "what it is" and "when" shown only to someone buying; and for an account already signed in, before it is sent to pay. "Signed up, not activated" says "Asked for Klik Premium, for a wedding on 13 Jun 2026" with when, the client list says it under each customer not yet activated, and each client's page lists every request above the grant form. It also lands in the account's history and in its data export. A row grants nothing (BILLING.md), a reload within ten minutes is the same request, and a plan or date the route cannot read is dropped rather than refusing the signup. Clicks by visitors who never sign up are not recorded: there is no one to attach them to.
+
+### ADM-7. Every event, and making and moving things for an account
+**DONE 2026-10-17** (`lib/admin-events.ts`, `app/admin/events/page.tsx`, `app/api/admin/events/[id]/owner`, `app/api/admin/clients/[userId]/events`, `test/admin-events.dbtest.ts`). Asked for as "admin can see all the events and all the pictures, create users, organisers and events, assign events to organisers, manage info and change passwords".
+- **`/admin/events`**: every event on the platform, newest first, filtered by live, draft, lapsed or in the trash, searched by the event's name or address or its owner's name, email or handle. Open is the event's own dashboard, where a superadmin already acts with the owner's powers over every photo and video (folders, moving, hiding, deleting, trash, QR). A trashed event has Restore instead.
+- **Moving an event** ("Move to another account" on each event on a client's page): to an email or a handle. The licence goes with the event, as with ORG-4's handover, so a live gallery stays live; the client link and venue feature are cleared; the new owner leaves the team if they were on it; the previous owner stays as a manager unless unticked, and Klik never does. Guarded on the owner read just before, so two moves cannot both land. Audit log, both accounts' histories, and an email to the new owner.
+- **New event for them** on a client's page: the New event form with looks, as a draft. Putting it live is the existing grant beside it.
+- **A login without an event** on `/admin/new` ("Set up their first event now", ticked by default), with an optional email on both kinds. Not activated, holding nothing, so it waits in "Signed up, not activated" for a grant.
+- **Change password** now takes a password the superadmin types, or generates one as before; either way sessions end and it is shown once.
 
 ## Phase TPL: Gallery looks
 

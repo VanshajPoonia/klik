@@ -13,6 +13,8 @@ import { ActivationEmailControl } from "@/components/admin/activation-email-cont
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
 import { EraseClientControl } from "@/components/admin/erase-client-control";
 import { AccountChain } from "@/components/admin/account-chain";
+import { NewEventForAccount } from "@/components/admin/new-event-for-account";
+import { MoveEventControl } from "@/components/admin/move-event-control";
 import { getClientDetail } from "@/lib/admin-clients";
 import { getAccountChains } from "@/lib/timeline";
 
@@ -157,23 +159,47 @@ export default async function ClientPage({ params }: { params: Promise<{ userId:
                       </div>
                     </div>
                     {!event.deleted && (
-                      <details className="group mt-2">
-                        <summary className="inline-flex min-h-9 cursor-pointer list-none items-center rounded-full border border-canvas-line px-3 text-xs text-paper transition-colors hover:border-paper/40 group-open:border-volt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt [&::-webkit-details-marker]:hidden">
-                          {event.license === "live" ? "Upgrade this event" : "Put this event live"}
-                        </summary>
-                        <div className="mt-3">
-                          <GrantControl
-                            userId={account.id}
-                            events={[]}
-                            target={{ id: event.id, name: event.name, state: event.license }}
-                          />
-                        </div>
-                      </details>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <details className="group open:basis-full">
+                          <summary className="inline-flex min-h-9 cursor-pointer list-none items-center rounded-full border border-canvas-line px-3 text-xs text-paper transition-colors hover:border-paper/40 group-open:border-volt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt [&::-webkit-details-marker]:hidden">
+                            {event.license === "live" ? "Upgrade this event" : "Put this event live"}
+                          </summary>
+                          <div className="mt-3">
+                            <GrantControl
+                              userId={account.id}
+                              events={[]}
+                              target={{ id: event.id, name: event.name, state: event.license }}
+                            />
+                          </div>
+                        </details>
+                        {/* ADM-7: put it on someone else's account. */}
+                        <details className="group open:basis-full">
+                          <summary className="inline-flex min-h-9 cursor-pointer list-none items-center rounded-full border border-canvas-line px-3 text-xs text-paper transition-colors hover:border-paper/40 group-open:border-volt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt [&::-webkit-details-marker]:hidden">
+                            Move to another account
+                          </summary>
+                          <div className="mt-3">
+                            <MoveEventControl eventId={event.id} eventName={event.name} ownerIsKlik={isKlik} />
+                          </div>
+                        </details>
+                      </div>
                     )}
                   </li>
                 ))}
               </ul>
             )}
+          </Card>
+
+          {/* ADM-7: an event made by Klik on their account, as a draft. */}
+          <Card>
+            <details className="group">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                <h2 className={sectionTitle}>New event for them</h2>
+                <span className="rounded-full border border-canvas-line px-3 py-1 text-xs text-paper group-open:hidden">Open</span>
+              </summary>
+              <div className="mt-4">
+                <NewEventForAccount userId={account.id} />
+              </div>
+            </details>
           </Card>
 
           <Card className="space-y-5">

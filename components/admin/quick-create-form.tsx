@@ -18,11 +18,15 @@ import { templateByKey, templatesFor, type OccasionKey, type TemplateFields } fr
 interface Result {
   username: string;
   password: string;
-  event: { id: string; slug: string; name: string };
+  userId: string;
+  /** ADM-7: null when only the login was made. */
+  event: { id: string; slug: string; name: string } | null;
 }
 
 const initialForm = {
   contactName: "",
+  email: "",
+  withEvent: true,
   eventName: "",
   eventDate: "",
   expiresAt: "",
@@ -56,7 +60,9 @@ export function QuickCreateForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contactName: form.contactName,
-          eventName: form.eventName,
+          email: form.email || undefined,
+          withEvent: form.withEvent,
+          eventName: form.withEvent ? form.eventName : undefined,
           eventDate: form.eventDate || null,
           expiresAt: endOfDayIso(form.expiresAt),
           moderation: form.moderation,
@@ -93,7 +99,45 @@ export function QuickCreateForm() {
     }
   }
 
-  if (result) {
+  if (result && !result.event) {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const loginText = ["Klik login", `URL: ${origin}/login`, `Username: ${result.username}`, `Password: ${result.password}`].join("\n");
+    return (
+      <Card className="space-y-6">
+        <div>
+          <p className="text-sm font-medium text-volt">Login created</p>
+          <h2 className="mt-1 font-display text-xl text-paper">{form.contactName}</h2>
+          <p className="mt-1 text-sm text-muted">
+            No event and no plan yet. It is waiting in &ldquo;Signed up, not activated&rdquo;; make their event and grant
+            a plan from their page.
+          </p>
+        </div>
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+          The password is shown once. Copy it now. It can only be changed later.
+        </div>
+        <dl className="space-y-2 text-sm">
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted">Username</dt>
+            <dd className="font-mono text-paper">{result.username}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted">Password</dt>
+            <dd className="select-all font-mono text-paper">{result.password}</dd>
+          </div>
+        </dl>
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" onClick={() => void copyCredentials(loginText)}>
+            {copied ? "Copied" : "Copy credentials"}
+          </Button>
+          <Link href={`/admin/clients/${result.userId}`} className={buttonClassName({ variant: "ghost" })}>
+            Open their page
+          </Link>
+        </div>
+      </Card>
+    );
+  }
+
+  if (result && result.event) {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const guestUrl = `${origin}/e/${result.event.slug}`;
     const credentialsText = [
@@ -207,119 +251,141 @@ export function QuickCreateForm() {
             placeholder="Grand Palace Banquets"
           />
         </Field>
-        <OccasionPicker
-          value={occasion}
-          onChange={(next) => {
-            setOccasion(next);
-            setTemplate(templatesFor(next)[0]?.key ?? "plain");
-            setColorway(null);
-          }}
-        />
-        {occasion && (
-          <TemplatePicker
-            occasion={occasion}
-            value={template}
-            onChange={(next) => {
-              setTemplate(next.key);
-              setColorway(null);
-            }}
-            colorwayFor={(option) =>
-              option.key === template ? (option.colorways.find((item) => item.key === colorway) ?? null) : null
-            }
-          />
-        )}
-        {occasion && chosen && (
-          <ColorwayPicker
-            template={chosen}
-            value={colorway ?? chosen.colorways[0].key}
-            onChange={(next) => setColorway(next.key)}
-          />
-        )}
-        {occasion && chosen && chosen.fields.length > 0 && (
-          <LookFields template={chosen} value={lookFields} onChange={setLookFields} showDateToggle={false} idPrefix="admin-look" />
-        )}
-        <Field label="Event name">
+        <Field label="Email (optional)" hint="Where their access email, messages and receipts go">
           <input
+            type="email"
             className={inputClass}
-            value={form.eventName}
-            onChange={(event) => setForm((f) => ({ ...f, eventName: event.target.value }))}
-            required
-            placeholder="Anita & Raj's wedding"
+            value={form.email}
+            onChange={(event) => setForm((f) => ({ ...f, email: event.target.value }))}
+            maxLength={254}
+            autoComplete="off"
+            placeholder="hello@grandpalace.com"
           />
         </Field>
-        <Field label="Plan" hint="The plan controls event count, upload window, and video size">
-          <select
-            className={inputClass}
-            value={form.planKey}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                planKey: event.target.value as PlanKey,
-              }))
-            }
-          >
-            {Object.values(PLANS).map((plan) => (
-              <option key={plan.key} value={plan.key}>
-                {plan.name} · {plan.maxActiveEvents} active{" "}
-                {plan.maxActiveEvents === 1 ? "event" : "events"} · {plan.maxEventsPerMonth}/month
-              </option>
-            ))}
-          </select>
-        </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Event date (optional)">
-            <input
-              type="date"
-              className={inputClass}
-              value={form.eventDate}
-              onChange={(event) => setForm((f) => ({ ...f, eventDate: event.target.value }))}
-            />
-          </Field>
-          <Field label="Expires on (optional)" hint="The gallery closes at the end of this day">
-            <input
-              type="date"
-              className={inputClass}
-              value={form.expiresAt}
-              onChange={(event) => setForm((f) => ({ ...f, expiresAt: event.target.value }))}
-            />
-          </Field>
-        </div>
-        <VisibilityField
-          value={form.visibility}
-          onChange={(visibility) => setForm((f) => ({ ...f, visibility }))}
-        />
-        {form.visibility === "password" && (
-          <Field
-            label="Gallery password"
-            hint="Guests will enter this password after scanning the QR code"
-            htmlFor="admin-gallery-password"
-          >
-            <PasswordInput
-              id="admin-gallery-password"
-              value={form.galleryPassword}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, galleryPassword: event.target.value }))
-              }
-              autoComplete="new-password"
-              minLength={4}
-              maxLength={72}
-              required
-            />
-          </Field>
-        )}
         <Checkbox
-          checked={form.moderation}
-          onChange={(event) => setForm((f) => ({ ...f, moderation: event.target.checked }))}
+          checked={form.withEvent}
+          onChange={(event) => setForm((f) => ({ ...f, withEvent: event.target.checked }))}
+          hint="Untick to make only the login. You can add their events and grant a plan from their page."
         >
-          Review photos before they go public
+          Set up their first event now
         </Checkbox>
+        {form.withEvent && (
+          <>
+            <OccasionPicker
+              value={occasion}
+              onChange={(next) => {
+                setOccasion(next);
+                setTemplate(templatesFor(next)[0]?.key ?? "plain");
+                setColorway(null);
+              }}
+            />
+            {occasion && (
+              <TemplatePicker
+                occasion={occasion}
+                value={template}
+                onChange={(next) => {
+                  setTemplate(next.key);
+                  setColorway(null);
+                }}
+                colorwayFor={(option) =>
+                  option.key === template ? (option.colorways.find((item) => item.key === colorway) ?? null) : null
+                }
+              />
+            )}
+            {occasion && chosen && (
+              <ColorwayPicker
+                template={chosen}
+                value={colorway ?? chosen.colorways[0].key}
+                onChange={(next) => setColorway(next.key)}
+              />
+            )}
+            {occasion && chosen && chosen.fields.length > 0 && (
+              <LookFields template={chosen} value={lookFields} onChange={setLookFields} showDateToggle={false} idPrefix="admin-look" />
+            )}
+            <Field label="Event name">
+              <input
+                className={inputClass}
+                value={form.eventName}
+                onChange={(event) => setForm((f) => ({ ...f, eventName: event.target.value }))}
+                required
+                placeholder="Anita & Raj's wedding"
+              />
+            </Field>
+            <Field label="Plan" hint="The plan controls event count, upload window, and video size">
+              <select
+                className={inputClass}
+                value={form.planKey}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    planKey: event.target.value as PlanKey,
+                  }))
+                }
+              >
+                {Object.values(PLANS).map((plan) => (
+                  <option key={plan.key} value={plan.key}>
+                    {plan.name} · {plan.maxActiveEvents} active{" "}
+                    {plan.maxActiveEvents === 1 ? "event" : "events"} · {plan.maxEventsPerMonth}/month
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Event date (optional)">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={form.eventDate}
+                  onChange={(event) => setForm((f) => ({ ...f, eventDate: event.target.value }))}
+                />
+              </Field>
+              <Field label="Expires on (optional)" hint="The gallery closes at the end of this day">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={form.expiresAt}
+                  onChange={(event) => setForm((f) => ({ ...f, expiresAt: event.target.value }))}
+                />
+              </Field>
+            </div>
+            <VisibilityField
+              value={form.visibility}
+              onChange={(visibility) => setForm((f) => ({ ...f, visibility }))}
+            />
+            {form.visibility === "password" && (
+              <Field
+                label="Gallery password"
+                hint="Guests will enter this password after scanning the QR code"
+                htmlFor="admin-gallery-password"
+              >
+                <PasswordInput
+                  id="admin-gallery-password"
+                  value={form.galleryPassword}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, galleryPassword: event.target.value }))
+                  }
+                  autoComplete="new-password"
+                  minLength={4}
+                  maxLength={72}
+                  required
+                />
+              </Field>
+            )}
+            <Checkbox
+              checked={form.moderation}
+              onChange={(event) => setForm((f) => ({ ...f, moderation: event.target.checked }))}
+            >
+              Review photos before they go public
+            </Checkbox>
+          </>
+        )}
         {error && (
           <p className="text-sm text-red-400" role="alert">
             {error}
           </p>
         )}
         <Button type="submit" disabled={loading} className="w-full">
-          {loading ? "Provisioning…" : "Provision client"}
+          {loading ? "Provisioning…" : form.withEvent ? "Provision client" : "Create the login"}
         </Button>
       </form>
     </Card>

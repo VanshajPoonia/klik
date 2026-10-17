@@ -123,6 +123,7 @@ export const TIMELINE_KINDS = [
   "grace_email_failed",
   "details_changed",
   "plan_requested",
+  "event_moved",
 ] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
