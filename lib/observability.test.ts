@@ -139,6 +139,23 @@ describe("reporters", () => {
     // The original error still reached the log, which is the point.
     expect(captured(errorSpy).event).toBe("upload.store_failed");
   });
+
+  /**
+   * Next gives instrumentation.ts its own copy of this module, apart from the
+   * routes'. A reporter registered in one copy must hear errors from another.
+   */
+  it("reaches a reporter registered by a separate copy of the module", async () => {
+    vi.resetModules();
+    const registering = await import("./observability");
+    vi.resetModules();
+    const reporting = await import("./observability");
+    expect(reporting).not.toBe(registering);
+
+    const reporter = vi.fn();
+    registering.registerErrorReporter(reporter);
+    reporting.reportError("ops.test_error", new Error("from a route"));
+    expect(reporter).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ event: "ops.test_error" }));
+  });
 });
 
 describe("withErrorReporting", () => {

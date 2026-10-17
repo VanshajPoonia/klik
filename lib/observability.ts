@@ -69,9 +69,17 @@ export function redact(value: unknown, depth = 0): unknown {
  * a DSN, and nothing else today. Kept as an array so adding one does not mean
  * replacing one, and so a reporter that throws cannot take down the request it
  * was reporting on.
+ *
+ * Kept on `globalThis`, not in this module. Next bundles `instrumentation.ts`
+ * apart from the app's routes, so each gets its own copy of this file: the
+ * reporters were registered in one copy while every route reported into the
+ * other's empty list, and until 2026-10-17 no route's error reached Sentry or
+ * the alert email. `Symbol.for` gives every copy the same list, as it already
+ * does for `REPORTED` below.
  */
 type Reporter = (error: unknown, context: LogContext) => void;
-const reporters: Reporter[] = [];
+const REPORTERS = Symbol.for("klik.reporters");
+const reporters: Reporter[] = ((globalThis as Record<symbol, unknown>)[REPORTERS] ??= []) as Reporter[];
 
 export function registerErrorReporter(reporter: Reporter): void {
   reporters.push(reporter);

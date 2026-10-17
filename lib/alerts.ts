@@ -117,7 +117,7 @@ export function registerEmailAlerts(): void {
     // every one of them to report a failure that has already happened. The
     // structured log is the record of truth and is already written by the time
     // this runs. `keepAlive` stops Vercel freezing the function before the
-    // email has gone, which without it happened nearly every time.
+    // email has gone.
     keepAlive(deliver(event, error, context).catch(() => {}));
   });
 }
