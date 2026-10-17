@@ -248,7 +248,13 @@ export function createThrottle(windowMs = 60_000, maxKeys = 200) {
  */
 export function serverReporter(
   dsnValue: string | undefined,
-  options: { environment?: string; release?: string; fetchImpl?: typeof fetch } = {},
+  options: {
+    environment?: string;
+    release?: string;
+    fetchImpl?: typeof fetch;
+    /** Holds the function open until the send settles; see `lib/after-response.ts`. */
+    keepAlive?: (task: Promise<unknown>) => void;
+  } = {},
 ): ((error: unknown, context: Record<string, unknown>) => void) | null {
   const dsn = parseDsn(dsnValue);
   if (!dsn) return null;
@@ -267,6 +273,7 @@ export function serverReporter(
       url,
       context,
     });
-    void sendEvent(dsn, event, options.fetchImpl);
+    const sending = sendEvent(dsn, event, options.fetchImpl);
+    options.keepAlive?.(sending);
   };
 }

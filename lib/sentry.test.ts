@@ -156,4 +156,13 @@ describe("the server reporter", () => {
     const failing = serverReporter(DSN, { fetchImpl: (async () => { throw new Error("offline"); }) as typeof fetch })!;
     expect(() => failing(new Error("x"), { event: "y" })).not.toThrow();
   });
+
+  it("hands each send to keepAlive, so the host does not freeze the function mid-send", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
+    const keepAlive = vi.fn();
+    const report = serverReporter(DSN, { fetchImpl: fetchImpl as unknown as typeof fetch, keepAlive })!;
+    report(new Error("boom"), { event: "ops.test_error" });
+    expect(keepAlive).toHaveBeenCalledTimes(1);
+    await expect(keepAlive.mock.calls[0][0]).resolves.toBe(true);
+  });
 });

@@ -19,13 +19,15 @@ export async function register() {
   // development never reports. One public DSN serves the server and the
   // browser, which is why it carries the NEXT_PUBLIC_ prefix.
   if (process.env.NODE_ENV === "production") {
-    const [{ serverReporter }, { registerErrorReporter }] = await Promise.all([
+    const [{ serverReporter }, { registerErrorReporter }, { keepAlive }] = await Promise.all([
       import("./lib/sentry"),
       import("./lib/observability"),
+      import("./lib/after-response"),
     ]);
     const reporter = serverReporter(process.env.NEXT_PUBLIC_SENTRY_DSN, {
       environment: process.env.VERCEL_ENV ?? "production",
       release: process.env.VERCEL_GIT_COMMIT_SHA,
+      keepAlive,
     });
     if (reporter) registerErrorReporter(reporter);
   }

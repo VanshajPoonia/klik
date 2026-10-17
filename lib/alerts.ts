@@ -1,6 +1,7 @@
 import { consume } from "./ratelimit";
 import { sendEmail, isEmailConfigured } from "./email";
 import { registerErrorReporter } from "./observability";
+import { keepAlive } from "./after-response";
 import { escapeHtml } from "./emails/theme";
 
 /**
@@ -111,13 +112,12 @@ export function registerEmailAlerts(): void {
 
   registerErrorReporter((error, context) => {
     const event = typeof context.event === "string" ? context.event : "unknown";
-    // Floating on purpose. `reportError` is synchronous and called from inside
-    // error paths all over the codebase; making it awaitable would mean
-    // touching every one of them to report a failure that has already happened.
-    // The structured log is the record of truth and is already written by the
-    // time this runs. On a serverless host this send can occasionally be cut
-    // short when the function freezes, which is the honest cost of the choice
-    // and the main thing Sentry would fix.
-    void deliver(event, error, context).catch(() => {});
+    // Not awaited. `reportError` is synchronous and called from inside error
+    // paths all over the codebase; making it awaitable would mean touching
+    // every one of them to report a failure that has already happened. The
+    // structured log is the record of truth and is already written by the time
+    // this runs. `keepAlive` stops Vercel freezing the function before the
+    // email has gone, which without it happened nearly every time.
+    keepAlive(deliver(event, error, context).catch(() => {}));
   });
 }
