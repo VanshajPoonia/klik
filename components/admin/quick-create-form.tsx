@@ -13,6 +13,7 @@ import { endOfDayIso } from "@/lib/dates";
 import { PLANS, type PlanKey } from "@/lib/plans";
 import { ColorwayPicker, OccasionPicker, TemplatePicker } from "@/components/dashboard/template-picker";
 import { LookFields, lookFieldsPayload } from "@/components/dashboard/look-fields";
+import { PasswordLinkControl } from "@/components/admin/password-link-control";
 import { templateByKey, templatesFor, type OccasionKey, type TemplateFields } from "@/lib/gallery-templates";
 
 interface Result {
@@ -125,6 +126,7 @@ export function QuickCreateForm() {
             <dd className="select-all font-mono text-paper">{result.password}</dd>
           </div>
         </dl>
+        {form.email.trim() && <PasswordLinkControl userId={result.userId} email={form.email.trim()} compact />}
         <div className="flex flex-wrap gap-3">
           <Button type="button" onClick={() => void copyCredentials(loginText)}>
             {copied ? "Copied" : "Copy credentials"}
@@ -201,6 +203,7 @@ export function QuickCreateForm() {
           />
         </div>
 
+        {form.email.trim() && <PasswordLinkControl userId={result.userId} email={form.email.trim()} compact />}
         <div className="flex flex-wrap gap-3">
           <Button type="button" onClick={() => void copyCredentials(credentialsText)}>
             {copied ? "Copied" : "Copy credentials"}

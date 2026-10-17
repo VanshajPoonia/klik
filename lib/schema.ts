@@ -124,6 +124,8 @@ export const TIMELINE_KINDS = [
   "details_changed",
   "plan_requested",
   "event_moved",
+  // ACC-8: Klik emailed a link to choose a password.
+  "password_link_sent",
 ] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
@@ -860,6 +862,27 @@ export const shareInvites = pgTable(
 );
 
 export type ShareInvite = typeof shareInvites.$inferSelect;
+
+/**
+ * ACC-8: a link to choose one's own password, emailed from /admin. The code's
+ * hash only; once, for seven days. drizzle/0062_password_links.sql,
+ * lib/password-links.ts.
+ */
+export const passwordLinks = pgTable(
+  "password_links",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+  },
+  (table) => [index("password_links_user_idx").on(table.userId)],
+);
 
 /**
  * MSG-1: one conversation per account with Klik. drizzle/0056_messages.sql,

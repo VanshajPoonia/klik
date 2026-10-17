@@ -55,7 +55,9 @@ export type AuditAction =
   | "prints.submitted"
   | "prints.refunded"
   // MED-14: someone on the team sending a link to particular people.
-  | "share.invited";
+  | "share.invited"
+  // ACC-8: a superadmin emailing an account a link to choose its password.
+  | "account.password_link_sent";
 
 export async function recordAudit(entry: {
   actor: Pick<Session, "user"> | { user: { id: string; username?: string | null; name?: string | null } } | null;

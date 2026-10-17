@@ -11,6 +11,7 @@ import { EntitlementList } from "@/components/admin/entitlement-list";
 import { CreditControl } from "@/components/admin/credit-control";
 import { ActivationEmailControl } from "@/components/admin/activation-email-control";
 import { ResetPasswordControl } from "@/components/admin/reset-password-control";
+import { PasswordLinkControl } from "@/components/admin/password-link-control";
 import { EraseClientControl } from "@/components/admin/erase-client-control";
 import { AccountChain } from "@/components/admin/account-chain";
 import { NewEventForAccount } from "@/components/admin/new-event-for-account";
@@ -211,6 +212,7 @@ export default async function ClientPage({ params }: { params: Promise<{ userId:
               sentAt={sentAt}
             />
             <CreditControl userId={account.id} balanceCents={creditCents} referredBy={referredBy} />
+            {!isKlik && account.email && <PasswordLinkControl userId={account.id} email={account.email} />}
             {!isKlik && account.username && <ResetPasswordControl userId={account.id} username={account.username} />}
             {!isKlik && <EraseClientControl userId={account.id} confirmWith={account.username ?? account.email ?? ""} />}
           </Card>

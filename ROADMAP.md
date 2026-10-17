@@ -73,7 +73,7 @@ What the second check left became these, built in this order on 2026-10-18, each
 - **MED-14** access for particular people: a link sent by email to named addresses, opened by signing in as one of them. **Done 2026-10-18.**
 - **MED-15** guests make folders of their own. **Done 2026-10-18.**
 - **MED-16** the host puts the photos in a folder in their own order. **Done 2026-10-18.**
-- **ACC-8** a login made on `/admin` can be sent a link to set its own password, instead of a password passed on by hand.
+- **ACC-8** a login made on `/admin` can be sent a link to set its own password, instead of a password passed on by hand. **Done 2026-10-18.**
 - Not taken up: a superadmin designing new looks from `/admin` (TPL-1, "Not built").
 
 ## Contents
@@ -794,6 +794,10 @@ Found while building it, and fixed for every upload: the upload id is chosen by 
 - `media.folder_position`, saved for the whole folder in one statement; a photo not in the list has none. Photos without a place come after the placed ones in the order they would otherwise be in, which is where new photos join an arranged folder. A trigger clears a photo's place when it changes folder, and `folder_position` now stamps `changed_at`, so open galleries pick up a new order on their next sync.
 - A folder link pages by place, time and id (`encodeRankedCursor`); a cursor from before reads as unplaced.
 - Not built: arranging "Everything" or a moment. Both are time by nature; a folder is where an order belongs.
+
+### ACC-8. A link to choose one's own password
+**DONE 2026-10-18** (`drizzle/0062_password_links.sql`, `lib/password-links.ts`, `app/set-password/[token]`, `test/password-links.dbtest.ts`). Asked for as "we will send them the credentials". An account's page on `/admin`, and the screen right after **New client** makes a login with an email, have **Email a link to choose a password**: the person gets one email, opens `/set-password/...`, and chooses a password (the signup rules: ten characters at least, not their email). The link works once, for seven days; a newer one replaces it; only its hash is kept; opening the page spends nothing, so a mail scanner cannot use it up. Choosing ends every other session, as any password change does, and the password the account had keeps working until then, so sending it never locks anyone out. It sits beside the generated password, which stays for a client with no email.
+- Not built: "Forgot your password?" on the sign-in page. An account with an email can already sign in with an emailed code; a self-service reset would reuse this table.
 
 ---
 
