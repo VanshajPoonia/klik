@@ -54,6 +54,12 @@ export interface QueuedUpload {
   capturedAt: string | null;
   clientCompressed: boolean;
   maxVideoSeconds: number;
+  /**
+   * Preparations started on this item that never ended, because the page died
+   * in them (a phone out of memory halfway through a 4K clip). Absent on items
+   * queued before it was counted.
+   */
+  prepareUnfinished?: number;
 
   albumId: string | null;
   challengeId: string | null;
@@ -143,6 +149,7 @@ export function newQueuedUpload(
     durationS: null,
     capturedAt: upload.capturedAt ?? null,
     clientCompressed: false,
+    prepareUnfinished: 0,
     maxVideoSeconds: context.maxVideoSeconds,
     albumId: context.albumId,
     challengeId: upload.challengeId ?? null,

@@ -86,6 +86,12 @@ type QueueMessage =
 
 const PAGE_CONCURRENCY = 3;
 const PREPARE_CONCURRENCY = 2;
+/**
+ * Preparations a file may die in before it goes as picked. A file that takes
+ * the page down with it would otherwise do so on every reload and never be
+ * sent, holding up nothing else but losing itself.
+ */
+const MAX_UNFINISHED_PREPARES = 2;
 /** How long a part waits for a lost connection before the queue's own wait takes over. */
 const PAGE_PATIENCE_MS = 5 * 60 * 1000;
 const MAX_IDLE_MS = 60_000;
@@ -341,7 +347,19 @@ class UploadQueue {
     this.emit();
     void runLimited(waiting, PREPARE_CONCURRENCY, async (item) => {
       let interrupted = false;
+      let marked = false;
       try {
+        // Written down before it starts and struck off however it ends, so
+        // only an attempt the page died in is still counted next time.
+        const started = await store.update(item.id, (current) => ({
+          prepareUnfinished: (current.prepareUnfinished ?? 0) + 1,
+        }));
+        marked = started !== null;
+        if ((started?.prepareUnfinished ?? 0) > MAX_UNFINISHED_PREPARES) {
+          // Send it as picked: the server compresses what the device could not.
+          await store.update(item.id, () => ({ ready: true }));
+          return;
+        }
         const patch = await prepareUpload(item, (fraction) => {
           this.prepareProgress.set(item.id, fraction);
           this.emitSoon();
@@ -354,6 +372,11 @@ class UploadQueue {
         // Send it as picked: the server compresses what the browser could not.
         else await store.update(item.id, () => ({ ready: true })).catch(() => null);
       } finally {
+        if (marked) {
+          await store
+            .update(item.id, (current) => ({ prepareUnfinished: Math.max(0, (current.prepareUnfinished ?? 1) - 1) }))
+            .catch(() => null);
+        }
         this.preparing.delete(item.id);
         this.prepareProgress.delete(item.id);
         await this.changed();
