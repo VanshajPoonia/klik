@@ -14,6 +14,7 @@ import { formatDuration } from "@/lib/video-poster";
 import { uploadToGallery } from "@/lib/upload-client";
 import { UploadTray } from "@/components/upload/upload-tray";
 import { useUploadQueue } from "@/components/upload/use-upload-queue";
+import { AddToHomeScreen } from "@/components/guest/add-to-home-screen";
 import type { PendingUploads } from "@/components/guest/media-share-panel";
 import type { AddedEvent } from "@/lib/upload-queue/page-queue";
 import {
@@ -922,6 +923,8 @@ export function GuestGallery({
             {t.gallery.galleryFull}
           </p>
         )}
+
+        {!isOwner && <AddToHomeScreen eventId={event.id} />}
 
         {notice && (
           <p className="mb-6 text-sm text-muted" role="status">

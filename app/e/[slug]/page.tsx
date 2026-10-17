@@ -48,6 +48,7 @@ import { GuestGallery } from "@/components/guest/guest-gallery";
 import { GuestCopyProvider } from "@/components/guest/guest-copy";
 import { GUEST_COPY } from "@/lib/i18n/guest";
 import { LOCALE_COOKIE, chooseLocale } from "@/lib/i18n/locale";
+import { homeScreenLabel } from "@/lib/home-screen";
 
 // Shared by the page and its metadata so one request runs one query.
 const getEventBySlug = cache(async (slug: string) => {
@@ -70,6 +71,16 @@ export async function generateMetadata({
     title: event?.name,
     robots: { index: false },
     alternates: event && event.slug !== slug ? { canonical: `/e/${event.slug}` } : undefined,
+    // The gallery on a guest's home screen, as a shortcut into this browser
+    // (lib/home-screen.ts). `capable: false` is needed, not decoration: Next
+    // assumes true, and on an iPhone that makes the icon an app with its own
+    // storage, where the guest would have to join again.
+    ...(event
+      ? {
+          manifest: `/e/${event.slug}/manifest.webmanifest`,
+          appleWebApp: { title: homeScreenLabel(event.name), capable: false },
+        }
+      : {}),
   };
 }
 

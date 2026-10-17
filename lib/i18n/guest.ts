@@ -62,6 +62,16 @@ const en = {
     recapPlaceholder: "you@example.com",
     recapConsent: "Email me the highlights the morning after. One email, then Klik deletes my address.",
   },
+  // A gallery on the guest's home screen (lib/home-screen.ts).
+  home: {
+    title: "Keep this gallery on your home screen",
+    body: "One tap back to everyone's photos, and you stay joined.",
+    ios: "Tap Share, then Add to Home Screen.",
+    android: "Tap the menu (⋮), then Add to Home screen.",
+    samsung: "Tap the menu (☰), then Add page to, then Home screen.",
+    inApp: "Open this page in your phone's browser first (from the ⋯ menu), then add it to your home screen there.",
+    dismiss: "Not now",
+  },
   gallery: {
     linkedMissing: "That photo is not in the gallery any more, or not yet. Here is everything else.",
     videosNotWatermarked: "Videos cannot be watermarked yet. Turn proofs off to add videos.",
@@ -513,6 +523,15 @@ const es: GuestCopy = {
     recapHint: "Recibe las mejores fotos a la mañana siguiente.",
     recapPlaceholder: "tu@ejemplo.com",
     recapConsent: "Envíame lo mejor a la mañana siguiente. Un solo correo, y después Klik borra mi dirección.",
+  },
+  home: {
+    title: "Ten esta galería en tu pantalla de inicio",
+    body: "Un toque para volver a las fotos de todos, sin tener que unirte otra vez.",
+    ios: "Toca Compartir y luego Agregar a la pantalla de inicio.",
+    android: "Toca el menú (⋮) y luego Agregar a la pantalla principal.",
+    samsung: "Toca el menú (☰), luego Añadir página a y Pantalla de inicio.",
+    inApp: "Primero abre esta página en el navegador de tu teléfono (desde el menú ⋯) y agrégala ahí a tu pantalla de inicio.",
+    dismiss: "Ahora no",
   },
   gallery: {
     linkedMissing: "Esa foto ya no está en la galería, o todavía no. Aquí tienes todo lo demás.",
