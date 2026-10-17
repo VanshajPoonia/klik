@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Sparkles } from "lucide-react";
+import { StreamVideo, UnplayableVideo } from "@/components/media/stream-video";
 import {
   enhancePhoto,
   getEnhancePreference,
@@ -147,13 +148,25 @@ export function ShareView({
 
       <div className="relative min-h-0 flex-1 px-5">
         {kind === "video" ? (
-          <video
+          <StreamVideo
             src={contentUrl}
+            stream={false}
             poster={posterUrl ?? undefined}
             className="h-full max-h-[75vh] w-full rounded-2xl object-contain"
-            controls
-            playsInline
-            preload="metadata"
+            unplayable={
+              <div className="flex min-h-[50vh] items-center justify-center rounded-2xl border border-canvas-line">
+                <UnplayableVideo
+                  title="This video won't play here"
+                  body={
+                    downloadUrl
+                      ? "It was filmed in a format this browser can't show. Download it to watch it, or open this link on a phone."
+                      : "It was filmed in a format this browser can't show. Open this link on a phone to watch it."
+                  }
+                  downloadHref={downloadUrl}
+                  downloadLabel="Download video"
+                />
+              </div>
+            }
           />
         ) : (
           <div className="relative h-full max-h-[75vh] min-h-[60vh] w-full overflow-hidden rounded-2xl">

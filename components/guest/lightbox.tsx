@@ -26,7 +26,7 @@ import { MediaSharePanel } from "@/components/guest/media-share-panel";
 import { fetchMediaBlob } from "@/lib/media-share";
 import { ProofNote } from "@/components/guest/proof-note";
 import { useGuestCopy } from "@/components/guest/guest-copy";
-import { StreamVideo } from "@/components/media/stream-video";
+import { StreamVideo, UnplayableVideo } from "@/components/media/stream-video";
 import { PRINT_PRODUCTS, printDpi, printQuality } from "@/lib/print-catalog";
 
 // CAM-2. A few hundred kilobytes that only someone editing should download,
@@ -682,6 +682,14 @@ export function Lightbox({
               label={t.viewer.position("video", index + 1, items.length)}
               className="h-full w-full object-contain"
               autoPlay
+              unplayable={
+                <UnplayableVideo
+                  title={t.viewer.cantPlayTitle}
+                  body={canDownload && downloadBaseUrl ? t.viewer.cantPlayBody : t.viewer.cantPlayBodyNoDownload}
+                  downloadHref={canDownload && downloadBaseUrl ? `${downloadBaseUrl}/${item.id}/download` : null}
+                  downloadLabel={t.viewer.download("video")}
+                />
+              }
             />
           ) : (
             // Keyed apart from the sheets below, which share this parent: one key
