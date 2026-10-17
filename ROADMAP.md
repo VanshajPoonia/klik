@@ -71,7 +71,7 @@
 What the second check left became these, built in this order on 2026-10-18, each shipped on its own:
 - **MED-13** a guest's own link can carry an end date and a password. **Done 2026-10-18.**
 - **MED-14** access for particular people: a link sent by email to named addresses, opened by signing in as one of them. **Done 2026-10-18.**
-- **MED-15** guests make folders of their own.
+- **MED-15** guests make folders of their own. **Done 2026-10-18.**
 - **MED-16** the host puts the photos in a folder in their own order.
 - **ACC-8** a login made on `/admin` can be sent a link to set its own password, instead of a password passed on by hand.
 - Not taken up: a superadmin designing new looks from `/admin` (TPL-1, "Not built").
@@ -784,6 +784,10 @@ Found while building it, and fixed for every upload: the upload id is chosen by 
 - A host invites up to 20 at a time, a guest 10; 50 a link. Invitations go as bulk mail, so they stop before the last 20 emails of the day, which are kept for sign-in codes. **Let anyone with the link open it again** turns it back; taking someone off deletes their row.
 - A link turned off or run out says so before asking who anyone is. A crawler is never signed in, so an invite-only link previews as a refusal with no photo. Privacy Policy updated (and its date, which last week's changes had not moved).
 - Not built: inviting by phone number, and an invite that expires on its own (the link's own end date covers it).
+
+### MED-15. Guests make folders
+**DONE 2026-10-18** (`drizzle/0060_guest_folders.sql`, `app/api/e/[slug]/me/folders/route.ts`, `test/guest-self-service.dbtest.ts`). Filing their own photos, a guest's **Move to** list ends with **New folder…**: they name it, it is made, and what they picked goes in. A guest's folder is an ordinary folder of the event from then on: everyone sees it once something is in it, anyone can file their own photos into it, and the hosts rename, hide or delete it like their own; the dashboard's card says "Made by Ana, a guest". Top level only, five per guest, inside the plan's cap. **Guests can make folders** in Settings is the host's switch, on by default.
+- Not built: a guest renaming or deleting their own folder. The hosts can, and a folder that other guests have filed into is not one guest's to take away.
 
 ---
 

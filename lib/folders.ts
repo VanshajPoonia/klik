@@ -91,11 +91,14 @@ export async function createFolder({
   name,
   parentId,
   maxFolders,
+  createdByGuestId = null,
 }: {
   eventId: string;
   name: string;
   parentId: string | null;
   maxFolders: number;
+  /** MED-15: a guest made it. */
+  createdByGuestId?: string | null;
 }): Promise<FolderRow> {
   const live = await listFolders(eventId);
   if (live.length >= maxFolders) throw new FolderError("limit");
@@ -104,7 +107,7 @@ export async function createFolder({
   try {
     const [row] = await db
       .insert(albums)
-      .values({ id: nanoid(), eventId, name, parentId, position: await nextPosition(eventId, parentId) })
+      .values({ id: nanoid(), eventId, name, parentId, position: await nextPosition(eventId, parentId), createdByGuestId })
       .returning(folderColumns);
     return row;
   } catch (error) {

@@ -146,7 +146,8 @@ export function EventDashboard({
   usage?: UsageSummary | null;
   addressing?: { origin: string; formerSlugs: string[] } | null;
   license?: EventLicenseSummary;
-  albums?: Album[];
+  /** MED-15: `madeBy` is the guest who made it, when one did. */
+  albums?: Array<Album & { madeBy?: string | null }>;
   /** AI-1: the event's moments, when there are at least two. */
   moments?: DashboardMoment[];
   coHosts?: CoHost[];
@@ -207,6 +208,7 @@ export function EventDashboard({
       coverMediaId: album.coverMediaId,
       createdAt: album.createdAt,
       teamOnly: album.teamOnly,
+      madeBy: album.madeBy ?? null,
     })),
   );
   const [chosenView, setChosenView] = useState<FolderView>("all");

@@ -380,6 +380,8 @@ export const events = pgTable(
     scenesEnabled: boolean("scenes_enabled").notNull().default(true),
     // GRW-6: whether guests may order prints, once prints are switched on.
     printsEnabled: boolean("prints_enabled").notNull().default(true),
+    // MED-15: guests may make folders of their own. drizzle/0060_guest_folders.sql.
+    guestFolders: boolean("guest_folders").notNull().default(true),
     // GRW-3: a ranked list of who has shared most, by display name. Off until
     // the host turns it on. See lib/challenges.ts.
     leaderboardEnabled: boolean("leaderboard_enabled").notNull().default(false),
@@ -471,6 +473,8 @@ export const albums = pgTable(
     // MED-12: kept to the event's team. Guests do not see the folder or what
     // is in it, below it included; a folder link still opens it.
     teamOnly: boolean("team_only").notNull().default(false),
+    // MED-15: the guest who made it, if one did. Otherwise an ordinary folder.
+    createdByGuestId: text("created_by_guest_id").references((): AnyPgColumn => guests.id, { onDelete: "set null" }),
     // Soft delete: media references an album with ON DELETE SET NULL, so a hard
     // delete silently unfiled every photo in it. Sorting 2,000 wedding photos
     // into folders is real work to lose to one mis-tap.

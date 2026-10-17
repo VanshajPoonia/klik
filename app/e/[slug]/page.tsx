@@ -330,6 +330,7 @@ export default async function GuestEventPage({
       initialMedia={initialMedia}
       syncedAt={syncedAt}
       folders={folders}
+      canMakeFolders={!isOwner && event.guestFolders && canUseAlbums(plan.key)}
       moments={moments}
       coverUrl={coverUrl}
       canSlideshow={canUseSlideshow(plan.key)}

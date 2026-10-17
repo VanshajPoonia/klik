@@ -61,6 +61,8 @@ const patchSchema = z.object({
   scenesEnabled: z.boolean().optional(),
   // GRW-6. On by default; shown only once prints are switched on.
   printsEnabled: z.boolean().optional(),
+  // MED-15: guests may make folders of their own.
+  guestFolders: z.boolean().optional(),
   // GRW-1. On by default: it only offers, each guest still chooses.
   recapEnabled: z.boolean().optional(),
   // GRW-4. Listed on the owner's public profile, so only the owner sets it.

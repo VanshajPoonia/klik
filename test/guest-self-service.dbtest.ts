@@ -18,6 +18,8 @@ const { POST: arrange } = await import("@/app/api/e/[slug]/me/media/route");
 const { GET: listLinks, POST: makeLink, PATCH: limitLink, DELETE: turnOff } = await import("@/app/api/e/[slug]/me/shares/route");
 const { evaluateShare } = await import("@/lib/share-access");
 const guestInvites = await import("@/app/api/e/[slug]/me/shares/[shareId]/invites/route");
+const { POST: makeFolder } = await import("@/app/api/e/[slug]/me/folders/route");
+const { events } = await import("@/lib/schema");
 const { verifySharePassword } = await import("@/lib/shares");
 const { guestCookieName, signGuestSession } = await import("@/lib/guest");
 const { fetchGalleryMedia } = await import("@/lib/media");
@@ -235,5 +237,51 @@ describe("MED-11 links", () => {
 
     jar.set(guestCookieName(eventId), await signGuestSession({ guestId: someone, eventId }));
     expect((await invite(made.id, "x@example.test")).status).toBe(404);
+  });
+});
+
+describe("MED-15 a guest's own folders", () => {
+  const folderCall = (slug: string, body: unknown) =>
+    makeFolder(
+      new Request(`https://klik.test/api/e/${slug}/me/folders`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.23" },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ slug }) },
+    );
+
+  it("makes a top-level folder the guest can file their own photos into, marked as theirs", async () => {
+    const { eventId, slug, me } = await setUp();
+    const mine = await makeMedia(eventId, { guestId: me });
+    const response = await folderCall(slug, { name: "  Dance floor  " });
+    expect(response.status).toBe(201);
+    const { folder } = await response.json();
+    expect(folder).toMatchObject({ name: "Dance floor", parentId: null });
+    const [row] = await testDb.select().from(albums).where(eq(albums.id, folder.id));
+    expect(row.createdByGuestId).toBe(me);
+
+    expect((await call(arrange, slug, { action: "move", ids: [mine], albumId: folder.id })).status).toBe(200);
+    expect((await rowsOf([mine]))[0].albumId).toBe(folder.id);
+  });
+
+  it("stops at five per guest, needs a name, and is off when the host says so", async () => {
+    const { eventId, slug } = await setUp();
+    for (let index = 0; index < 5; index++) expect((await folderCall(slug, { name: `F${index}` })).status).toBe(201);
+    const sixth = await folderCall(slug, { name: "F5" });
+    expect(sixth.status).toBe(409);
+    expect((await sixth.json()).code).toBe("guest_limit");
+    expect((await folderCall(slug, { name: "   " })).status).toBe(400);
+
+    await testDb.update(events).set({ guestFolders: false }).where(eq(events.id, eventId));
+    const off = await folderCall(slug, { name: "Nope" });
+    expect(off.status).toBe(403);
+    expect((await off.json()).code).toBe("hosts_only");
+  });
+
+  it("refuses without a guest", async () => {
+    const { slug } = await setUp();
+    jar.clear();
+    expect((await folderCall(slug, { name: "X" })).status).toBe(401);
   });
 });

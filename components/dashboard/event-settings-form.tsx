@@ -50,6 +50,7 @@ export function EventSettingsForm({
   const [reactionsEnabled, setReactionsEnabled] = useState(event.reactionsEnabled);
   const [commentsEnabled, setCommentsEnabled] = useState(event.commentsEnabled);
   const [momentsEnabled, setMomentsEnabled] = useState(event.momentsEnabled);
+  const [guestFolders, setGuestFolders] = useState(event.guestFolders);
   const [scenesEnabled, setScenesEnabled] = useState(event.scenesEnabled);
   const [printsEnabled, setPrintsEnabled] = useState(event.printsEnabled);
   const [recapEnabled, setRecapEnabled] = useState(event.recapEnabled);
@@ -117,6 +118,7 @@ export function EventSettingsForm({
           reactionsEnabled,
           commentsEnabled,
           momentsEnabled,
+          guestFolders,
           scenesEnabled,
           printsEnabled,
           recapEnabled,
@@ -387,6 +389,13 @@ export function EventSettingsForm({
           hint="Klik splits the gallery wherever there was a long pause in the photos, like before and after the ceremony. Rename them from the gallery tab."
         >
           Show guests the gallery in moments
+        </Checkbox>
+        <Checkbox
+          checked={guestFolders}
+          onChange={(change) => setGuestFolders(change.target.checked)}
+          hint="When they file their own photos, a guest can start a new folder, up to five each. Everyone sees it once something is in it, and you can rename, hide or delete it like your own."
+        >
+          Guests can make folders
         </Checkbox>
         {offerScenes && (
           <Checkbox

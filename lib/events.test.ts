@@ -60,6 +60,7 @@ const row: Event = {
   momentsEnabled: true,
   scenesEnabled: true,
   printsEnabled: true,
+  guestFolders: true,
   leaderboardEnabled: false,
   showOnProfile: false,
   guestLanguage: "auto",
@@ -144,6 +145,7 @@ const WITHHELD: Record<string, string> = {
   scenesEnabled: "decides what the server sends, never needed raw",
   // GRW-6. The page decides whether to offer prints and passes that alone.
   printsEnabled: "decides what the server sends, never needed raw",
+  guestFolders: "decides what the server sends, never needed raw",
   // GRW-3. The server sends no leaderboard when it is off, for the same reason.
   leaderboardEnabled: "decides what the server sends, never needed raw",
   // GRW-4. The host's choice about their own profile page.

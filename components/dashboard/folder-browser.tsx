@@ -23,6 +23,8 @@ export interface DashboardFolder extends FolderNode {
   coverMediaId: string | null;
   /** MED-12: kept to the event's team, this folder itself. */
   teamOnly?: boolean;
+  /** MED-15: the guest who made it, when one did. */
+  madeBy?: string | null;
 }
 
 /** "all", "unfiled", a folder's id, or `moment:` and a moment's id (AI-1). */
@@ -504,6 +506,7 @@ export function FolderBrowser({
                       {childrenOf(folders, folder.id).length > 0 &&
                         ` · ${childrenOf(folders, folder.id).length} ${childrenOf(folders, folder.id).length === 1 ? "folder" : "folders"}`}
                     </span>
+                    {folder.madeBy && <span className="block truncate text-xs text-muted">Made by {folder.madeBy}, a guest</span>}
                   </span>
                 </button>
                 {canManage && cards.length > 1 && (

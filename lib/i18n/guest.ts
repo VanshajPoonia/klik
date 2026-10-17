@@ -190,6 +190,20 @@ const en = {
     linkEnded: "Ended",
     linkLocked: "Needs a password",
     linkForPeople: (n: number) => (n === 1 ? "For 1 person" : `For ${n} people`),
+    newFolderOption: "New folder…",
+    newFolderTitle: "A new folder",
+    newFolderLabel: "What to call it",
+    newFolderHint: (n: number) =>
+      `${n === 1 ? "The one you picked goes" : `The ${n} you picked go`} into it. Everyone sees the folder once something is in it, and the hosts can rename it.`,
+    newFolderSubmit: (n: number) => (n === 1 ? "Make it and move 1" : `Make it and move ${n}`),
+    newFolderErrors: {
+      hosts_only: "The hosts make the folders here.",
+      guest_limit: "You have made as many folders as you can here.",
+      event_full: "This gallery has all the folders it can hold.",
+      no_name: "Give the folder a name.",
+      rate_limited: "Too many folders at once. Try again shortly.",
+      closed: "This gallery is not open right now.",
+    } as Record<string, string>,
     manageLink: "Manage",
     linkNoteInvited: "Only the people you invited can open it, signed in with their address. Turn it off any time under Your links.",
     invite: {
@@ -731,6 +745,20 @@ const es: GuestCopy = {
     linkEnded: "Caducado",
     linkLocked: "Pide contraseña",
     linkForPeople: (n: number) => (n === 1 ? "Para 1 persona" : `Para ${n} personas`),
+    newFolderOption: "Carpeta nueva…",
+    newFolderTitle: "Una carpeta nueva",
+    newFolderLabel: "Cómo llamarla",
+    newFolderHint: (n: number) =>
+      `${n === 1 ? "La que elegiste va" : `Las ${n} que elegiste van`} dentro. Todos ven la carpeta en cuanto tiene algo, y los anfitriones pueden cambiarle el nombre.`,
+    newFolderSubmit: (n: number) => (n === 1 ? "Crearla y mover 1" : `Crearla y mover ${n}`),
+    newFolderErrors: {
+      hosts_only: "Aquí las carpetas las crean los anfitriones.",
+      guest_limit: "Ya creaste todas las carpetas que puedes aquí.",
+      event_full: "Esta galería ya tiene todas las carpetas que admite.",
+      no_name: "Ponle un nombre a la carpeta.",
+      rate_limited: "Demasiadas carpetas a la vez. Inténtalo en un momento.",
+      closed: "Esta galería no está abierta ahora.",
+    } as Record<string, string>,
     manageLink: "Gestionar",
     linkNoteInvited: "Solo las personas que invitaste pueden abrirlo, con su dirección. Desactívalo cuando quieras en Tus enlaces.",
     invite: {

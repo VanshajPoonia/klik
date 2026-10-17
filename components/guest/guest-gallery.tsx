@@ -147,6 +147,7 @@ export function GuestGallery({
   initialMedia,
   syncedAt,
   folders: initialFolders = [],
+  canMakeFolders = false,
   moments: initialMoments = [],
   coverUrl = null,
   canSlideshow = false,
@@ -172,6 +173,8 @@ export function GuestGallery({
   /** When the server read `initialMedia`. The first poll asks what changed since. */
   syncedAt: string;
   folders?: GalleryFolder[];
+  /** MED-15: a guest may start a folder when filing their own photos. */
+  canMakeFolders?: boolean;
   moments?: GalleryMoment[];
   coverUrl?: string | null;
   canSlideshow?: boolean;
@@ -715,6 +718,8 @@ export function GuestGallery({
     invited: number;
   } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  // MED-15: naming a new folder for what they picked.
+  const [newFolder, setNewFolder] = useState<{ name: string; busy: boolean; error: string | null } | null>(null);
   // The limits on the link just made: an end and a password, set after making it.
   const [limitOpen, setLimitOpen] = useState(false);
   const [limitDays, setLimitDays] = useState<1 | 7 | 30 | null>(null);
@@ -738,6 +743,7 @@ export function GuestGallery({
   const stopSelecting = useCallback(() => {
     setSelecting(false);
     setSelectedIds(new Set());
+    setNewFolder(null);
   }, []);
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((current) => {
@@ -790,6 +796,35 @@ export function GuestGallery({
     },
     [event.slug, stopSelecting, t],
   );
+
+  /** MED-15: makes the folder, then files what they picked into it. */
+  const makeFolderAndMove = useCallback(async () => {
+    if (!newFolder || newFolder.busy) return;
+    const name = newFolder.name.trim();
+    if (!name) {
+      setNewFolder({ ...newFolder, error: t.gallery.newFolderErrors.no_name });
+      return;
+    }
+    setNewFolder({ ...newFolder, busy: true, error: null });
+    try {
+      const res = await fetch(`/api/e/${event.slug}/me/folders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNewFolder({ name, busy: false, error: t.gallery.newFolderErrors[data.code] ?? data.error ?? t.gallery.arrangeFailed });
+        return;
+      }
+      const folder = data.folder as GalleryFolder;
+      setFolders((current) => [...current, { ...folder, filled: true }]);
+      setNewFolder(null);
+      await arrange({ action: "move", ids: [...selectedIds], albumId: folder.id });
+    } catch {
+      setNewFolder({ name, busy: false, error: t.common.noConnection });
+    }
+  }, [arrange, event.slug, newFolder, selectedIds, t]);
 
   /** The sheet for one of their links: one just made, or one from Your links. */
   const openLinkSheet = useCallback((link: NonNullable<typeof madeLink>) => {
@@ -1731,18 +1766,22 @@ export function GuestGallery({
             ))}
             <label
               className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border border-canvas-line text-xs text-paper ${
-                arranging || selectedIds.size === 0 || folders.length === 0 ? "opacity-40" : ""
+                arranging || selectedIds.size === 0 || (folders.length === 0 && !canMakeFolders) ? "opacity-40" : ""
               }`}
             >
               <FolderInput className="h-4 w-4" aria-hidden="true" />
               {t.gallery.moveToFolder}
               <select
                 aria-label={t.gallery.moveToFolder}
-                disabled={arranging || selectedIds.size === 0 || folders.length === 0}
+                disabled={arranging || selectedIds.size === 0 || (folders.length === 0 && !canMakeFolders)}
                 value=""
                 onChange={(change) => {
                   const value = change.target.value;
                   if (!value) return;
+                  if (value === "__new") {
+                    setNewFolder({ name: "", busy: false, error: null });
+                    return;
+                  }
                   void arrange({ action: "move", ids: [...selectedIds], albumId: value === "none" ? null : value });
                 }}
                 className="absolute inset-0 cursor-pointer opacity-0"
@@ -1755,6 +1794,7 @@ export function GuestGallery({
                     {folder.name}
                   </option>
                 ))}
+                {canMakeFolders && <option value="__new">{t.gallery.newFolderOption}</option>}
               </select>
             </label>
             <button
@@ -1768,6 +1808,56 @@ export function GuestGallery({
             </button>
           </div>
         </div>
+      )}
+
+      {/* MED-15: naming a folder for what they picked, above the bar. */}
+      {selecting && newFolder && (
+        <form
+          className="klik-sheet-up fixed inset-x-3 bottom-3 z-50 mx-auto max-w-md rounded-2xl border border-canvas-line bg-canvas-raised p-4"
+          style={contentTheme}
+          role="dialog"
+          aria-labelledby="new-folder-title"
+          onSubmit={(submit) => {
+            submit.preventDefault();
+            void makeFolderAndMove();
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p id="new-folder-title" className="text-sm font-medium text-paper">
+              {t.gallery.newFolderTitle}
+            </p>
+            <button
+              type="button"
+              onClick={() => setNewFolder(null)}
+              aria-label={t.common.close}
+              className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted hover:text-paper"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+          <label htmlFor="new-folder-name" className="mb-2 mt-3 block text-xs text-muted">
+            {t.gallery.newFolderLabel}
+          </label>
+          <input
+            id="new-folder-name"
+            value={newFolder.name}
+            onChange={(change) => setNewFolder({ ...newFolder, name: change.target.value, error: null })}
+            maxLength={60}
+            autoFocus
+            autoComplete="off"
+            enterKeyHint="done"
+            className="min-h-11 w-full rounded-xl border border-canvas-line bg-canvas px-3 py-2 text-sm text-paper focus:border-volt/60 focus:outline-none focus:ring-1 focus:ring-volt/60"
+          />
+          <p className="mt-2 text-xs leading-relaxed text-muted">{t.gallery.newFolderHint(selectedIds.size)}</p>
+          {newFolder.error && (
+            <p className="mt-2 text-xs text-red-400" role="alert">
+              {newFolder.error}
+            </p>
+          )}
+          <Button type="submit" size="sm" className="mt-3 w-full" disabled={newFolder.busy || !newFolder.name.trim()}>
+            {t.gallery.newFolderSubmit(selectedIds.size)}
+          </Button>
+        </form>
       )}
 
       {/* MED-11: the link a guest just made, ready to send. */}

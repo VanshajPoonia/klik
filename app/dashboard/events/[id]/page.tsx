@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { albums, eventCoHosts, events, media, users, venueClients } from "@/lib/schema";
+import { albums, eventCoHosts, events, guests, media, users, venueClients } from "@/lib/schema";
 import { toOrganizerEvent } from "@/lib/events";
 import { getAppUrl } from "@/lib/env";
 import { eventLicenseState, eventPlan } from "@/lib/license";
@@ -119,7 +119,14 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           }),
         ),
       ),
-    db.select().from(albums).where(and(eq(albums.eventId, id), isNull(albums.deletedAt), eq(albums.kind, "manual"))).orderBy(albums.position, albums.createdAt),
+    // MED-15: with the name of the guest who made it, when one did.
+    db
+      .select({ album: albums, madeBy: guests.displayName })
+      .from(albums)
+      .leftJoin(guests, eq(guests.id, albums.createdByGuestId))
+      .where(and(eq(albums.eventId, id), isNull(albums.deletedAt), eq(albums.kind, "manual")))
+      .orderBy(albums.position, albums.createdAt)
+      .then((rows) => rows.map(({ album, madeBy }) => ({ ...album, madeBy: album.createdByGuestId ? (madeBy ?? "A guest") : null }))),
     db
       .select({
         id: users.id,
