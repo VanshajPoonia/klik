@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(node -e ' *)",
-      "Bash(npm run db:migrate *)"
+      "Bash(npm run db:migrate *)",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "Bash(git -C /Users/vanshajpoonia/Code/Klik status --short)"
     ]
   }
 }
