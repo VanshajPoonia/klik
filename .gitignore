@@ -43,3 +43,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# impeccable design-review captures and logs
+/.impeccable/review/
+/.impeccable/questions/
+
+# local image enhance probe
+/.probe-enh/
