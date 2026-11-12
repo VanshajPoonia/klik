@@ -2,21 +2,22 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Mail, MessageCircle, Send, Share2 } from "lucide-react";
+import Link from "next/link";
+import { Mail, MessageCircle, Printer, Send, Share2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button, buttonClassName } from "@/components/ui/button";
-import { composeSign, composeStory, shareOrDownload } from "@/lib/qr-compose";
+import { composeStory, shareOrDownload } from "@/lib/qr-compose";
 
 type QrStyle = "classic" | "dots" | "rounded";
 
 const STYLE_LABELS: Record<QrStyle, string> = { classic: "Classic", dots: "Dots", rounded: "Rounded" };
 
 /**
- * The event's QR code and every way to get it in front of guests (QR-2, QR-3):
- * a style on Premium, a share sheet that sends the image itself to WhatsApp,
- * prefilled messages, a printable sign and a story image. A styled code is
- * decoded on the server before it is served, so the preview here is always one
- * a phone can read.
+ * The event's QR code and every way to get it in front of guests (QR-2, QR-3,
+ * QR-5): a printable sign in the gallery's look on its own page, a style on
+ * Premium, a share sheet that sends the image itself to WhatsApp, prefilled
+ * messages and a story image. A styled code is decoded on the server before it
+ * is served, so the preview here is always one a phone can read.
  */
 export function QrPanel({
   eventId,
@@ -24,8 +25,6 @@ export function QrPanel({
   guestUrl,
   eventName,
   accent,
-  template = "classic",
-  canDownloadSign = false,
   canStyle = false,
 }: {
   eventId: string;
@@ -33,8 +32,6 @@ export function QrPanel({
   guestUrl: string;
   eventName: string;
   accent: string;
-  template?: "classic" | "minimal" | "bold";
-  canDownloadSign?: boolean;
   canStyle?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
@@ -103,7 +100,11 @@ export function QrPanel({
       </div>
 
       <div className="flex flex-wrap justify-center gap-3">
-        <Button onClick={() => void run("share", fetchQr, `klik-${slug}.png`)} disabled={busy !== null} className="gap-2">
+        <Link href={`/dashboard/events/${eventId}/sign`} className={buttonClassName({ className: "gap-2" })}>
+          <Printer className="h-4 w-4" aria-hidden="true" />
+          Print a sign
+        </Link>
+        <Button variant="ghost" onClick={() => void run("share", fetchQr, `klik-${slug}.png`)} disabled={busy !== null} className="gap-2">
           <Share2 className="h-4 w-4" aria-hidden="true" />
           {busy === "share" ? "Preparing…" : "Share QR code"}
         </Button>
@@ -161,22 +162,6 @@ export function QrPanel({
         >
           {busy === "story" ? "Drawing…" : "Story image"}
         </Button>
-        {canDownloadSign && (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy !== null}
-            onClick={() =>
-              void run(
-                "sign",
-                () => composeSign({ qrUrl: qrUrl(1024), eventName, guestUrl, accent, template }),
-                `klik-${slug}-sign.png`,
-              )
-            }
-          >
-            {busy === "sign" ? "Drawing…" : "Printable sign"}
-          </Button>
-        )}
       </div>
       {message && (
         <p className="text-xs text-muted" role="status">

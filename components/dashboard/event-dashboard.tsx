@@ -92,7 +92,6 @@ export function EventDashboard({
   canManageShares = false,
   canCustomizeGallery = false,
   canCustomizeQr = false,
-  canDownloadQrSign = false,
   canUseVenueHub = false,
   canDeleteEvent = false,
   canManageTrash = false,
@@ -130,7 +129,6 @@ export function EventDashboard({
   canManageShares?: boolean;
   canCustomizeGallery?: boolean;
   canCustomizeQr?: boolean;
-  canDownloadQrSign?: boolean;
   canUseVenueHub?: boolean;
   canDeleteEvent?: boolean;
   canManageTrash?: boolean;
@@ -1056,8 +1054,6 @@ export function EventDashboard({
                 guestUrl={guestUrl}
                 eventName={event.name}
                 accent={canCustomizeGallery ? event.accentColor : "#edee00"}
-                template={canCustomizeQr ? event.qrTemplate : "classic"}
-                canDownloadSign={canDownloadQrSign}
                 canStyle={canCustomizeQr}
               />
               {canManageKiosks && <KioskPanel eventId={event.id} folders={canManageAlbums ? folders : []} />}

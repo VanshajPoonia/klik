@@ -21,7 +21,6 @@ import { listFormerSlugs } from "@/lib/slugs";
 import {
   canCustomizeGallery,
   canCustomizeQr,
-  canDownloadQrSign,
   canManageEventClients,
   canUseAlbums,
   canUseCoHosts,
@@ -221,7 +220,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         })()}
         canCustomizeGallery={canCustomizeGallery(plan.key)}
         canCustomizeQr={canCustomizeQr(plan.key)}
-        canDownloadQrSign={canDownloadQrSign(plan.key)}
         canUseVenueHub={canUseVenueHub(plan.key)}
         license={{
           state: licenseState,
