@@ -16,7 +16,6 @@ import { canUseProofs } from "@/lib/plans";
 export function EventSettingsForm({
   event,
   canManageClients = false,
-  canCustomizeQr = false,
   canUseVenueHub = false,
   canDeleteEvent = false,
   profile = null,
@@ -33,7 +32,6 @@ export function EventSettingsForm({
   /** QR-1: present when the plan allows a custom address. */
   addressing?: { origin: string; formerSlugs: string[] } | null;
   canManageClients?: boolean;
-  canCustomizeQr?: boolean;
   canUseVenueHub?: boolean;
   canDeleteEvent?: boolean;
   /** GRW-4: set only for the owner, whose profile this event may be listed on. */
@@ -64,7 +62,6 @@ export function EventSettingsForm({
   const [clientEmail, setClientEmail] = useState(event.clientEmail ?? "");
   const [clientPhone, setClientPhone] = useState(event.clientPhone ?? "");
   const [clientId, setClientId] = useState(event.clientId ?? "");
-  const [qrTemplate, setQrTemplate] = useState(event.qrTemplate);
   const [venueFeatured, setVenueFeatured] = useState(event.venueFeatured);
   // CAM-4. The develop time is edited in the browser's own time zone, which is
   // the host's, and sent as an instant.
@@ -131,7 +128,6 @@ export function EventSettingsForm({
           clientName: canManageClients ? clientName || null : undefined,
           clientEmail: canManageClients ? clientEmail || null : undefined,
           clientPhone: canManageClients ? clientPhone || null : undefined,
-          qrTemplate: canCustomizeQr ? qrTemplate : undefined,
           venueFeatured: canUseVenueHub ? venueFeatured : undefined,
           slug: addressing && slug.trim() !== event.slug ? slug.trim() : undefined,
           disposableMode,
@@ -289,23 +285,8 @@ export function EventSettingsForm({
 
       <p className="rounded-xl border border-canvas-line px-4 py-3 text-sm text-muted">
         The gallery&apos;s look, its colours and your names for it are on the <span className="text-paper">Look</span> tab.
+        The printable QR sign follows them, from the <span className="text-paper">QR code</span> tab.
       </p>
-
-      {canCustomizeQr && (
-        <Field label="QR sign template">
-          <select
-            className={inputClass}
-            value={qrTemplate}
-            onChange={(event) =>
-              setQrTemplate(event.target.value as OrganizerEvent["qrTemplate"])
-            }
-          >
-            <option value="classic">Classic</option>
-            <option value="minimal">Minimal</option>
-            <option value="bold">Bold</option>
-          </select>
-        </Field>
-      )}
 
       {addressing && (
         <Field

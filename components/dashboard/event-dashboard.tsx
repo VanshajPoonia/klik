@@ -972,7 +972,6 @@ export function EventDashboard({
               offerScenes={visionEnabled}
               offerPrints={printsAvailable}
               canManageClients={canManageClients}
-              canCustomizeQr={canCustomizeQr}
               canUseVenueHub={canUseVenueHub}
               canDeleteEvent={canDeleteEvent}
               clients={clients}
