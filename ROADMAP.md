@@ -950,6 +950,15 @@ Replace the plain `qrcode` render for display purposes with a styled renderer: r
 - **QR-4f. Print guardrails.** Before allowing export, warn when: the QR renders smaller than 2.5 cm at the chosen physical size (below reliable scan distance), the contrast ratio between QR modules and whatever is behind them is under 4.5:1, any element crosses the bleed line, or an uploaded image is below 150 DPI at its placed size. These four checks are what separate this from a toy.
 - **Mobile:** the full editor is desktop-first. On phones, offer template selection, text editing, and export only. Say so in the UI rather than shipping a broken drag experience.
 
+### QR-5. A printable sign in the gallery's look
+**DONE 2026-11-13** (`lib/qr-sign.ts`, `lib/qr-svg.ts`, `components/qr-sign/`, `app/dashboard/events/[id]/sign/`, `.qs` in `app/globals.css`, `lib/qr-sign.test.ts`). "Print a sign" on the QR code tab opens a page with the sign on one side and its options on the other. It replaces the three fixed sign templates (classic, minimal, bold) and the settings field that picked between them. Decisions:
+- **The preview is the print.** The sign is one component sized entirely in container units, so the preview and the printed sheet are the same layout at two scales. Printing renders it again at its real size in `.qs-print-root` and hides everything else, with `@page` set to the paper and no margin. Checked by printing to PDF in Chrome: one page, at the chosen size, for every look and paper.
+- **Every look has its sign.** Black tie, White lace, Party, Diploma, Modern and Klik's own, each in the look's typefaces and ornaments and the event's colourway. The words come from what the host wrote for the gallery (the couple, the age, the class year), read through the sign's look.
+- **The code is drawn in the sign's colours** (the background colour on a cream card for a dark look, the accent or the ink on the paper for a light one), held to dark on light at 4.5:1, and **decoded in the page before it is shown**. One that does not decode is swapped for a plain black code and the page says so. A test decodes every colourway, on its own paper and on white, in every style.
+- **Options:** the look, its colourways, print on white to save ink, the title, the line over the code (four presets or the host's own), English or Spanish, the code's style, the date, the message, three how-it-works steps, the address, the Klik mark, paper (A4, Letter, A5, 5 x 7, 4 x 6) and four table cards to a sheet with cut lines. Remembered per event in the browser, not on the event.
+- **Plans.** The sign is on every plan, because every gallery already has its look and the Klik mark on it carries Klik to every table. Premium adds what it adds everywhere: dotted and rounded codes, its own colours, and taking the mark off. The print studio (QR-4) stays Premium and Venue.
+- Not done: saving the options on the event so a co-host sees the same sign, and a PNG download of the sign (Save as PDF in the print dialog covers sending it to a print shop).
+
 ---
 
 ## Phase CAM: Camera, editor, sharing
