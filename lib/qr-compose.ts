@@ -1,16 +1,17 @@
 /**
- * QR-3: the printable sign and the story image, drawn in the browser.
+ * QR-3: the story image, drawn in the browser.
  *
  * In the browser rather than on the server because of fonts. The server draws
  * SVG with sharp, whose text rendering depends on fonts installed on the
- * machine, and a Vercel function has none worth relying on; a sign whose event
- * name comes out as boxes is worse than no sign. The browser already has
- * Fraunces and Geist loaded for the page, so the sign uses exactly the type the
- * organizer sees everywhere else. The QR code itself still comes from the
- * server, which is where it is decoded and checked before it is served.
+ * machine, and a Vercel function has none worth relying on; a story whose
+ * event name comes out as boxes is worse than no story. The browser already
+ * has Fraunces and Geist loaded for the page, so the image uses exactly the
+ * type the organizer sees everywhere else. The QR code itself still comes from
+ * the server, which is where it is decoded and checked before it is served.
+ *
+ * The printable sign that used to be drawn here is now its own page in the
+ * gallery's look (QR-5, components/qr-sign).
  */
-
-type Template = "classic" | "minimal" | "bold";
 
 export function cssFont(variable: string, fallback: string): string {
   const value = getComputedStyle(document.body).getPropertyValue(variable).trim();
@@ -84,62 +85,6 @@ interface ComposeInput {
   eventName: string;
   guestUrl: string;
   accent: string;
-}
-
-/** 6 x 8 inches at 300 dpi, in the event's chosen template. */
-export async function composeSign({ qrUrl, eventName, guestUrl, accent, template }: ComposeInput & { template: Template }): Promise<Blob> {
-  await document.fonts.ready;
-  const display = cssFont("--font-fraunces", "Georgia, serif");
-  const sans = cssFont("--font-geist-sans", "system-ui, sans-serif");
-  const qr = await loadImage(qrUrl);
-
-  const width = 1800;
-  const height = 2400;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d")!;
-
-  const background = template === "bold" ? accent : template === "minimal" ? "#ffffff" : "#090a08";
-  const foreground = template === "classic" ? "#ffffff" : "#090a08";
-  const rule = template === "bold" ? "#090a08" : accent;
-
-  context.fillStyle = background;
-  context.fillRect(0, 0, width, height);
-  context.fillStyle = rule;
-  roundedRect(context, 110, 110, 1580, 18, 9);
-
-  context.fillStyle = foreground;
-  context.textAlign = "center";
-  context.font = `700 54px ${sans}`;
-  context.letterSpacing = "10px";
-  context.fillText("KLIK", width / 2, 370);
-  context.letterSpacing = "0px";
-
-  const title = fitText(context, eventName, { family: display, weight: 700, start: 120, min: 64, width: 1500, maxLines: 2 });
-  context.font = `700 ${title.size}px ${display}`;
-  title.lines.forEach((line, index) => context.fillText(line, width / 2, 560 + index * title.size * 1.1));
-
-  context.globalAlpha = 0.72;
-  context.font = `400 48px ${sans}`;
-  context.fillText("Scan to share photos and videos", width / 2, 790);
-  context.globalAlpha = 1;
-
-  context.fillStyle = "#ffffff";
-  roundedRect(context, 300, 880, 1200, 1200, template === "minimal" ? 24 : 90);
-  context.drawImage(qr, 400, 980, 1000, 1000);
-
-  context.fillStyle = foreground;
-  context.globalAlpha = 0.72;
-  context.font = `400 34px ${sans}`;
-  context.fillText(guestUrl.replace(/^https?:\/\//, ""), width / 2, 2225);
-  context.globalAlpha = 1;
-  context.fillStyle = rule;
-  context.beginPath();
-  context.arc(width / 2, 2305, 13, 0, Math.PI * 2);
-  context.fill();
-
-  return toBlob(canvas);
 }
 
 /** 1080 x 1920, for an Instagram or WhatsApp story. */
