@@ -184,13 +184,16 @@ export function formatLookDate(value: string | Date | null, look: TemplateKey, l
 
 /** Black tie: an Art Deco fan over the names, drawn in hairline gold. */
 function DecoFan() {
+  // Rounded, because the server and a browser can disagree in the last digit
+  // of a sine, and the sign page hydrates this in a client component.
+  const at = (value: number) => Math.round(value * 1000) / 1000;
   const rays = Array.from({ length: 11 }, (_, index) => {
     const angle = ((195 + index * 15) * Math.PI) / 180;
     return {
-      x1: 40 + 13 * Math.cos(angle),
-      y1: 32 + 13 * Math.sin(angle),
-      x2: 40 + 27 * Math.cos(angle),
-      y2: 32 + 27 * Math.sin(angle),
+      x1: at(40 + 13 * Math.cos(angle)),
+      y1: at(32 + 13 * Math.sin(angle)),
+      x2: at(40 + 27 * Math.cos(angle)),
+      y2: at(32 + 27 * Math.sin(angle)),
     };
   });
   return (
