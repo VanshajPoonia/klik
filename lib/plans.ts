@@ -88,6 +88,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "6-month gallery access",
       "Room for about 1,000 photos (25 GB)",
       "One QR code and one gallery",
+      "A printable QR sign in your gallery's look",
       "No subscription",
     ],
     featured: true,
