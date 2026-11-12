@@ -1168,3 +1168,658 @@ body::before {
     rotate: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   QR-5: the printable QR sign (components/qr-sign/qr-sign.tsx), in each look.
+
+   Every size is a share of the sign (cqw, cqh, cqmin against `.qs-cell`), so
+   the preview on the sign page and the printed sheet are the same layout at
+   different scales. Type and ornament follow the gallery looks above; colour
+   comes from the sign's palette (lib/qr-sign.ts), set as --qs-* on `.qs`.
+   --------------------------------------------------------------------------- */
+
+.qs-cell {
+  position: relative;
+  container-type: size;
+  overflow: hidden;
+}
+
+.qs {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--qs-bg);
+  color: var(--qs-ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  text-align: center;
+  /* Without this a browser leaves the background off the paper. */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.qs p {
+  margin: 0;
+}
+
+.qs-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2cqh;
+  padding: 7.5cqh 10cqw 5.5cqh;
+}
+
+.qs-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.3cqh;
+  width: 100%;
+}
+.qs-title {
+  font-size: var(--qs-title);
+  line-height: 1.1;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.qs-date {
+  color: var(--qs-muted);
+  font-size: 2.6cqw;
+}
+.qs-message {
+  max-width: 78cqw;
+  color: var(--qs-muted);
+  font-size: 3cqw;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.qs-orn {
+  display: block;
+  color: var(--qs-accent);
+}
+.qs-orn svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.qs-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.2cqh;
+  width: 100%;
+}
+.qs-cta {
+  max-width: 84cqw;
+  font-size: 4.8cqw;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+.qs-code {
+  /* The larger of a share of the width and of the height that leaves room
+     for the words, so a short Letter sheet and a tall 4 x 6 card both fit. */
+  width: min(46cqw, 34cqh);
+  padding: 2.2cqw;
+  background: var(--qs-card);
+}
+.qs-code img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.qs-steps {
+  display: flex;
+  justify-content: center;
+  gap: 3.5cqw;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--qs-muted);
+  font-size: 2.3cqw;
+  line-height: 1.2;
+}
+.qs-steps li {
+  display: flex;
+  align-items: center;
+  gap: 1.3cqw;
+  max-width: 25cqw;
+  text-align: left;
+}
+.qs-step-n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 4.4cqw;
+  height: 4.4cqw;
+  border: 0.3cqw solid var(--qs-accent);
+  border-radius: 50%;
+  color: var(--qs-accent);
+  font-weight: 600;
+  font-size: 2.3cqw;
+  line-height: 1;
+}
+.qs-noapp {
+  color: var(--qs-muted);
+  font-size: 2.4cqw;
+}
+
+.qs-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4cqh;
+}
+.qs-address {
+  color: var(--qs-ink);
+  font-size: 2.3cqw;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.qs-address span {
+  color: var(--qs-muted);
+}
+.qs-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.1cqw;
+  color: var(--qs-ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 2.9cqw;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.qs-mark {
+  width: 4.6cqw;
+  height: 4.6cqw;
+}
+.qs-frame {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Black tie: Bodoni capitals inside a fine gold double rule, the deco fan over
+   the names, and the code on a cream card ruled in gold. */
+.qs[data-look="black-tie"] .qs-frame {
+  inset: 4.2cqw;
+  border: 0.22cqw solid color-mix(in srgb, var(--qs-accent) 60%, transparent);
+  outline: 0.14cqw solid color-mix(in srgb, var(--qs-accent) 32%, transparent);
+  outline-offset: 1.1cqw;
+}
+.qs[data-look="black-tie"] :is(.qs-title, .qs-date, .qs-message, .qs-cta, .qs-steps, .qs-step-n, .qs-address, .qs-noapp) {
+  font-family: var(--font-bodoni), "Bodoni 72", Didot, serif;
+  font-optical-sizing: auto;
+}
+.qs[data-look="black-tie"] .qs-fan {
+  width: 17cqw;
+}
+.qs[data-look="black-tie"] .qs-title {
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-inline-end: -0.14em;
+  line-height: 1.14;
+}
+.qs[data-look="black-tie"] .qs-amp {
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--qs-accent);
+  font-size: 1.15em;
+  line-height: 0;
+}
+.qs[data-look="black-tie"] .qs-date {
+  display: flex;
+  align-items: center;
+  gap: 1.1em;
+  color: var(--qs-ink);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-size: 2cqw;
+}
+.qs[data-look="black-tie"] .qs-date::before,
+.qs[data-look="black-tie"] .qs-date::after {
+  content: "";
+  flex: none;
+  width: 7cqw;
+  height: 0.16cqw;
+  background: color-mix(in srgb, var(--qs-accent) 65%, transparent);
+}
+.qs[data-look="black-tie"] .qs-message {
+  font-style: italic;
+  font-size: 3.2cqw;
+}
+.qs[data-look="black-tie"] .qs-cta {
+  color: var(--qs-accent);
+  font-style: italic;
+  font-size: 5cqw;
+}
+.qs[data-look="black-tie"] .qs-code {
+  outline: 0.2cqw solid color-mix(in srgb, var(--qs-accent) 70%, transparent);
+  outline-offset: 1.1cqw;
+}
+.qs[data-look="black-tie"] .qs-steps {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 2cqw;
+}
+.qs[data-look="black-tie"] .qs-step-n {
+  border-width: 0.16cqw;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 2.4cqw;
+}
+.qs[data-look="black-tie"] .qs-address {
+  letter-spacing: 0.08em;
+}
+
+/* White lace: the names in calligraphy, a sprig under them, Cormorant for
+   everything else, and the code straight on the paper in a hairline frame. */
+.qs[data-look="white-lace"] .qs-frame {
+  inset: 4.2cqw;
+  border: 0.14cqw solid color-mix(in srgb, var(--qs-accent) 45%, transparent);
+  border-radius: 1.2cqw;
+}
+.qs[data-look="white-lace"] :is(.qs-date, .qs-message, .qs-cta, .qs-steps, .qs-step-n, .qs-address, .qs-noapp) {
+  font-family: var(--font-cormorant), Georgia, serif;
+}
+.qs[data-look="white-lace"] .qs-title {
+  font-family: var(--font-pinyon), "Snell Roundhand", cursive;
+  font-weight: 400;
+  line-height: 1.12;
+}
+.qs[data-look="white-lace"] .qs-amp {
+  padding-inline: 0.12em;
+  font-family: var(--font-cormorant), Georgia, serif;
+  font-style: italic;
+  font-size: 0.55em;
+  color: var(--qs-accent);
+}
+.qs[data-look="white-lace"] .qs-sprig {
+  width: 26cqw;
+}
+.qs[data-look="white-lace"] .qs-date {
+  color: var(--qs-ink);
+  font-weight: 600;
+  font-variant-numeric: lining-nums;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  margin-inline-end: -0.28em;
+  font-size: 2.2cqw;
+}
+.qs[data-look="white-lace"] .qs-message {
+  font-style: italic;
+  font-size: 3.6cqw;
+}
+.qs[data-look="white-lace"] .qs-cta {
+  font-style: italic;
+  font-weight: 500;
+  font-size: 5.6cqw;
+}
+.qs[data-look="white-lace"] .qs-code {
+  border: 0.16cqw solid color-mix(in srgb, var(--qs-accent) 55%, transparent);
+  border-radius: 1.4cqw;
+}
+.qs[data-look="white-lace"] .qs-steps {
+  font-size: 2.7cqw;
+}
+.qs[data-look="white-lace"] .qs-step-n {
+  border-width: 0.16cqw;
+  font-style: italic;
+  font-size: 2.8cqw;
+}
+.qs[data-look="white-lace"] .qs-address {
+  letter-spacing: 0.06em;
+  font-size: 2.5cqw;
+}
+
+/* Party: round Fredoka letters, the age as a giant numeral, confetti in two
+   corners, the call to action on a tilted ribbon of the accent. */
+.qs[data-look="party"] :is(.qs-title, .qs-date, .qs-message, .qs-cta, .qs-steps, .qs-step-n, .qs-address, .qs-noapp, .qs-age) {
+  font-family: var(--font-fredoka), ui-rounded, sans-serif;
+}
+.qs[data-look="party"] .qs-confetti {
+  position: absolute;
+  width: 52cqw;
+  color: var(--qs-accent);
+  pointer-events: none;
+}
+.qs[data-look="party"] .qs-confetti svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.qs[data-look="party"] .qs-confetti-top {
+  top: 0.5cqw;
+  right: 0.5cqw;
+}
+/* Smaller, and tucked into the corner, so it never lands on the address. */
+.qs[data-look="party"] .qs-confetti-bottom {
+  bottom: 0;
+  left: 0;
+  width: 24cqw;
+  rotate: 180deg;
+}
+.qs[data-look="party"] .qs-party {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0 2.6cqw;
+}
+.qs[data-look="party"] .qs-age {
+  color: var(--qs-accent);
+  font-weight: 700;
+  font-size: 21cqw;
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  font-variant-numeric: lining-nums;
+}
+.qs[data-look="party"] .qs-party-words {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1cqh;
+}
+.qs[data-look="party"] .qs-age + .qs-party-words {
+  text-align: left;
+  padding-bottom: 0.6cqw;
+}
+.qs[data-look="party"] .qs-title {
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+}
+.qs[data-look="party"] :is(.qs-date, .qs-message) {
+  font-weight: 500;
+}
+.qs[data-look="party"] .qs-cta {
+  max-width: none;
+  rotate: -2deg;
+}
+.qs[data-look="party"] .qs-cta span {
+  display: inline-block;
+  padding: 1.3cqw 4cqw 1.5cqw;
+  border-radius: 999px;
+  background: var(--qs-accent);
+  color: var(--qs-on-accent);
+  font-weight: 700;
+  font-size: 4.4cqw;
+}
+.qs[data-look="party"] .qs-code {
+  padding: 3cqw;
+  border: 1cqw solid var(--qs-accent);
+  border-radius: 5cqw;
+}
+.qs[data-look="party"] .qs-steps {
+  font-weight: 500;
+  font-size: 2.5cqw;
+}
+.qs[data-look="party"] .qs-step-n {
+  border: 0;
+  background: var(--qs-accent);
+  color: var(--qs-on-accent);
+  font-weight: 700;
+}
+
+/* Diploma: a double rule round the sheet, Cinzel capitals, the class year in
+   laurels, and the code in a double rule of its own. */
+.qs[data-look="diploma"] .qs-frame {
+  inset: 4.2cqw;
+  border: 1.1cqw double color-mix(in srgb, var(--qs-accent) 75%, transparent);
+}
+.qs[data-look="diploma"] :is(.qs-title, .qs-class, .qs-school, .qs-date, .qs-cta, .qs-steps, .qs-step-n, .qs-address, .qs-noapp) {
+  font-family: var(--font-cinzel), "Trajan Pro", serif;
+}
+.qs[data-look="diploma"] .qs-title {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin-inline-end: -0.08em;
+  line-height: 1.14;
+}
+.qs[data-look="diploma"] .qs-class {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8em;
+  color: var(--qs-accent);
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  font-size: 2.5cqw;
+}
+.qs[data-look="diploma"] .qs-class svg {
+  display: block;
+  width: 1.9em;
+  height: auto;
+}
+.qs[data-look="diploma"] .qs-school {
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  font-size: 2.1cqw;
+}
+.qs[data-look="diploma"] .qs-date {
+  letter-spacing: 0.12em;
+  font-size: 2.1cqw;
+}
+.qs[data-look="diploma"] .qs-message {
+  font-size: 2.8cqw;
+}
+.qs[data-look="diploma"] .qs-cta {
+  color: var(--qs-accent);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  font-size: 3.6cqw;
+}
+.qs[data-look="diploma"] .qs-code {
+  outline: 0.7cqw double color-mix(in srgb, var(--qs-accent) 80%, transparent);
+  outline-offset: 1cqw;
+}
+.qs[data-look="diploma"] .qs-steps {
+  letter-spacing: 0.04em;
+  font-size: 2.1cqw;
+}
+.qs[data-look="diploma"] .qs-step-n {
+  border-radius: 0;
+  border-width: 0.18cqw;
+}
+
+/* Modern: everything set left in Space Grotesk, a band of the accent down the
+   edge, the code beside its three steps, a rule over the address. */
+.qs[data-look="modern"] {
+  text-align: left;
+}
+.qs[data-look="modern"] :is(.qs-title, .qs-date, .qs-message, .qs-cta, .qs-steps, .qs-step-n, .qs-address, .qs-noapp) {
+  font-family: var(--font-space-grotesk), var(--font-geist-sans), sans-serif;
+}
+.qs[data-look="modern"] .qs-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2.6cqw;
+  background: var(--qs-accent);
+}
+.qs[data-look="modern"] .qs-body {
+  align-items: stretch;
+}
+.qs[data-look="modern"] .qs-head {
+  align-items: flex-start;
+}
+.qs[data-look="modern"] .qs-title {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.96;
+}
+.qs[data-look="modern"] .qs-rule {
+  display: block;
+  width: 11cqw;
+  height: 1.3cqw;
+  margin-block: 0.6cqh;
+  background: var(--qs-accent);
+}
+.qs[data-look="modern"] .qs-date {
+  color: var(--qs-ink);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 2.3cqw;
+}
+.qs[data-look="modern"] .qs-message {
+  max-width: none;
+  font-size: 3.1cqw;
+}
+.qs[data-look="modern"] .qs-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 2.4cqh 5cqw;
+}
+.qs[data-look="modern"] .qs-cta {
+  grid-column: 1 / -1;
+  max-width: none;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  font-size: 5.6cqw;
+}
+.qs[data-look="modern"] .qs-steps,
+.qs[data-look="modern"] .qs-noapp {
+  align-self: center;
+}
+.qs[data-look="modern"] .qs-steps {
+  flex-direction: column;
+  gap: 2.6cqh;
+  color: var(--qs-ink);
+  font-size: 2.9cqw;
+}
+.qs[data-look="modern"] .qs-noapp {
+  color: var(--qs-ink);
+  font-weight: 500;
+  font-size: 3.4cqw;
+  line-height: 1.2;
+}
+.qs[data-look="modern"] .qs-steps li {
+  max-width: none;
+}
+.qs[data-look="modern"] .qs-step-n {
+  border: 0;
+  border-radius: 0;
+  background: var(--qs-accent);
+  color: var(--qs-on-accent);
+  font-weight: 700;
+}
+.qs[data-look="modern"] .qs-foot {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4cqw;
+  padding-top: 2cqh;
+  border-top: 0.3cqw solid var(--qs-ink);
+}
+.qs[data-look="modern"] .qs-address {
+  text-align: left;
+}
+
+/* Plain: Klik's own sign. The mark over the name, Fraunces for the name,
+   volt for the call to action and the steps. */
+.qs[data-look="plain"] .qs-lockup-hero {
+  gap: 2cqw;
+  margin-bottom: 1.5cqh;
+  font-size: 6.4cqw;
+  letter-spacing: -0.03em;
+}
+.qs[data-look="plain"] .qs-lockup-hero .qs-mark {
+  width: 10cqw;
+  height: 10cqw;
+}
+.qs[data-look="plain"] .qs-title {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+}
+.qs[data-look="plain"] .qs-cta {
+  color: var(--qs-accent);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.qs[data-look="plain"] .qs-code {
+  padding: 3cqw;
+  border-radius: 4cqw;
+}
+.qs[data-look="plain"] .qs-step-n {
+  border: 0;
+  background: var(--qs-accent);
+  color: var(--qs-on-accent);
+  font-weight: 700;
+}
+
+/* The sign page: what prints is the sheet in `.qs-print-root`, the same
+   component as the preview at its real size, and nothing else. The page's
+   film grain stays off here so the preview is what comes out of the printer. */
+.qs-print-root {
+  display: none;
+}
+body:has(.qs-designer)::before {
+  display: none;
+}
+.qs-sheet {
+  position: relative;
+  display: grid;
+  background: #ffffff;
+}
+.qs-sheet[data-per-page="4"] {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+/* Cut lines between four signs, light enough to vanish under the scissors. */
+.qs-sheet[data-per-page="4"]::before,
+.qs-sheet[data-per-page="4"]::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  border: 0 dashed #9a9a9a;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.qs-sheet[data-per-page="4"]::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-left-width: 0.25mm;
+}
+.qs-sheet[data-per-page="4"]::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top-width: 0.25mm;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+  }
+  body::before {
+    display: none !important;
+  }
+  body > *:not(.qs-print-root) {
+    display: none !important;
+  }
+  .qs-print-root {
+    display: block;
+  }
+  .qs-print-root .qs-sheet {
+    break-inside: avoid;
+    overflow: hidden;
+  }
+}

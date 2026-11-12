@@ -182,8 +182,9 @@ export function formatLookDate(value: string | Date | null, look: TemplateKey, l
   return date.toLocaleDateString(locale === "es" ? "es-US" : "en-US", { ...options, timeZone: "UTC" });
 }
 
-/** Black tie: an Art Deco fan over the names, drawn in hairline gold. */
-function DecoFan() {
+/** Black tie: an Art Deco fan over the names, drawn in hairline gold. The
+ *  printable sign (components/qr-sign) draws these ornaments too. */
+export function DecoFan() {
   // Rounded, because the server and a browser can disagree in the last digit
   // of a sine, and the sign page hydrates this in a client component.
   const at = (value: number) => Math.round(value * 1000) / 1000;
@@ -210,7 +211,7 @@ function DecoFan() {
 }
 
 /** White lace: a sprig of leaves either side of a single pearl. */
-function Sprig() {
+export function Sprig() {
   const leaves = [
     { x: 47, y: 10.4, r: -28 },
     { x: 39.5, y: 13.6, r: 26 },
@@ -246,7 +247,7 @@ function Sprig() {
 }
 
 /** Party: confetti thrown over the top corner, in the accent and the paper colour. */
-function Confetti() {
+export function Confetti() {
   const pieces: Array<{ kind: "dot" | "strip" | "wave" | "tri"; x: number; y: number; r: number; paper?: boolean; o?: number }> = [
     { kind: "dot", x: 182, y: 14, r: 0 },
     { kind: "strip", x: 150, y: 22, r: 32, paper: true },
@@ -287,7 +288,7 @@ function Confetti() {
 }
 
 /** Diploma: a laurel branch either side of the class year. */
-function Laurel({ mirrored = false }: { mirrored?: boolean }) {
+export function Laurel({ mirrored = false }: { mirrored?: boolean }) {
   const leaves = [
     { x: 21.5, y: 18.5, r: -60 },
     { x: 16.5, y: 15.5, r: -48 },
